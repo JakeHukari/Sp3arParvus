@@ -4947,6 +4947,29 @@ function Bracket:Window(Window)
 	return Window
 end
 
+function Bracket:Notification(Notification)
+	Notification = Bracket.Utilities:GetType(Notification, {}, "table")
+
+	local Style = Notification.Style
+	if type(Style) == "string" then
+		Style = Style:lower()
+	end
+
+	if Style == "toast" then
+		return self:Toast(Notification)
+	end
+
+	if Style == "push" then
+		return self:Push(Notification)
+	end
+
+	if Notification.Description ~= nil then
+		return self:Push(Notification)
+	end
+
+	return self:Toast(Notification)
+end
+
 function Bracket:Push(Notification)
 	Notification = Bracket.Utilities:GetType(Notification, {}, "table")
 	Notification.Title = Bracket.Utilities:GetType(Notification.Title, "Title", "string")
