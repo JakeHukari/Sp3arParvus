@@ -22,7 +22,7 @@ local SP3ARPARVUS_VERSION = "1.0.0"
 repeat task.wait() until game.IsLoaded
 if Sp3arParvus and Sp3arParvus.Loaded then return end
 
-getgenv().Sp3arParvus = {Loaded = false, Utilities = {}}
+getgenv().Sp3arParvus = {Loaded = false, Utilities = {}, UIRoot = nil}
 
 Sp3arParvus.Games = {
 	["Universal"] = {Name = "Universal"},
@@ -7274,13 +7274,32 @@ local CTRL_HELD = false
 -- ============================================================
 local Window -- Declare Window at file scope (will be assigned below)
 
+local function ResolveUIRoot()
+    local cached = Sp3arParvus and Sp3arParvus.UIRoot
+    if cached and cached.Parent then
+        return cached
+    end
+
+    local screenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+    if screenGui and Sp3arParvus then
+        Sp3arParvus.UIRoot = screenGui
+    elseif Sp3arParvus then
+        Sp3arParvus.UIRoot = nil
+    end
+
+    return screenGui
+end
+
 local function ReloadScript()
     print(string.format("[Sp3arParvus v%s] Reloading script...", SP3ARPARVUS_VERSION))
 
     -- Clean up existing UI
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+    local ScreenGui = ResolveUIRoot()
     if ScreenGui then
         ScreenGui:Destroy()
+        if Sp3arParvus then
+            Sp3arParvus.UIRoot = nil
+        end
     end
 
     -- Clean up ESP objects
@@ -7310,9 +7329,12 @@ local function ShutdownScript()
     print(string.format("[Sp3arParvus v%s] Shutting down...", SP3ARPARVUS_VERSION))
 
     -- Clean up UI
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+    local ScreenGui = ResolveUIRoot()
     if ScreenGui then
         ScreenGui:Destroy()
+        if Sp3arParvus then
+            Sp3arParvus.UIRoot = nil
+        end
     end
 
     -- Clean up ESP objects
@@ -7376,7 +7398,7 @@ end
 local function CreatePerformanceDisplay()
     if performanceLabel then return end
 
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+    local ScreenGui = ResolveUIRoot()
     if not ScreenGui then return end
 
     performanceLabel = Instance.new("TextLabel")
@@ -7468,7 +7490,7 @@ end
 local function CreateClosestPlayerTracker()
     if closestPlayerTrackerLabel then return end
 
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+    local ScreenGui = ResolveUIRoot()
     if not ScreenGui then return end
 
     closestPlayerTrackerLabel = Instance.new("TextLabel")
@@ -7687,6 +7709,11 @@ Window = Sp3arParvus.Utilities.UI:Window({
     Name = string.format("Sp3arParvus v%s %s %s", SP3ARPARVUS_VERSION, utf8.char(8212), Sp3arParvus.Game.Name),
     Position = UDim2.new(0.5, -248 * 3, 0.5, -248)
 }) do
+
+    local uiRoot = Window.Asset and Window.Asset.Parent
+    if uiRoot and uiRoot.Parent then
+        Sp3arParvus.UIRoot = uiRoot
+    end
 
     local CombatTab = Window:Tab({Name = "Combat"}) do
         local PredictionSection = CombatTab:Section({Name = "Ballistics Configuration", Side = "Left"}) do
