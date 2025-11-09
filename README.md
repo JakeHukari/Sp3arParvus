@@ -170,6 +170,19 @@ Your executor **MUST** have these functions for full functionality:
 - Watermark with FPS and ping
 - Keybind list display
 
+#### **Script Control (NEW in v1.0.0)**
+- **Reload Script** - Completely refresh the script
+  - Cleans up all UI elements and ESP objects
+  - Reloads fresh copy from GitHub
+  - Fixes any broken state without rejoining game
+  - Preserves executor environment
+- **Shutdown Script** - Gracefully unload everything
+  - Removes all UI and ESP
+  - Restores broken parts from Br3ak3r
+  - Cleans up all resources and global state
+  - Complete teardown with no residue
+- **Version Display** - Always see current version in UI
+
 #### **Config System**
 - Auto-save settings
 - Multiple config slots
@@ -457,14 +470,36 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 ---
 ## 📝 Version Information
 
-**Version:** Sp3arParvus v1.1 (Single-File Edition with Stability Fixes)
+**Current Version:** Sp3arParvus v1.0.0
 **Based on:** Parvus Hub by AlexR32
 **Last Updated:** 2025-11-09
-**Script Size:** 7,473 lines
-**File Size:** ~310 KB
+**Script Size:** ~8,140 lines
+**File Size:** ~320 KB
+
+**Version Format:** MAJOR.MINOR.PATCH (e.g., 1.0.0)
+- Each update increments the PATCH version by 1 (e.g., 1.0.0 → 1.0.1)
+- Version is displayed in UI title, console logs, and all documentation
 
 ### Changelog
-- v1.1 (2025-11-09)
+
+**v1.0.0 (2025-11-09) - Comprehensive Audit & Fixes**
+  - 🔧 **CRITICAL FIX:** Resolved all scoping issues causing "attempt to call a nil value" errors
+    - Moved all Misc feature variables and functions outside Window scope
+    - Fixed Window variable declaration (removed incorrect `local` scope)
+    - All functions now properly accessible throughout script lifecycle
+  - ✨ **NEW: Reload Feature** - Completely refresh the script without rejoining
+    - Cleans up all UI, ESP, and resources
+    - Preserves executor environment
+    - Accessible from Miscellaneous → Script Control
+  - ✨ **NEW: Shutdown Feature** - Gracefully unload script and restore modified parts
+    - Removes all UI elements and ESP objects
+    - Restores broken parts from Br3ak3r
+    - Cleans up global state completely
+  - 📌 **Versioning System** - Track updates across all instances
+    - Version constant at script top (SP3ARPARVUS_VERSION)
+    - Displayed in Window title: "Sp3arParvus v1.0.0"
+    - Shown in console logs and Script Control section
+    - Documentation synchronized with script version
   - ✅ Fixed AR2 missing GetTeam function (squad detection)
   - ✅ Fixed Bad Business getupvalue crashes
   - ✅ Fixed Blackhawk Rescue Mission infinite loop
@@ -472,11 +507,7 @@ Enable "Open On Load" in Options to automatically open UI on script load.
   - ✅ Protected all game-specific functions with pcall
   - ✅ Added timeout protection to module loading
   - ✅ Improved stability across all supported games
-
-- v1.0 (Initial Release)
-  - Combined all modules into single file
-  - Added executor function guards
-  - Offline-ready, no GitHub dependencies
+  - 📚 Enhanced code organization with clear section markers
 
 ---
 
@@ -489,7 +520,10 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 **ESP:** Visuals → ESP → Enable features
 **Save Settings:** Options → Config → Save
 **Change Keybinds:** Click any keybind button → Press new key
-**Fix Errors:** Update to latest version, check executor compatibility
+**Reload Script:** Miscellaneous → Script Control → Reload Script
+**Shutdown Script:** Miscellaneous → Script Control → Shutdown Script
+**Check Version:** Miscellaneous → Script Control (shows version)
+**Fix Errors:** Update to latest version, try Reload Script feature
 
 ---
 
