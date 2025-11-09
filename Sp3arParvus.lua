@@ -5141,6 +5141,40 @@ local function ClearDrawing(Table)
         end
     end
 end
+
+local function HideESPDrawings(ESP)
+    if not ESP or not ESP.Drawing then return end
+
+    local function HideContainer(Container)
+        local ContainerType = typeof(Container)
+
+        if ContainerType == "table" then
+            if rawget(Container, "Visible") ~= nil then
+                Container.Visible = false
+            end
+
+            if rawget(Container, "OutlineVisible") ~= nil then
+                Container.OutlineVisible = false
+            end
+
+            for _, Value in pairs(Container) do
+                HideContainer(Value)
+            end
+
+            return
+        end
+
+        if ContainerType == "userdata" then
+            pcall(function()
+                if Container.Visible ~= nil then
+                    Container.Visible = false
+                end
+            end)
+        end
+    end
+
+    HideContainer(ESP.Drawing)
+end
 local function GetFlag(Flags, Flag, Option)
     return Flags[Flag .. Option]
 end
@@ -6564,10 +6598,7 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function()
         -- Wrap each ESP update in pcall to prevent one error from affecting others
         local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
         if not Success then
-            -- Hide ESP on error to prevent visual glitches
-            if ESP.Drawing and ESP.Drawing.Box then
-                ESP.Drawing.Box.Visible = false
-            end
+            HideESPDrawings(ESP)
         end
     end
     for Object, ESP in pairs(DrawingLibrary.ObjectESP) do
