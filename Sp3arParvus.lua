@@ -18,11 +18,12 @@
 -- VERSIONING SYSTEM
 -- ============================================================
 local SP3ARPARVUS_VERSION = "1.0.0"
+local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
 if Sp3arParvus and Sp3arParvus.Loaded then return end
 
-getgenv().Sp3arParvus = {Loaded = false, Utilities = {}, UIRoot = nil}
+getgenv().Sp3arParvus = {Loaded = false, Utilities = {}, DefaultCursor = DEFAULT_CURSOR_DATA, Cursor = DEFAULT_CURSOR_DATA}
 
 Sp3arParvus.Games = {
 	["Universal"] = {Name = "Universal"},
@@ -5202,6 +5203,16 @@ local MAX_ESP_ERRORS = 3 -- Remove ESP after this many consecutive errors
 local ESPUpdateAccumulators = {}
 local ESPCleanupQueue = {}
 
+-- Expose tracking tables so callers can inspect or reset them safely
+DrawingLibrary.ESPErrorCounts = ESPErrorCounts
+DrawingLibrary.ESPUpdateAccumulators = ESPUpdateAccumulators
+
+function DrawingLibrary.ResetESPCounters(Self, Target)
+    if not Target then return end
+    ESPErrorCounts[Target] = nil
+    ESPUpdateAccumulators[Target] = nil
+end
+
 local function GetFlag(Flags, Flag, Option)
     return Flags[Flag .. Option]
 end
@@ -6537,8 +6548,7 @@ function DrawingLibrary.RemoveESP(Self, Target)
     Self.ESP[Target] = nil
 
     -- Clean up tracking tables to prevent memory leaks
-    ESPErrorCounts[Target] = nil
-    ESPUpdateAccumulators[Target] = nil
+    Self:ResetESPCounters(Target)
 
     -- Clear any reference to the ESP object
     ESP = nil
@@ -6561,17 +6571,33 @@ end
 function DrawingLibrary.SetupCursor(Window)
     local Cursor = AddDrawing("Image", {
         Size = V2New(64, 64) / 1.5,
-        Data = Sp3arParvus.Cursor,
-        --Rounding = 0,
-
-        --Transparency = 1,
-        --Visible = false,
         ZIndex = 3
     })
 
+    local CursorData = Sp3arParvus.Cursor
+    local DefaultCursorData = Sp3arParvus.DefaultCursor
+
+    if type(CursorData) == "string" and #CursorData > 0 then
+        Cursor.Data = CursorData
+    elseif type(DefaultCursorData) == "string" and #DefaultCursorData > 0 then
+        Cursor.Data = DefaultCursorData
+    else
+        Cursor:Remove()
+        UserInputService.MouseIconEnabled = true
+        return
+    end
+
+    local LastVisibility = nil
+
     RunService.Heartbeat:Connect(function()
-        Cursor.Visible = Window.Flags["Mouse/Enabled"] and Window.Enabled and UserInputService.MouseBehavior == Enum.MouseBehavior.Default
-        if Cursor.Visible then Cursor.Position = UserInputService:GetMouseLocation() - Cursor.Size / 2 end
+        local ShouldShow = Window.Flags["Mouse/Enabled"] and Window.Enabled and UserInputService.MouseBehavior == Enum.MouseBehavior.Default
+        Cursor.Visible = ShouldShow
+        if ShouldShow then Cursor.Position = UserInputService:GetMouseLocation() - Cursor.Size / 2 end
+
+        if LastVisibility ~= ShouldShow then
+            UserInputService.MouseIconEnabled = not ShouldShow
+            LastVisibility = ShouldShow
+        end
     end)
 end
 
@@ -7921,7 +7947,7 @@ Window = Sp3arParvus.Utilities.UI:Window({
             ScriptControlSection:Label({Text = "Cleans up all resources"})
         end
     end
-    Sp3arParvus.Utilities:SettingsSection(Window, "RightShift", false)
+    Sp3arParvus.Utilities:SettingsSection(Window, "RightShift", true)
 end
 
 Sp3arParvus.Utilities.InitAutoLoad(Window)
@@ -8244,9 +8270,11 @@ PlayerService.PlayerRemoving:Connect(function(Player)
     -- Remove ESP and clean up all tracking data
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
 
-    -- Clean up any remaining references in tracking tables
-    ESPErrorCounts[Player] = nil
-    ESPUpdateAccumulators[Player] = nil
+    -- Ensure any tracking counters are reset without touching module locals
+    local DrawingUtilities = Sp3arParvus.Utilities.Drawing
+    if DrawingUtilities and DrawingUtilities.ResetESPCounters then
+        DrawingUtilities:ResetESPCounters(Player)
+    end
 end)
 
 -- ============================================================
