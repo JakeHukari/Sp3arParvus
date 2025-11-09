@@ -888,7 +888,9 @@ function Utility.SetupLighting(Self, Flags)
     end)
 end
 
-return Utility
+for Key, Value in pairs(Utility) do
+    Parvus.Utilities[Key] = Value
+end
 
 -- ===== UI MODULE (Bracket V2) =====
 Parvus.Utilities.UI = loadstring([=[
