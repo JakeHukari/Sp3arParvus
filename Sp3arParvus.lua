@@ -5253,8 +5253,31 @@ if game.GameId == 1168263273 or game.GameId == 3360073263 then -- Bad Business
     DrawingLibrary.CharacterSize = Vector3.new(2.05, 7.3, 1.35)
     local TeamService = game:GetService("Teams")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Tortoiseshell = getupvalue(require(ReplicatedStorage.TS), 1)
-    local Characters = getupvalue(Tortoiseshell.Characters.GetCharacter, 1)
+
+    -- Safely get Tortoiseshell and Characters with error handling
+    local Tortoiseshell, Characters = nil, {}
+
+    if getupvalue and ReplicatedStorage:FindFirstChild("TS") then
+        local Success, TortoiseResult = pcall(function()
+            return getupvalue(require(ReplicatedStorage.TS), 1)
+        end)
+
+        if Success and TortoiseResult then
+            Tortoiseshell = TortoiseResult
+
+            -- Try to get Characters table
+            if Tortoiseshell.Characters and Tortoiseshell.Characters.GetCharacter then
+                local CharSuccess, CharResult = pcall(function()
+                    return getupvalue(Tortoiseshell.Characters.GetCharacter, 1)
+                end)
+
+                if CharSuccess and CharResult then
+                    Characters = CharResult
+                end
+            end
+        end
+    end
+
     local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
 
     local function GetPlayerTeam(Player)
@@ -5278,65 +5301,152 @@ if game.GameId == 1168263273 or game.GameId == 3360073263 then -- Bad Business
         return FindHighlightForCharacter(Character)
     end]]
     function GetCharacter(Target, Mode)
+        if not Characters then return end
         local Character = Characters[Target]
         if not Character or Character.Parent == nil then return end
         --DrawingLibrary.ESP[Target].Highlight = FindHighlightForCharacter(Character)
         return Character, Character.PrimaryPart
     end
     function GetHealth(Target, Character, Mode)
-        local Health = Character.Health
+        local Success, Health = pcall(function()
+            return Character.Health
+        end)
+
+        if not Success or not Health then
+            return 100, 100, true
+        end
+
         return Health.Value, Health.MaxHealth.Value, Health.Value > 0
     end
     function GetTeam(Target, Character, Mode)
         local Team, LocalTeam = GetPlayerTeam(Target), GetPlayerTeam(LocalPlayer)
-        return LocalTeam ~= Team or Team == "FFA", Tortoiseshell.Teams.Colors[Team]
+        local TeamColor = WhiteColor
+
+        if Tortoiseshell and Tortoiseshell.Teams and Tortoiseshell.Teams.Colors and Team then
+            TeamColor = Tortoiseshell.Teams.Colors[Team] or WhiteColor
+        end
+
+        return LocalTeam ~= Team or Team == "FFA", TeamColor
     end
     function GetWeapon(Target, Character, Mode)
-        return tostring(Character.Backpack.Equipped.Value or "Hands")
+        local Success, Weapon = pcall(function()
+            return tostring(Character.Backpack.Equipped.Value or "Hands")
+        end)
+
+        return Success and Weapon or "Hands"
     end
 elseif game.GameId == 358276974 or game.GameId == 3495983524 then -- Apocalypse Rising 2
     function GetHealth(Target, Character, Mode)
-        local Health = Target.Stats.Health
-        local Bonus = Target.Stats.HealthBonus
+        local Success, Health, Bonus = pcall(function()
+            return Target.Stats.Health, Target.Stats.HealthBonus
+        end)
+
+        if not Success or not Health then
+            return 100, 100, true
+        end
 
         return Health.Value + Bonus.Value,
         100 + Bonus.Value, Health.Value > 0
     end
 
     function GetWeapon(Target, Character, Mode)
-        local Equipped = Character.Equipped:GetChildren()
-        return Equipped[1] and Equipped[1].Name or "Hands"
+        local Success, Result = pcall(function()
+            local Equipped = Character.Equipped:GetChildren()
+            return Equipped[1] and Equipped[1].Name or "Hands"
+        end)
+
+        return Success and Result or "Hands"
     end
 
-    -- TODO: Squad GetTeam function
-    --function GetTeam(Target, Character, Mode) end
+    function GetTeam(Target, Character, Mode)
+        if Mode ~= "Player" then
+            return true, WhiteColor
+        end
+
+        -- AR2 uses a squad system, not standard Roblox teams
+        -- Check if both players have squad data
+        local Success, LocalSquad, TargetSquad = pcall(function()
+            local LocalSquadData = LocalPlayer:FindFirstChild("Squad")
+            local TargetSquadData = Target:FindFirstChild("Squad")
+            return LocalSquadData, TargetSquadData
+        end)
+
+        if not Success then
+            -- If we can't determine squads, treat as enemy for safety
+            return true, WhiteColor
+        end
+
+        -- If either player has no squad, they're solo (treat as enemy)
+        if not LocalSquad or not TargetSquad then
+            return true, WhiteColor
+        end
+
+        -- Check if squad values match
+        local SameSquad = LocalSquad.Value == TargetSquad.Value and LocalSquad.Value ~= nil
+
+        -- Return true if different squads (is enemy), false if same squad (is ally)
+        return not SameSquad, WhiteColor
+    end
 elseif game.GameId == 1054526971 then -- Blackhawk Rescue Mission 5
     local function RequireModule(Name)
-        for Index, Instance in pairs(getmodules()) do
-            if Instance.Name == Name then
-                return require(Instance)
+        if not getmodules then return nil end
+
+        local Success, Result = pcall(function()
+            for Index, Instance in pairs(getmodules()) do
+                if Instance.Name == Name then
+                    return require(Instance)
+                end
             end
+        end)
+
+        return Success and Result or nil
+    end
+
+    -- Wait for RoundInterface with timeout
+    local RoundInterface = nil
+    local TimeoutSeconds = 30
+    local StartTime = tick()
+
+    while not RoundInterface and (tick() - StartTime) < TimeoutSeconds do
+        RoundInterface = RequireModule("RoundInterface")
+        if not RoundInterface then
+            task.wait(0.5)
         end
     end
 
-    repeat task.wait() until RequireModule("RoundInterface")
-    local RoundInterface = RequireModule("RoundInterface")
+    if not RoundInterface then
+        warn("[Parvus] BRM5: Failed to load RoundInterface module after " .. TimeoutSeconds .. " seconds")
+    end
 
     local function GetSkirmishTeam(Player)
-        for TeamName, TeamData in pairs(RoundInterface.Teams) do
-            for UserId, UserData in pairs(TeamData.Players) do
-                if tonumber(UserId) == Player.UserId then
-                    return TeamName
+        if not RoundInterface or not RoundInterface.Teams then return nil end
+
+        local Success, Result = pcall(function()
+            for TeamName, TeamData in pairs(RoundInterface.Teams) do
+                for UserId, UserData in pairs(TeamData.Players) do
+                    if tonumber(UserId) == Player.UserId then
+                        return TeamName
+                    end
                 end
             end
-        end
+        end)
+
+        return Success and Result or nil
     end
     function GetTeam(Target, Character, Mode)
         if Mode == "Player" then
-            return not Target.Neutral and LocalPlayer.Team ~= Target.Team
-            or GetSkirmishTeam(LocalPlayer) ~= GetSkirmishTeam(Target), WhiteColor
+            local Success, IsEnemy = pcall(function()
+                return not Target.Neutral and LocalPlayer.Team ~= Target.Team
+                or GetSkirmishTeam(LocalPlayer) ~= GetSkirmishTeam(Target)
+            end)
+
+            return Success and IsEnemy or true, WhiteColor
         else
-            return not FindFirstChildWhichIsA(Character, "ProximityPrompt", true), WhiteColor
+            local Success, IsEnemy = pcall(function()
+                return not FindFirstChildWhichIsA(Character, "ProximityPrompt", true)
+            end)
+
+            return Success and IsEnemy or true, WhiteColor
         end
     end
 elseif game.GameId == 580765040 then -- RAGDOLL UNIVERSE
@@ -6459,32 +6569,48 @@ end)
 DrawingLibrary.Connection = RunService.RenderStepped:Connect(function()
     debug.profilebegin("PARVUS_DRAWING")
     for Target, ESP in pairs(DrawingLibrary.ESP) do
-        DrawingLibrary.Update(ESP, Target)
+        -- Wrap each ESP update in pcall to prevent one error from affecting others
+        local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
+        if not Success then
+            -- Hide ESP on error to prevent visual glitches
+            if ESP.Drawing and ESP.Drawing.Box then
+                ESP.Drawing.Box.Visible = false
+            end
+        end
     end
     for Object, ESP in pairs(DrawingLibrary.ObjectESP) do
-        --DrawingLibrary.UpdateObject(ESP, Object)
-        if not GetFlag(ESP.Flags, ESP.GlobalFlag, "/Enabled")
-        or not GetFlag(ESP.Flags, ESP.Flag, "/Enabled") then
-            ESP.Name.Visible = false
-            continue
-        end
+        local Success, Error = pcall(function()
+            --DrawingLibrary.UpdateObject(ESP, Object)
+            if not GetFlag(ESP.Flags, ESP.GlobalFlag, "/Enabled")
+            or not GetFlag(ESP.Flags, ESP.Flag, "/Enabled") then
+                ESP.Name.Visible = false
+                return
+            end
 
-        ESP.Target.Position = ESP.IsBasePart and ESP.Target.RootPart.Position or ESP.Target.Position
-        ESP.Target.ScreenPosition, ESP.Target.OnScreen = WorldToScreen(ESP.Target.Position)
+            ESP.Target.Position = ESP.IsBasePart and ESP.Target.RootPart.Position or ESP.Target.Position
+            ESP.Target.ScreenPosition, ESP.Target.OnScreen = WorldToScreen(ESP.Target.Position)
 
-        ESP.Target.Distance = GetDistance(ESP.Target.Position)
-        ESP.Target.InTheRange = IsWithinReach(GetFlag(ESP.Flags, ESP.GlobalFlag, "/DistanceCheck"),
-        GetFlag(ESP.Flags, ESP.GlobalFlag, "/Distance"), ESP.Target.Distance)
+            ESP.Target.Distance = GetDistance(ESP.Target.Position)
+            ESP.Target.InTheRange = IsWithinReach(GetFlag(ESP.Flags, ESP.GlobalFlag, "/DistanceCheck"),
+            GetFlag(ESP.Flags, ESP.GlobalFlag, "/Distance"), ESP.Target.Distance)
 
-        ESP.Name.Visible = (ESP.Target.OnScreen and ESP.Target.InTheRange) or false
+            ESP.Name.Visible = (ESP.Target.OnScreen and ESP.Target.InTheRange) or false
 
-        if ESP.Name.Visible then
-            local Color = GetFlag(ESP.Flags, ESP.Flag, "/Color")
-            ESP.Name.Transparency = 1 - Color[4]
-            ESP.Name.Color = Color[6]
+            if ESP.Name.Visible then
+                local Color = GetFlag(ESP.Flags, ESP.Flag, "/Color")
+                ESP.Name.Transparency = 1 - Color[4]
+                ESP.Name.Color = Color[6]
 
             ESP.Name.Position = ESP.Target.ScreenPosition
             ESP.Name.Text = string.format("%s\n%i studs", ESP.Target.Name, ESP.Target.Distance)
+            end
+        end)
+
+        if not Success then
+            -- Hide ESP on error
+            if ESP and ESP.Name then
+                ESP.Name.Visible = false
+            end
         end
     end
     debug.profileend()
