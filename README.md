@@ -67,26 +67,6 @@ This version includes **critical stability fixes** that resolve tens of thousand
 
 ## ✅ Requirements
 
-### ❌ **Won't Work**
-- **Solara** - Missing all required functions (0/20 supported)
-- **KRNL** - Outdated, no longer maintained
-- **JJSploit** - Too limited, lacks essential APIs
-
-### ✅ **Will Work**
-- **Fluxus** (Free, recommended) - Get from [WeAreDevs.net](https://wearedevs.net)
-  - Full Drawing API support
-  - All hooks available
-  - Best compatibility
-- **Wave** (Free, keyless)
-  - Good Drawing support
-  - Most features work
-- **Synapse X** (Paid, $20)
-  - Premium stability
-  - All features supported
-- **Script-Ware** (Paid, $20)
-  - Excellent performance
-  - Full compatibility
-
 ### Required Executor Functions
 Your executor **MUST** have these functions for full functionality:
 
@@ -110,37 +90,6 @@ Your executor **MUST** have these functions for full functionality:
 - ⭐ `isrbxactive` (for window focus detection)
 
 ---
-
-## 🚀 Quick Start
-
-### Method 1: Load File (Easiest) ⭐
-1. Download `Sp3arParvus.lua` to your computer
-2. Open your executor (Fluxus, Wave, etc.)
-3. Click "Attach" to attach to Roblox
-4. Click "Load File" or "Open"
-5. Select `Sp3arParvus.lua`
-6. Click "Execute"
-7. Press **RightShift** to open the menu
-
-### Method 2: Copy & Paste
-1. Open `Sp3arParvus.lua` in any text editor (Notepad, VS Code, etc.)
-2. Select all (Ctrl+A) and copy (Ctrl+C)
-3. Open your executor
-4. Attach to Roblox
-5. Paste into your executor (Ctrl+V)
-6. Click "Execute"
-7. Press **RightShift** to open the menu
-
-### First Time Setup
-1. Once loaded, the UI will appear
-2. Configure your keybinds in the Options tab
-3. Adjust visual settings (UI color, background, etc.)
-4. Save your config using the config system
-5. Enable "Open On Load" for automatic UI display next time
-
----
-
-## 🎮 Features
 
 ### Combat Features
 
@@ -506,24 +455,6 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 - Open source contributors
 
 ---
-
-## 📞 Support & Community
-
-### Getting Help
-1. **Check this README first** - Most issues covered here
-2. **Try troubleshooting section** - Common problems and solutions
-3. **Check executor compatibility** - Make sure your executor is supported
-
-### Original Parvus Support
-- **Discord:** [discord.gg/sYqDpbPYb7](https://discord.gg/sYqDpbPYb7)
-- **Note:** This is for the original Parvus Hub, not this fork
-
-### Executor Support
-- **Fluxus:** [WeAreDevs.net](https://wearedevs.net)
-- **Wave:** [WeAreDevs.net](https://wearedevs.net)
-
----
-
 ## 📝 Version Information
 
 **Version:** Sp3arParvus v1.1 (Single-File Edition with Stability Fixes)
