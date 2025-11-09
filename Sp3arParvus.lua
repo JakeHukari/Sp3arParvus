@@ -7238,6 +7238,325 @@ local Window = Sp3arParvus.Utilities.UI:Window({
         VisualsSection:Toggle({Name = "Enable Range Limit", Flag = "ESP/Player/DistanceCheck", Value = false})
         VisualsSection:Slider({Name = "Maximum Range", Flag = "ESP/Player/Distance", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
     end
+
+    -- ============================================================
+    -- PERFORMANCE DISPLAY FEATURE
+    -- ============================================================
+    local performanceLabel
+    local perfMinimized = false
+    local perfOriginalSize = UDim2.fromOffset(180, 80)
+    local perfAccum = 0
+
+    local function CreatePerformanceDisplay()
+        if performanceLabel then return end
+
+        local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+        if not ScreenGui then return end
+
+        performanceLabel = Instance.new("TextLabel")
+        performanceLabel.Name = "PerfMetrics"
+        performanceLabel.Size = perfOriginalSize
+        performanceLabel.Position = UDim2.new(1, -190, 0, 10)
+        performanceLabel.BackgroundTransparency = 0.3
+        performanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        performanceLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        performanceLabel.Font = Enum.Font.Code
+        performanceLabel.TextSize = 11
+        performanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+        performanceLabel.TextYAlignment = Enum.TextYAlignment.Top
+        performanceLabel.BorderSizePixel = 0
+        performanceLabel.Parent = ScreenGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = performanceLabel
+
+        local padding = Instance.new("UIPadding")
+        padding.PaddingLeft = UDim.new(0, 8)
+        padding.PaddingTop = UDim.new(0, 6)
+        padding.Parent = performanceLabel
+
+        -- Minimize button
+        local minimizeBtn = Instance.new("TextButton")
+        minimizeBtn.Name = "MinimizeBtn"
+        minimizeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        minimizeBtn.BackgroundTransparency = 0.3
+        minimizeBtn.BorderSizePixel = 0
+        minimizeBtn.Size = UDim2.fromOffset(20, 20)
+        minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
+        minimizeBtn.Text = "−"
+        minimizeBtn.Font = Enum.Font.GothamBold
+        minimizeBtn.TextSize = 14
+        minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        minimizeBtn.ZIndex = performanceLabel.ZIndex + 1
+        minimizeBtn.Parent = performanceLabel
+
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = minimizeBtn
+
+        minimizeBtn.MouseButton1Click:Connect(function()
+            perfMinimized = not perfMinimized
+            if perfMinimized then
+                performanceLabel.Size = UDim2.fromOffset(180, 30)
+                performanceLabel.Text = "Performance"
+                minimizeBtn.Text = "+"
+            else
+                performanceLabel.Size = perfOriginalSize
+                minimizeBtn.Text = "−"
+            end
+        end)
+    end
+
+    local function UpdatePerformanceDisplay()
+        if not Window.Flags["Misc/PerformanceDisplay"] then
+            if performanceLabel then performanceLabel.Visible = false end
+            return
+        end
+
+        if not performanceLabel then
+            CreatePerformanceDisplay()
+        end
+
+        if performanceLabel then
+            performanceLabel.Visible = true
+
+            if not perfMinimized then
+                local fps = math.floor(1 / RunService.Heartbeat:Wait())
+                local playerCount = #PlayerService:GetPlayers()
+                local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+
+                performanceLabel.Text = string.format(
+                    "Performance\nFPS: %d\nPlayers: %d\nPing: %dms",
+                    fps,
+                    playerCount,
+                    ping
+                )
+            end
+        end
+    end
+
+    -- ============================================================
+    -- CLOSEST PLAYER TRACKER FEATURE
+    -- ============================================================
+    local closestPlayerTrackerLabel
+    local closestTrackerMinimized = false
+    local closestTrackerOriginalSize = UDim2.fromOffset(220, 70)
+    local nearestPlayerRef = nil
+
+    local function CreateClosestPlayerTracker()
+        if closestPlayerTrackerLabel then return end
+
+        local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
+        if not ScreenGui then return end
+
+        closestPlayerTrackerLabel = Instance.new("TextLabel")
+        closestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
+        closestPlayerTrackerLabel.Size = closestTrackerOriginalSize
+        closestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, 10)
+        closestPlayerTrackerLabel.BackgroundTransparency = 0.2
+        closestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        closestPlayerTrackerLabel.TextColor3 = Color3.fromRGB(255, 105, 180)
+        closestPlayerTrackerLabel.Font = Enum.Font.GothamBold
+        closestPlayerTrackerLabel.TextSize = 14
+        closestPlayerTrackerLabel.TextXAlignment = Enum.TextXAlignment.Center
+        closestPlayerTrackerLabel.TextYAlignment = Enum.TextYAlignment.Center
+        closestPlayerTrackerLabel.BorderSizePixel = 0
+        closestPlayerTrackerLabel.Parent = ScreenGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = closestPlayerTrackerLabel
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(255, 105, 180)
+        stroke.Thickness = 2
+        stroke.Transparency = 0.5
+        stroke.Parent = closestPlayerTrackerLabel
+
+        -- Minimize button
+        local minimizeBtn = Instance.new("TextButton")
+        minimizeBtn.Name = "MinimizeBtn"
+        minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 40)
+        minimizeBtn.BackgroundTransparency = 0.3
+        minimizeBtn.BorderSizePixel = 0
+        minimizeBtn.Size = UDim2.fromOffset(20, 20)
+        minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
+        minimizeBtn.Text = "−"
+        minimizeBtn.Font = Enum.Font.GothamBold
+        minimizeBtn.TextSize = 14
+        minimizeBtn.TextColor3 = Color3.fromRGB(255, 105, 180)
+        minimizeBtn.ZIndex = closestPlayerTrackerLabel.ZIndex + 1
+        minimizeBtn.Parent = closestPlayerTrackerLabel
+
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = minimizeBtn
+
+        minimizeBtn.MouseButton1Click:Connect(function()
+            closestTrackerMinimized = not closestTrackerMinimized
+            if closestTrackerMinimized then
+                closestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
+                closestPlayerTrackerLabel.Text = "Closest Player"
+                minimizeBtn.Text = "+"
+            else
+                closestPlayerTrackerLabel.Size = closestTrackerOriginalSize
+                minimizeBtn.Text = "−"
+            end
+        end)
+    end
+
+    local function UpdateNearestPlayer()
+        local myChar = LocalPlayer.Character
+        if not myChar then
+            nearestPlayerRef = nil
+            return
+        end
+
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then
+            nearestPlayerRef = nil
+            return
+        end
+
+        local myRootPos = myRoot.Position
+        local best, bestDist = nil, nil
+
+        for _, player in ipairs(PlayerService:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                if character then
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    local hum = character:FindFirstChildOfClass("Humanoid")
+
+                    if root and hum and hum.Health > 0 then
+                        local dist = (root.Position - myRootPos).Magnitude
+                        if not bestDist or dist < bestDist then
+                            best, bestDist = player, dist
+                        end
+                    end
+                end
+            end
+        end
+
+        nearestPlayerRef = best
+    end
+
+    local function UpdateClosestPlayerTracker()
+        if not Window.Flags["Misc/ClosestPlayerTracker"] then
+            if closestPlayerTrackerLabel then closestPlayerTrackerLabel.Visible = false end
+            return
+        end
+
+        if not closestPlayerTrackerLabel then
+            CreateClosestPlayerTracker()
+        end
+
+        if closestPlayerTrackerLabel then
+            closestPlayerTrackerLabel.Visible = true
+
+            if not closestTrackerMinimized then
+                if nearestPlayerRef then
+                    local myChar = LocalPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    local targetChar = nearestPlayerRef.Character
+                    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+
+                    if myRoot and targetRoot then
+                        local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                        local distRounded = math.floor(distance + 0.5)
+                        local name = nearestPlayerRef.DisplayName or nearestPlayerRef.Name
+
+                        closestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
+                    else
+                        closestPlayerTrackerLabel.Text = "Closest Player\n---"
+                    end
+                else
+                    closestPlayerTrackerLabel.Text = "Closest Player\nNo players nearby"
+                end
+            end
+        end
+    end
+
+    -- ============================================================
+    -- BR3AK3R FEATURE (PART BREAKER)
+    -- ============================================================
+    local brokenSet = {}
+    local brokenCacheDirty = true
+    local undoStack = {}
+    local UNDO_LIMIT = 25
+    local hoverHL
+    local CTRL_HELD = false
+
+    local function MarkBroken(part)
+        if not part or not part:IsA("BasePart") then return end
+        if brokenSet[part] then return end
+
+        brokenSet[part] = true
+        brokenCacheDirty = true
+
+        table.insert(undoStack, {
+            part = part,
+            cc = part.CanCollide,
+            ltm = part.LocalTransparencyModifier,
+            t = part.Transparency
+        })
+
+        if #undoStack > UNDO_LIMIT then
+            table.remove(undoStack, 1)
+        end
+
+        part.CanCollide = false
+        part.LocalTransparencyModifier = 1
+        part.Transparency = 1
+    end
+
+    local function UnbreakLast()
+        local entry = table.remove(undoStack)
+        if not entry or not entry.part or not entry.part:IsDescendantOf(game) then
+            if entry and entry.part then
+                brokenSet[entry.part] = nil
+                brokenCacheDirty = true
+            end
+            return
+        end
+
+        brokenSet[entry.part] = nil
+        brokenCacheDirty = true
+        entry.part.CanCollide = entry.cc
+        entry.part.LocalTransparencyModifier = entry.ltm
+        entry.part.Transparency = entry.t
+    end
+
+    local function GetMouseRay()
+        local mousePos = UserInputService:GetMouseLocation()
+        local ray = Camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+        return ray.Origin, ray.Direction * 1000
+    end
+
+    local function WorldRaycast(origin, direction)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        raycastParams.IgnoreWater = true
+
+        return Workspace:Raycast(origin, direction, raycastParams)
+    end
+
+    local function CreateHoverHighlight()
+        if hoverHL then return end
+
+        hoverHL = Instance.new("Highlight")
+        hoverHL.Name = "Br3ak3rHoverHL"
+        hoverHL.FillTransparency = 0.5
+        hoverHL.OutlineTransparency = 0
+        hoverHL.OutlineColor = Color3.fromRGB(255, 255, 0)
+        hoverHL.FillColor = Color3.fromRGB(255, 255, 0)
+        hoverHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hoverHL.Enabled = false
+        hoverHL.Parent = game:GetService("CoreGui")
+    end
+
     local MiscTab = Window:Tab({Name = "Miscellaneous"}) do
         local UtilitySection = MiscTab:Section({Name = "Utility Features", Side = "Left"}) do
             UtilitySection:Toggle({Name = "Performance Display", Flag = "Misc/PerformanceDisplay", Value = false, Callback = function(Value)
@@ -7537,325 +7856,6 @@ end)
 Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
 end)
-
--- ============================================================
--- PERFORMANCE DISPLAY FEATURE
--- ============================================================
-local performanceLabel
-local perfMinimized = false
-local perfOriginalSize = UDim2.fromOffset(180, 80)
-local perfAccum = 0
-
-local function CreatePerformanceDisplay()
-    if performanceLabel then return end
-
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
-    if not ScreenGui then return end
-
-    performanceLabel = Instance.new("TextLabel")
-    performanceLabel.Name = "PerfMetrics"
-    performanceLabel.Size = perfOriginalSize
-    performanceLabel.Position = UDim2.new(1, -190, 0, 10)
-    performanceLabel.BackgroundTransparency = 0.3
-    performanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    performanceLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-    performanceLabel.Font = Enum.Font.Code
-    performanceLabel.TextSize = 11
-    performanceLabel.TextXAlignment = Enum.TextXAlignment.Left
-    performanceLabel.TextYAlignment = Enum.TextYAlignment.Top
-    performanceLabel.BorderSizePixel = 0
-    performanceLabel.Parent = ScreenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = performanceLabel
-
-    local padding = Instance.new("UIPadding")
-    padding.PaddingLeft = UDim.new(0, 8)
-    padding.PaddingTop = UDim.new(0, 6)
-    padding.Parent = performanceLabel
-
-    -- Minimize button
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "MinimizeBtn"
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    minimizeBtn.BackgroundTransparency = 0.3
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.Size = UDim2.fromOffset(20, 20)
-    minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
-    minimizeBtn.Text = "−"
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 14
-    minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    minimizeBtn.ZIndex = performanceLabel.ZIndex + 1
-    minimizeBtn.Parent = performanceLabel
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 4)
-    btnCorner.Parent = minimizeBtn
-
-    minimizeBtn.MouseButton1Click:Connect(function()
-        perfMinimized = not perfMinimized
-        if perfMinimized then
-            performanceLabel.Size = UDim2.fromOffset(180, 30)
-            performanceLabel.Text = "Performance"
-            minimizeBtn.Text = "+"
-        else
-            performanceLabel.Size = perfOriginalSize
-            minimizeBtn.Text = "−"
-        end
-    end)
-end
-
-local function UpdatePerformanceDisplay()
-    if not Window.Flags["Misc/PerformanceDisplay"] then
-        if performanceLabel then performanceLabel.Visible = false end
-        return
-    end
-
-    if not performanceLabel then
-        CreatePerformanceDisplay()
-    end
-
-    if performanceLabel then
-        performanceLabel.Visible = true
-
-        if not perfMinimized then
-            local fps = math.floor(1 / RunService.Heartbeat:Wait())
-            local playerCount = #PlayerService:GetPlayers()
-            local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-
-            performanceLabel.Text = string.format(
-                "Performance\nFPS: %d\nPlayers: %d\nPing: %dms",
-                fps,
-                playerCount,
-                ping
-            )
-        end
-    end
-end
-
--- ============================================================
--- CLOSEST PLAYER TRACKER FEATURE
--- ============================================================
-local closestPlayerTrackerLabel
-local closestTrackerMinimized = false
-local closestTrackerOriginalSize = UDim2.fromOffset(220, 70)
-local nearestPlayerRef = nil
-
-local function CreateClosestPlayerTracker()
-    if closestPlayerTrackerLabel then return end
-
-    local ScreenGui = game:GetService("CoreGui"):FindFirstChild("Parvus")
-    if not ScreenGui then return end
-
-    closestPlayerTrackerLabel = Instance.new("TextLabel")
-    closestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
-    closestPlayerTrackerLabel.Size = closestTrackerOriginalSize
-    closestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, 10)
-    closestPlayerTrackerLabel.BackgroundTransparency = 0.2
-    closestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    closestPlayerTrackerLabel.TextColor3 = Color3.fromRGB(255, 105, 180)
-    closestPlayerTrackerLabel.Font = Enum.Font.GothamBold
-    closestPlayerTrackerLabel.TextSize = 14
-    closestPlayerTrackerLabel.TextXAlignment = Enum.TextXAlignment.Center
-    closestPlayerTrackerLabel.TextYAlignment = Enum.TextYAlignment.Center
-    closestPlayerTrackerLabel.BorderSizePixel = 0
-    closestPlayerTrackerLabel.Parent = ScreenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = closestPlayerTrackerLabel
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 105, 180)
-    stroke.Thickness = 2
-    stroke.Transparency = 0.5
-    stroke.Parent = closestPlayerTrackerLabel
-
-    -- Minimize button
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "MinimizeBtn"
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 40)
-    minimizeBtn.BackgroundTransparency = 0.3
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.Size = UDim2.fromOffset(20, 20)
-    minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
-    minimizeBtn.Text = "−"
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 14
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 105, 180)
-    minimizeBtn.ZIndex = closestPlayerTrackerLabel.ZIndex + 1
-    minimizeBtn.Parent = closestPlayerTrackerLabel
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 4)
-    btnCorner.Parent = minimizeBtn
-
-    minimizeBtn.MouseButton1Click:Connect(function()
-        closestTrackerMinimized = not closestTrackerMinimized
-        if closestTrackerMinimized then
-            closestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
-            closestPlayerTrackerLabel.Text = "Closest Player"
-            minimizeBtn.Text = "+"
-        else
-            closestPlayerTrackerLabel.Size = closestTrackerOriginalSize
-            minimizeBtn.Text = "−"
-        end
-    end)
-end
-
-local function UpdateNearestPlayer()
-    local myChar = LocalPlayer.Character
-    if not myChar then
-        nearestPlayerRef = nil
-        return
-    end
-
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then
-        nearestPlayerRef = nil
-        return
-    end
-
-    local myRootPos = myRoot.Position
-    local best, bestDist = nil, nil
-
-    for _, player in ipairs(PlayerService:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local character = player.Character
-            if character then
-                local root = character:FindFirstChild("HumanoidRootPart")
-                local hum = character:FindFirstChildOfClass("Humanoid")
-
-                if root and hum and hum.Health > 0 then
-                    local dist = (root.Position - myRootPos).Magnitude
-                    if not bestDist or dist < bestDist then
-                        best, bestDist = player, dist
-                    end
-                end
-            end
-        end
-    end
-
-    nearestPlayerRef = best
-end
-
-local function UpdateClosestPlayerTracker()
-    if not Window.Flags["Misc/ClosestPlayerTracker"] then
-        if closestPlayerTrackerLabel then closestPlayerTrackerLabel.Visible = false end
-        return
-    end
-
-    if not closestPlayerTrackerLabel then
-        CreateClosestPlayerTracker()
-    end
-
-    if closestPlayerTrackerLabel then
-        closestPlayerTrackerLabel.Visible = true
-
-        if not closestTrackerMinimized then
-            if nearestPlayerRef then
-                local myChar = LocalPlayer.Character
-                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local targetChar = nearestPlayerRef.Character
-                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
-
-                if myRoot and targetRoot then
-                    local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                    local distRounded = math.floor(distance + 0.5)
-                    local name = nearestPlayerRef.DisplayName or nearestPlayerRef.Name
-
-                    closestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
-                else
-                    closestPlayerTrackerLabel.Text = "Closest Player\n---"
-                end
-            else
-                closestPlayerTrackerLabel.Text = "Closest Player\nNo players nearby"
-            end
-        end
-    end
-end
-
--- ============================================================
--- BR3AK3R FEATURE (PART BREAKER)
--- ============================================================
-local brokenSet = {}
-local brokenCacheDirty = true
-local undoStack = {}
-local UNDO_LIMIT = 25
-local hoverHL
-local CTRL_HELD = false
-
-local function MarkBroken(part)
-    if not part or not part:IsA("BasePart") then return end
-    if brokenSet[part] then return end
-
-    brokenSet[part] = true
-    brokenCacheDirty = true
-
-    table.insert(undoStack, {
-        part = part,
-        cc = part.CanCollide,
-        ltm = part.LocalTransparencyModifier,
-        t = part.Transparency
-    })
-
-    if #undoStack > UNDO_LIMIT then
-        table.remove(undoStack, 1)
-    end
-
-    part.CanCollide = false
-    part.LocalTransparencyModifier = 1
-    part.Transparency = 1
-end
-
-local function UnbreakLast()
-    local entry = table.remove(undoStack)
-    if not entry or not entry.part or not entry.part:IsDescendantOf(game) then
-        if entry and entry.part then
-            brokenSet[entry.part] = nil
-            brokenCacheDirty = true
-        end
-        return
-    end
-
-    brokenSet[entry.part] = nil
-    brokenCacheDirty = true
-    entry.part.CanCollide = entry.cc
-    entry.part.LocalTransparencyModifier = entry.ltm
-    entry.part.Transparency = entry.t
-end
-
-local function GetMouseRay()
-    local mousePos = UserInputService:GetMouseLocation()
-    local ray = Camera:ViewportPointToRay(mousePos.X, mousePos.Y)
-    return ray.Origin, ray.Direction * 1000
-end
-
-local function WorldRaycast(origin, direction)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    raycastParams.IgnoreWater = true
-
-    return Workspace:Raycast(origin, direction, raycastParams)
-end
-
--- Create hover highlight
-local function CreateHoverHighlight()
-    if hoverHL then return end
-
-    hoverHL = Instance.new("Highlight")
-    hoverHL.Name = "Br3ak3rHoverHL"
-    hoverHL.FillTransparency = 0.5
-    hoverHL.OutlineTransparency = 0
-    hoverHL.OutlineColor = Color3.fromRGB(255, 255, 0)
-    hoverHL.FillColor = Color3.fromRGB(255, 255, 0)
-    hoverHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hoverHL.Enabled = false
-    hoverHL.Parent = game:GetService("CoreGui")
-end
 
 -- Track CharacterAdded connections for proper cleanup on player leave/respawn
 local CharacterAddedConnections = {}
