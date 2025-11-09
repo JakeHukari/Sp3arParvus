@@ -5193,6 +5193,15 @@ local function HideESPDrawings(ESP)
 
     HideContainer(ESP.Drawing)
 end
+
+-- Track error counts for ESP objects to clean up broken ones
+local ESPErrorCounts = {}
+local MAX_ESP_ERRORS = 3 -- Remove ESP after this many consecutive errors
+
+-- Performance optimization tracking tables
+local ESPUpdateAccumulators = {}
+local ESPCleanupQueue = {}
+
 local function GetFlag(Flags, Flag, Option)
     return Flags[Flag .. Option]
 end
@@ -5283,8 +5292,35 @@ function GetHealth(Target, Character, Mode)
 end
 function GetTeam(Target, Character, Mode)
     if Mode == "Player" then
-        if Target.Neutral then return true, WhiteColor end
-        return LocalPlayer.Team ~= Target.Team, Target.TeamColor.Color
+        -- Safely check team with error handling
+        local Success, IsEnemy, TeamColor = pcall(function()
+            -- Check if player is neutral
+            if Target.Neutral then
+                return true, WhiteColor
+            end
+
+            -- Get teams and team color
+            local LocalTeam = LocalPlayer.Team
+            local TargetTeam = Target.Team
+            local Color = WhiteColor
+
+            -- Try to get team color
+            if TargetTeam and TargetTeam.TeamColor then
+                Color = TargetTeam.TeamColor.Color
+            end
+
+            -- Players on different teams or if either has no team
+            local DifferentTeam = LocalTeam ~= TargetTeam
+
+            return DifferentTeam, Color
+        end)
+
+        -- If error occurred, assume enemy for safety
+        if not Success then
+            return true, WhiteColor
+        end
+
+        return IsEnemy, TeamColor
     else
         return true, WhiteColor
     end
@@ -5927,7 +5963,8 @@ function DrawingLibrary.Update(ESP, Target)
         end
     end
 
-    local TeamCheck = (not GetFlag(Flags, Flag, "/TeamCheck") and not InEnemyTeam) or InEnemyTeam
+    -- Simplified team check: show all if TeamCheck disabled, otherwise show only enemies
+    local TeamCheck = not GetFlag(Flags, Flag, "/TeamCheck") or InEnemyTeam
     local Visible = RootPart and OnScreen and InTheRange and IsAlive and TeamCheck
     local ArrowVisible = RootPart and (not OnScreen) and InTheRange and IsAlive and TeamCheck
 
@@ -6491,9 +6528,20 @@ function DrawingLibrary.RemoveESP(Self, Target)
     local ESP = Self.ESP[Target]
     if not ESP then return end
 
-    --ESP.Connection:Disconnect()
-    ClearDrawing(ESP.Drawing)
+    -- Clean up drawing objects recursively
+    pcall(function()
+        ClearDrawing(ESP.Drawing)
+    end)
+
+    -- Remove from ESP table
     Self.ESP[Target] = nil
+
+    -- Clean up tracking tables to prevent memory leaks
+    ESPErrorCounts[Target] = nil
+    ESPUpdateAccumulators[Target] = nil
+
+    -- Clear any reference to the ESP object
+    ESP = nil
 end
 
 function DrawingLibrary.RebuildESP(Self, Target, Mode, Flag, Flags)
@@ -6616,18 +6664,100 @@ Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
 end)
 
-DrawingLibrary.Connection = RunService.RenderStepped:Connect(function()
+-- Performance optimization: throttle update rate based on distance
+local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 100 studs
+local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 100-300 studs
+local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 300-500 studs
+local MAX_DISTANCE = 500 -- Don't render beyond this distance
+
+DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
     debug.profilebegin("PARVUS_DRAWING")
+
+    -- Process ESP updates with distance-based throttling and error recovery
     for Target, ESP in pairs(DrawingLibrary.ESP) do
-        -- Wrap each ESP update in pcall to prevent one error from affecting others
-        local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
-        if not Success then
+        local shouldUpdate = false
+        local quickCheck = true
+
+        -- Quick validation check without pcall overhead
+        pcall(function()
+            if not Target or not Target.Parent then
+                quickCheck = false
+                return
+            end
+
+            -- Distance-based throttling
+            local character = Target.Character
+            if character then
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart and Camera then
+                    local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
+
+                    -- Skip if beyond max distance
+                    if distance > MAX_DISTANCE then
+                        HideESPDrawings(ESP)
+                        return
+                    end
+
+                    -- Determine update interval based on distance
+                    local updateInterval = NEAR_UPDATE_INTERVAL
+                    if distance > 300 then
+                        updateInterval = FAR_UPDATE_INTERVAL
+                    elseif distance > 100 then
+                        updateInterval = MID_UPDATE_INTERVAL
+                    end
+
+                    -- Check accumulator for this target
+                    ESPUpdateAccumulators[Target] = (ESPUpdateAccumulators[Target] or 0) + dt
+                    if ESPUpdateAccumulators[Target] >= updateInterval then
+                        ESPUpdateAccumulators[Target] = 0
+                        shouldUpdate = true
+                    end
+                else
+                    shouldUpdate = true
+                end
+            else
+                shouldUpdate = true
+            end
+        end)
+
+        -- If quick check failed, mark for cleanup
+        if not quickCheck then
+            ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
+            if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
+                table.insert(ESPCleanupQueue, Target)
+            end
             HideESPDrawings(ESP)
+        elseif shouldUpdate then
+            -- Perform actual ESP update with error handling
+            local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
+            if not Success then
+                -- Increment error count
+                ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
+
+                -- If too many errors, mark for cleanup
+                if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
+                    table.insert(ESPCleanupQueue, Target)
+                end
+
+                HideESPDrawings(ESP)
+            else
+                -- Reset error count on success
+                ESPErrorCounts[Target] = 0
+            end
         end
     end
+
+    -- Clean up broken ESP objects
+    for _, Target in ipairs(ESPCleanupQueue) do
+        DrawingLibrary:RemoveESP(Target)
+        ESPErrorCounts[Target] = nil
+        ESPUpdateAccumulators[Target] = nil
+    end
+    table.clear(ESPCleanupQueue)
+
+    -- Update object ESP (items, etc.)
     for Object, ESP in pairs(DrawingLibrary.ObjectESP) do
         local Success, Error = pcall(function()
-            --DrawingLibrary.UpdateObject(ESP, Object)
             if not GetFlag(ESP.Flags, ESP.GlobalFlag, "/Enabled")
             or not GetFlag(ESP.Flags, ESP.Flag, "/Enabled") then
                 ESP.Name.Visible = false
@@ -6654,9 +6784,12 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function()
         end)
 
         if not Success then
-            -- Hide ESP on error
+            -- Hide ESP on error and remove if object is invalid
             if ESP and ESP.Name then
                 ESP.Name.Visible = false
+            end
+            if not Object or not Object.Parent then
+                DrawingLibrary:RemoveObject(Object)
             end
         end
     end
@@ -7395,6 +7528,7 @@ local function CreateClosestPlayerTracker()
 end
 
 local function UpdateNearestPlayer()
+    -- Validate local player character
     local myChar = LocalPlayer.Character
     if not myChar then
         nearestPlayerRef = nil
@@ -7410,20 +7544,24 @@ local function UpdateNearestPlayer()
     local myRootPos = myRoot.Position
     local best, bestDist = nil, nil
 
+    -- Find closest alive player
     for _, player in ipairs(PlayerService:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local character = player.Character
-            if character then
-                local root = character:FindFirstChild("HumanoidRootPart")
-                local hum = character:FindFirstChildOfClass("Humanoid")
+        if player ~= LocalPlayer and player.Parent then
+            pcall(function()
+                local character = player.Character
+                if character and character.Parent then
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    local hum = character:FindFirstChildOfClass("Humanoid")
 
-                if root and hum and hum.Health > 0 then
-                    local dist = (root.Position - myRootPos).Magnitude
-                    if not bestDist or dist < bestDist then
-                        best, bestDist = player, dist
+                    if root and hum and hum.Health > 0 then
+                        local dist = (root.Position - myRootPos).Magnitude
+                        -- Only track players within reasonable distance (1000 studs)
+                        if dist <= 1000 and (not bestDist or dist < bestDist) then
+                            best, bestDist = player, dist
+                        end
                     end
                 end
-            end
+            end)
         end
     end
 
@@ -7437,30 +7575,34 @@ local function UpdateClosestPlayerTracker()
     end
 
     if not closestPlayerTrackerLabel then
-        CreateClosestPlayerTracker()
+        pcall(CreateClosestPlayerTracker)
     end
 
     if closestPlayerTrackerLabel then
         closestPlayerTrackerLabel.Visible = true
 
         if not closestTrackerMinimized then
-            if nearestPlayerRef then
-                local myChar = LocalPlayer.Character
-                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local targetChar = nearestPlayerRef.Character
-                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+            -- Validate nearestPlayerRef before using it
+            if nearestPlayerRef and nearestPlayerRef.Parent then
+                pcall(function()
+                    local myChar = LocalPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    local targetChar = nearestPlayerRef.Character
+                    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
 
-                if myRoot and targetRoot then
-                    local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                    local distRounded = math.floor(distance + 0.5)
-                    local name = nearestPlayerRef.DisplayName or nearestPlayerRef.Name
+                    if myRoot and targetRoot then
+                        local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                        local distRounded = math.floor(distance + 0.5)
+                        local name = nearestPlayerRef.DisplayName or nearestPlayerRef.Name
 
-                    closestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
-                else
-                    closestPlayerTrackerLabel.Text = "Closest Player\n---"
-                end
+                        closestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
+                    else
+                        closestPlayerTrackerLabel.Text = "Closest Player\n---"
+                    end
+                end)
             else
                 closestPlayerTrackerLabel.Text = "Closest Player\nNo players nearby"
+                nearestPlayerRef = nil -- Clear invalid reference
             end
         end
     end
@@ -8004,6 +8146,13 @@ local CharacterAddedConnections = {}
 local function SetupPlayerESP(Player)
     if Player == LocalPlayer then return end
 
+    -- Clean up any existing connection for this player (prevents accumulation)
+    local ExistingConnection = CharacterAddedConnections[Player]
+    if ExistingConnection then
+        ExistingConnection:Disconnect()
+        CharacterAddedConnections[Player] = nil
+    end
+
     -- Create initial ESP
     Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
 
@@ -8040,12 +8189,16 @@ PlayerService.PlayerRemoving:Connect(function(Player)
     -- Disconnect CharacterAdded listener
     local Connection = CharacterAddedConnections[Player]
     if Connection then
-        Connection:Disconnect()
+        pcall(function() Connection:Disconnect() end)
         CharacterAddedConnections[Player] = nil
     end
 
-    -- Remove ESP
+    -- Remove ESP and clean up all tracking data
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
+
+    -- Clean up any remaining references in tracking tables
+    ESPErrorCounts[Player] = nil
+    ESPUpdateAccumulators[Player] = nil
 end)
 
 -- ============================================================
@@ -8097,15 +8250,19 @@ RunService.Heartbeat:Connect(function(dt)
         nearestPlayerAccum = nearestPlayerAccum + dt
         if nearestPlayerAccum >= 0.05 then
             nearestPlayerAccum = 0
-            UpdateNearestPlayer()
+            pcall(UpdateNearestPlayer) -- Protect against errors
         end
+    else
+        -- Reset accumulator when disabled to avoid stale state
+        nearestPlayerAccum = 0
+        nearestPlayerRef = nil
     end
 
     -- Update Closest Player Tracker display (throttled to 10 Hz)
     closestTrackerAccum = closestTrackerAccum + dt
     if closestTrackerAccum >= 0.1 then
         closestTrackerAccum = 0
-        UpdateClosestPlayerTracker()
+        pcall(UpdateClosestPlayerTracker) -- Protect against errors
     end
 
     -- Update Performance Display (throttled to 2 Hz)
