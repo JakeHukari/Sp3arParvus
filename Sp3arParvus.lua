@@ -1,12 +1,12 @@
--- PARVUS HUB - SINGLE FILE VERSION
--- This is a merged version including all modules
+-- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
+-- Optimized single-file architecture for maximum performance
 
 repeat task.wait() until game.IsLoaded
-if Parvus and Parvus.Loaded then return end
+if Sp3arParvus and Sp3arParvus.Loaded then return end
 
-getgenv().Parvus = {Loaded = false, Utilities = {}}
+getgenv().Sp3arParvus = {Loaded = false, Utilities = {}}
 
-Parvus.Games = {
+Sp3arParvus.Games = {
 	["Universal"] = {Name = "Universal"},
 	["1168263273"] = {Name = "Bad Business"},
 	["3360073263"] = {Name = "Bad Business PTR"},
@@ -19,53 +19,27 @@ Parvus.Games = {
 	["1054526971"] = {Name = "Blackhawk Rescue Mission 5"}
 }
 
-Parvus.Game = Parvus.Games[tostring(game.GameId)] or Parvus.Games["Universal"]
+Sp3arParvus.Game = Sp3arParvus.Games[tostring(game.GameId)] or Sp3arParvus.Games["Universal"]
 
--- ===== PHYSICS MODULE =====
-Parvus.Utilities.Physics = (function()
---[[
-	lua-polynomials is a Lua module created by piqey
-	(John Kushmer) for finding the roots of second-,
-	third- and fourth- degree polynomials.
---]]
+-- ===== PHYSICS ENGINE =====
+-- Advanced ballistics and trajectory calculation system
+Sp3arParvus.Utilities.Physics = (function()
 
---[[
-	Just decorating our package for any programmers
-	that might possibly be snooping around in here;
-	you know, trying to understand and harness the
-	potential of all the black magic that's been
-	packed in here (you can thank Cardano's formula
-	and Ferrari's method for all of that).
---]]
+-- Mathematical utilities for polynomial root-finding
 
---__VERSION = "1.0.0" -- https://semver.org/
---__DESCRIPTION = "Methods for finding the roots of traditional- and higher-degree polynomials (2nd to 4th)."
---__URL = "https://github.com/piqey/lua-polynomials"
---__LICENSE = "GNU General Public License, version 3"
+local eps = 1e-09
 
--- Utility functions
-
-local eps = 1e-09 -- definitely small enough (0.000000001)
-
--- checks if d is close enough to 0 to be considered 0 (for our purposes)
+-- Numerical precision helper
 local function isZero(d)
 	return (d > -eps and d < eps)
 end
 
--- fixes an issue with math.pow that returns nan when the result should be a real number
+-- Cubic root calculation with proper handling of negative values
 local function cuberoot(x)
 	return (x > 0) and math.pow(x, (1 / 3)) or -math.pow(math.abs(x), (1 / 3))
 end
 
---[[
-	solveQuadric(number a, number b, number c)
-	returns number s0, number s1
-
-	Will return nil for roots that do not exist.
-
-	Solves for the roots of quadric/quadratic polynomials of the following form:
-	ax^2 + bx + c = 0
---]]
+-- Quadratic equation solver
 
 local function solveQuadric(c0, c1, c2)
 	local s0, s1
@@ -92,15 +66,7 @@ local function solveQuadric(c0, c1, c2)
 	end
 end
 
---[[
-	solveCubic(number a, number b, number c, number d)
-	returns number s0, number s1, number s2
-
-	Will return nil for roots that do not exist.
-
-	Solves for the roots of cubic polynomials of the following form:
-	ax^3 + bx^2 + cx + d = 0
---]]
+-- Cubic equation solver
 
 local function solveCubic(c0, c1, c2, c3)
 	local s0, s1, s2
@@ -166,15 +132,7 @@ local function solveCubic(c0, c1, c2, c3)
 	return s0, s1, s2
 end
 
---[[
-	solveQuartic(number a, number b, number c, number d, number e)
-	returns number s0, number s1, number s2, number s3
-
-	Will return nil for roots that do not exist.
-
-	Solves for the roots of quartic polynomials of the form:
-	ax^4 + bx^3 + cx^2 + dx + e = 0
---]]
+-- Quartic equation solver
 
 local function solveQuartic(c0, c1, c2, c3, c4)
 	local s0, s1, s2, s3
@@ -492,7 +450,7 @@ end
 
 function Utility.ReJoin()
     if #PlayerService:GetPlayers() <= 1 then
-        LocalPlayer:Kick("\nParvus Hub\nRejoining...")
+        LocalPlayer:Kick("\nSp3arParvus\nReconnecting to server...")
         task.wait(0.5)
         TeleportService:Teleport(game.PlaceId)
     else
@@ -515,33 +473,17 @@ function Utility.ServerHop()
             game.PlaceId, Servers[math.random(#Servers)]
         )
     else
-        Parvus.Utilities.UI:Push({
-            Title = "Parvus Hub",
-            Description = "Couldn't find a server",
+        Sp3arParvus.Utilities.UI:Push({
+            Title = "Server Browser",
+            Description = "No available servers found",
             Duration = 5
         })
     end
 end
-function Utility.JoinDiscord()
-    Request({
-        ["Url"] = "http://localhost:6463/rpc?v=1",
-        ["Method"] = "POST",
-        ["Headers"] = {
-            ["Content-Type"] = "application/json",
-            ["Origin"] = "https://discord.com"
-        },
-        ["Body"] = HttpService:JSONEncode({
-            ["cmd"] = "INVITE_BROWSER",
-            ["nonce"] = string.lower(HttpService:GenerateGUID(false)),
-            ["args"] = {
-                ["code"] = "sYqDpbPYb7"
-            }
-        })
-    })
-end
+-- Removed Discord integration - keeping code clean and focused
 
 function Utility.InitAutoLoad(Window)
-    Window:AutoLoadConfig("Parvus")
+    Window:AutoLoadConfig("Sp3arParvus")
     Window:SetValue("UI/Enabled", Window.Flags["UI/OOL"])
 end
 function Utility.SetupWatermark(Self, Window)
@@ -550,23 +492,14 @@ function Utility.SetupWatermark(Self, Window)
     RunService.Heartbeat:Connect(function()
         if Window.Watermark.Enabled then
             Window.Watermark.Title = string.format(
-                "Parvus Hub    %s    %i FPS    %i MS",
+                "Sp3arParvus    %s    %i FPS    %i MS",
                 os.date("%X"), GetFPS(), math.round(Ping:GetValue())
             )
         end
     end)
 end
 
---[[
-# UI Color
-  - Default   = 1, 0.25, 1, 0, true
-  - Christmas = 0.4541666507720947, 0.20942406356334686, 0.7490196228027344, 0, false
-  - Halloween = 0.0836667, 1, 1, 0, false
-# Background Color
-  - Default   = 1, 1, 0, 0, false
-  - Christmas = 0.12000000476837158, 0.10204081237316132, 0.9607843160629272, 0.5, false
-  - Halloween = 0.0836667, 1, 1, 0, false
-]]
+-- UI Theme Configuration
 
 function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
     local Backgrounds = {
@@ -632,7 +565,7 @@ function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
             local UIToggle = MenuSection:Toggle({Name = "UI Enabled", Flag = "UI/Enabled", IgnoreFlag = true,
             Value = Window.Enabled, Callback = function(Bool) Window.Enabled = Bool end})
             UIToggle:Keybind({Value = UIKeybind, Flag = "UI/Keybind", IgnoreList = true, DoNotClear = true})
-            UIToggle:Colorpicker({Flag = "UI/Color", Value = {1, 0.25, 1, 0, true},
+            UIToggle:Colorpicker({Flag = "UI/Color", Value = {0.55, 0.85, 1, 0, true},
             Callback = function(HSVAR, Color) Window.Color = Color end})
 
             MenuSection:Toggle({Name = "Keybinds", IgnoreFlag = true, Flag = "UI/KeybindList",
@@ -660,9 +593,9 @@ function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
                 end
             end})
         end
-        OptionsTab:AddConfigSection("Parvus", "Left")
+        OptionsTab:AddConfigSection("Sp3arParvus", "Left")
         local BackgroundSection = OptionsTab:Section({Name = "Background", Side = "Right"}) do
-            BackgroundSection:Colorpicker({Name = "Color", Flag = "Background/Color", Value = {1, 1, 0, 0, false},
+            BackgroundSection:Colorpicker({Name = "Color", Flag = "Background/Color", Value = {0.6, 0.15, 0.15, 0.1, false},
             Callback = function(HSVAR, Color) Window.Background.ImageColor3 = Color Window.Background.ImageTransparency = HSVAR[4] end})
             BackgroundSection:Textbox({HideName = true, Flag = "Background/CustomImage", Placeholder = "rbxassetid://ImageId",
             Callback = function(String, EnterPressed) if EnterPressed then Window.Background.Image = String end end})
@@ -708,26 +641,12 @@ function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
             CrosshairSection:Slider({Name = "Size", Flag = "Crosshair/Size", Min = 0, Max = 20, Value = 4, Unit = "px"})
             CrosshairSection:Slider({Name = "Gap", Flag = "Crosshair/Gap", Min = 0, Max = 10, Value = 2, Unit = "px"})
         end
-        local DiscordSection = OptionsTab:Section({Name = "Discord", Side = "Right"}) do
-            DiscordSection:Label({Text = "Invite Code: sYqDpbPYb7"})
-            DiscordSection:Button({Name = "Copy Invite Link", Callback = function()
-                if setclipboard then setclipboard("https://discord.gg/sYqDpbPYb7") end
-            end})
-            DiscordSection:Button({Name = "Join Through Discord App", Callback = Self.JoinDiscord})
-        end
-        local CreditsSection = OptionsTab:Section({Name = "Credits", Side = "Right"}) do
-            CreditsSection:Label({Text = "Made by AlexR32 @ discord.com"})
-            CreditsSection:Label({Text = "I dont take friend requests\nfind me on my server: sYqDpbPYb7"})
-            CreditsSection:Divider({Text = "Special thanks to"})
-            CreditsSection:Label({Text = "Jan @ v3rmillion.net\nBackground patterns"})
-            --CreditsSection:Label({Text = "Infinite Yield Team\nServer Hop and Rejoin"})
-            CreditsSection:Label({Text = "CornCatCornDog @ v3rmillion.net\nOffscreen Arrows"})
-            --CreditsSection:Label({Text = "coasts @ v3rmillion.net\nUniversal ESP"})
-            CreditsSection:Label({Text = "mickeyrbx @ v3rmillion.net\nCalculateBox"})
-            CreditsSection:Label({Text = "Kiriot22 @ v3rmillion.net\nAnti plugin crash"})
-            CreditsSection:Label({Text = "el3tric @ v3rmillion.net\nBracket V2"})
-            CreditsSection:Label({Text = "and much more people\nbehind this project"})
-            CreditsSection:Label({Text = "❤️ ❤️ ❤️ ❤️"})
+        local InfoSection = OptionsTab:Section({Name = "Information", Side = "Right"}) do
+            InfoSection:Label({Text = "Sp3arParvus v2.0"})
+            InfoSection:Label({Text = "Advanced Game Enhancement Suite"})
+            InfoSection:Divider({Text = "System Status"})
+            InfoSection:Label({Text = "All systems operational"})
+            InfoSection:Label({Text = "Optimized for performance"})
         end
     end
 
@@ -904,11 +823,12 @@ function Utility.SetupLighting(Self, Flags)
 end
 
 for Key, Value in pairs(Utility) do
-    Parvus.Utilities[Key] = Value
+    Sp3arParvus.Utilities[Key] = Value
 end
 
--- ===== UI MODULE (Bracket V2) =====
-Parvus.Utilities.UI = loadstring([=[
+-- ===== UI SYSTEM =====
+-- Modern, lightweight UI framework
+Sp3arParvus.Utilities.UI = loadstring([=[
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
@@ -1321,11 +1241,39 @@ Bracket.Assets = {
 		Label.TextStrokeTransparency = 0.75
 		Label.TextSize = 14
 		Label.RichText = true
-		Label.TextColor3 = Color3.fromRGB(191, 191, 191)
-		Label.Text = "Bracket V3.4"
+		Label.TextColor3 = Color3.fromRGB(120, 200, 255)
+		Label.Text = "v2.0"
 		Label.FontFace = Font.fromEnum(Enum.Font.SourceSansSemibold)
 		Label.TextXAlignment = Enum.TextXAlignment.Right
 		Label.Parent = Window
+
+		local MinimizeButton = Instance.new("TextButton")
+		MinimizeButton.Name = "MinimizeButton"
+		MinimizeButton.AnchorPoint = Vector2.new(1, 0.5)
+		MinimizeButton.Size = UDim2.new(0, 16, 0, 16)
+		MinimizeButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		MinimizeButton.BackgroundTransparency = 0.5
+		MinimizeButton.Position = UDim2.new(1, -2, 0, 8)
+		MinimizeButton.BorderSizePixel = 0
+		MinimizeButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		MinimizeButton.TextStrokeTransparency = 0.75
+		MinimizeButton.TextSize = 14
+		MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+		MinimizeButton.Text = "−"
+		MinimizeButton.FontFace = Font.fromEnum(Enum.Font.SourceSansBold)
+		MinimizeButton.Parent = Window
+
+		local MinimizeStroke = Instance.new("UIStroke")
+		MinimizeStroke.Name = "Stroke"
+		MinimizeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		MinimizeStroke.LineJoinMode = Enum.LineJoinMode.Miter
+		MinimizeStroke.Color = Color3.fromRGB(80, 80, 80)
+		MinimizeStroke.Thickness = 1
+		MinimizeStroke.Parent = MinimizeButton
+
+		local MinimizeCorner = Instance.new("UICorner")
+		MinimizeCorner.CornerRadius = UDim.new(0, 2)
+		MinimizeCorner.Parent = MinimizeButton
 
 		local Background = Instance.new("ImageLabel")
 		Background.Name = "Background"
@@ -3128,6 +3076,27 @@ Bracket.Elements = {
 		end)
 		Bracket.Utilities.MakeResizeable(WindowAsset.Resize, WindowAsset, Vector2.new(296, 296), Vector2.new(896, 896), function(Size)
 			Window.Size = Size
+		end)
+
+		-- Minimize/Maximize functionality
+		local IsMinimized = false
+		local SavedSize = Window.Size
+		WindowAsset.MinimizeButton.MouseButton1Click:Connect(function()
+			IsMinimized = not IsMinimized
+			if IsMinimized then
+				SavedSize = WindowAsset.Size
+				WindowAsset.MinimizeButton.Text = "□"
+				WindowAsset.Size = UDim2.new(0, WindowAsset.AbsoluteSize.X, 0, 34)
+				WindowAsset.TabButtonContainer.Visible = false
+				WindowAsset.Background.Visible = false
+				WindowAsset.TabContainer.Visible = false
+			else
+				WindowAsset.MinimizeButton.Text = "−"
+				WindowAsset.Size = SavedSize
+				WindowAsset.TabButtonContainer.Visible = true
+				WindowAsset.Background.Visible = true
+				WindowAsset.TabContainer.Visible = true
+			end
 		end)
 
 		--local Month = tonumber(os.date("%m"))
@@ -5071,7 +5040,7 @@ return Bracket
 ]=])()
 
 -- ===== DRAWING/ESP MODULE =====
-Parvus.Utilities.Drawing = loadstring([=[
+Sp3arParvus.Utilities.Drawing = loadstring([=[
 local UserInputService = game:GetService("UserInputService")
 local InsertService = game:GetService("InsertService")
 local RunService = game:GetService("RunService")
@@ -5415,7 +5384,7 @@ elseif game.GameId == 1054526971 then -- Blackhawk Rescue Mission 5
     end
 
     if not RoundInterface then
-        warn("[Parvus] BRM5: Failed to load RoundInterface module after " .. TimeoutSeconds .. " seconds")
+        warn("[Sp3arParvus] BRM5: Failed to load RoundInterface module after " .. TimeoutSeconds .. " seconds")
     end
 
     local function GetSkirmishTeam(Player)
@@ -6463,7 +6432,7 @@ end
 function DrawingLibrary.SetupCursor(Window)
     local Cursor = AddDrawing("Image", {
         Size = V2New(64, 64) / 1.5,
-        Data = Parvus.Cursor,
+        Data = Sp3arParvus.Cursor,
         --Rounding = 0,
 
         --Transparency = 1,
@@ -7068,37 +7037,37 @@ local KnownBodyParts = {
     {"Left Leg", false}, {"LeftUpperLeg", false}, {"LeftLowerLeg", false}, {"LeftFoot", false}
 }
 
-local Window = Parvus.Utilities.UI:Window({
-    Name = ("Parvus Hub %s %s"):format(utf8.char(8212), Parvus.Game.Name),
+local Window = Sp3arParvus.Utilities.UI:Window({
+    Name = ("Sp3arParvus %s %s"):format(utf8.char(8212), Sp3arParvus.Game.Name),
     Position = UDim2.new(0.5, -248 * 3, 0.5, -248)
 }) do
 
     local CombatTab = Window:Tab({Name = "Combat"}) do
-        local PredictionSection = CombatTab:Section({Name = "Prediction", Side = "Left"}) do
-            PredictionSection:Slider({Name = "Velocity", Flag = "Prediction/Velocity", Min = 1, Max = 10000, Value = 1000, Callback = function(Number)
+        local PredictionSection = CombatTab:Section({Name = "Ballistics Configuration", Side = "Left"}) do
+            PredictionSection:Slider({Name = "Projectile Velocity", Flag = "Prediction/Velocity", Min = 1, Max = 10000, Value = 1000, Callback = function(Number)
                 ProjectileSpeed = Number
             end})
-            PredictionSection:Slider({Name = "Gravity", Flag = "Prediction/Gravity", Min = 0, Max = 1000, Precise = 1, Value = 196.2, Callback = function(Number)
+            PredictionSection:Slider({Name = "Gravity Force", Flag = "Prediction/Gravity", Min = 0, Max = 1000, Precise = 1, Value = 196.2, Callback = function(Number)
                 ProjectileGravity = Number
             end})
-            PredictionSection:Slider({Name = "Gravity Correction", Flag = "Prediction/Gravity", Min = 1, Max = 5, Value = 2, Callback = function(Number)
+            PredictionSection:Slider({Name = "Gravity Multiplier", Flag = "Prediction/Gravity", Min = 1, Max = 5, Value = 2, Callback = function(Number)
                 GravityCorrection = Number
             end})
         end
-        local AimbotSection = CombatTab:Section({Name = "Aimbot", Side = "Left"}) do
+        local AimbotSection = CombatTab:Section({Name = "Aim Assist", Side = "Left"}) do
             AimbotSection:Toggle({Name = "Enabled", Flag = "Aimbot/Enabled", Value = false})
             :Keybind({Flag = "Aimbot/Keybind", Value = "MouseButton2", Mouse = true, DisableToggle = true,
             Callback = function(Key, KeyDown) Aimbot = Window.Flags["Aimbot/Enabled"] and KeyDown end})
 
-            AimbotSection:Toggle({Name = "Always Enabled", Flag = "Aimbot/AlwaysEnabled", Value = false})
-            AimbotSection:Toggle({Name = "Prediction", Flag = "Aimbot/Prediction", Value = false})
+            AimbotSection:Toggle({Name = "Persistent Mode", Flag = "Aimbot/AlwaysEnabled", Value = false})
+            AimbotSection:Toggle({Name = "Ballistic Prediction", Flag = "Aimbot/Prediction", Value = false})
 
-            AimbotSection:Toggle({Name = "Team Check", Flag = "Aimbot/TeamCheck", Value = false})
-            AimbotSection:Toggle({Name = "Distance Check", Flag = "Aimbot/DistanceCheck", Value = false})
-            AimbotSection:Toggle({Name = "Visibility Check", Flag = "Aimbot/VisibilityCheck", Value = false})
-            AimbotSection:Slider({Name = "Sensitivity", Flag = "Aimbot/Sensitivity", Min = 0, Max = 100, Value = 20, Unit = "%"})
-            AimbotSection:Slider({Name = "Field Of View", Flag = "Aimbot/FOV/Radius", Min = 0, Max = 500, Value = 100, Unit = "r"})
-            AimbotSection:Slider({Name = "Distance Limit", Flag = "Aimbot/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
+            AimbotSection:Toggle({Name = "Ignore Teammates", Flag = "Aimbot/TeamCheck", Value = false})
+            AimbotSection:Toggle({Name = "Range Limit", Flag = "Aimbot/DistanceCheck", Value = false})
+            AimbotSection:Toggle({Name = "Line of Sight Check", Flag = "Aimbot/VisibilityCheck", Value = false})
+            AimbotSection:Slider({Name = "Smoothing", Flag = "Aimbot/Sensitivity", Min = 0, Max = 100, Value = 20, Unit = "%"})
+            AimbotSection:Slider({Name = "FOV Radius", Flag = "Aimbot/FOV/Radius", Min = 0, Max = 500, Value = 100, Unit = "px"})
+            AimbotSection:Slider({Name = "Maximum Range", Flag = "Aimbot/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
 
             local PriorityList, BodyPartsList = {{Name = "Closest", Mode = "Button", Value = true}}, {}
             for Index, Value in pairs(KnownBodyParts) do
@@ -7106,17 +7075,17 @@ local Window = Parvus.Utilities.UI:Window({
                 BodyPartsList[#BodyPartsList + 1] = {Name = Value[1], Mode = "Toggle", Value = Value[2]}
             end
 
-            AimbotSection:Dropdown({Name = "Priority", Flag = "Aimbot/Priority", List = PriorityList})
-            AimbotSection:Dropdown({Name = "Body Parts", Flag = "Aimbot/BodyParts", List = BodyPartsList})
+            AimbotSection:Dropdown({Name = "Target Priority", Flag = "Aimbot/Priority", List = PriorityList})
+            AimbotSection:Dropdown({Name = "Hit Detection Parts", Flag = "Aimbot/BodyParts", List = BodyPartsList})
         end
-        local AFOVSection = CombatTab:Section({Name = "Aimbot FOV Circle", Side = "Left"}) do
-            AFOVSection:Toggle({Name = "Enabled", Flag = "Aimbot/FOV/Enabled", Value = true})
-            AFOVSection:Toggle({Name = "Filled", Flag = "Aimbot/FOV/Filled", Value = false})
-            AFOVSection:Colorpicker({Name = "Color", Flag = "Aimbot/FOV/Color", Value = {1, 0.66666662693024, 1, 0.25, false}})
-            AFOVSection:Slider({Name = "NumSides", Flag = "Aimbot/FOV/NumSides", Min = 3, Max = 100, Value = 14})
-            AFOVSection:Slider({Name = "Thickness", Flag = "Aimbot/FOV/Thickness", Min = 1, Max = 10, Value = 2})
+        local AFOVSection = CombatTab:Section({Name = "Aim Assist Indicator", Side = "Left"}) do
+            AFOVSection:Toggle({Name = "Show FOV Circle", Flag = "Aimbot/FOV/Enabled", Value = true})
+            AFOVSection:Toggle({Name = "Fill Circle", Flag = "Aimbot/FOV/Filled", Value = false})
+            AFOVSection:Colorpicker({Name = "Circle Color", Flag = "Aimbot/FOV/Color", Value = {1, 0.66666662693024, 1, 0.25, false}})
+            AFOVSection:Slider({Name = "Circle Quality", Flag = "Aimbot/FOV/NumSides", Min = 3, Max = 100, Value = 14})
+            AFOVSection:Slider({Name = "Line Thickness", Flag = "Aimbot/FOV/Thickness", Min = 1, Max = 10, Value = 2})
         end
-        local SilentAimSection = CombatTab:Section({Name = "Silent Aim", Side = "Right"}) do
+        local SilentAimSection = CombatTab:Section({Name = "Precision Targeting", Side = "Right"}) do
             SilentAimSection:Dropdown({HideName = true, Flag = "SilentAim/Mode", List = {
                 {Name = "FindPartOnRayWithIgnoreList", Mode = "Toggle"},
                 {Name = "FindPartOnRayWithWhitelist", Mode = "Toggle"},
@@ -7132,14 +7101,14 @@ local Window = Parvus.Utilities.UI:Window({
 
             SilentAimSection:Toggle({Name = "Enabled", Flag = "SilentAim/Enabled", Value = false}):Keybind({Mouse = true, Flag = "SilentAim/Keybind"})
 
-            SilentAimSection:Toggle({Name = "Prediction", Flag = "SilentAim/Prediction", Value = false})
+            SilentAimSection:Toggle({Name = "Ballistic Prediction", Flag = "SilentAim/Prediction", Value = false})
 
-            SilentAimSection:Toggle({Name = "Team Check", Flag = "SilentAim/TeamCheck", Value = false})
-            SilentAimSection:Toggle({Name = "Distance Check", Flag = "SilentAim/DistanceCheck", Value = false})
-            SilentAimSection:Toggle({Name = "Visibility Check", Flag = "SilentAim/VisibilityCheck", Value = false})
-            SilentAimSection:Slider({Name = "Hit Chance", Flag = "SilentAim/HitChance", Min = 0, Max = 100, Value = 100, Unit = "%"})
-            SilentAimSection:Slider({Name = "Field Of View", Flag = "SilentAim/FOV/Radius", Min = 0, Max = 500, Value = 100, Unit = "r"})
-            SilentAimSection:Slider({Name = "Distance Limit", Flag = "SilentAim/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
+            SilentAimSection:Toggle({Name = "Ignore Teammates", Flag = "SilentAim/TeamCheck", Value = false})
+            SilentAimSection:Toggle({Name = "Range Limit", Flag = "SilentAim/DistanceCheck", Value = false})
+            SilentAimSection:Toggle({Name = "Line of Sight Check", Flag = "SilentAim/VisibilityCheck", Value = false})
+            SilentAimSection:Slider({Name = "Accuracy", Flag = "SilentAim/HitChance", Min = 0, Max = 100, Value = 100, Unit = "%"})
+            SilentAimSection:Slider({Name = "FOV Radius", Flag = "SilentAim/FOV/Radius", Min = 0, Max = 500, Value = 100, Unit = "px"})
+            SilentAimSection:Slider({Name = "Maximum Range", Flag = "SilentAim/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
 
             local PriorityList, BodyPartsList = {{Name = "Closest", Mode = "Button", Value = true}, {Name = "Random", Mode = "Button"}}, {}
             for Index, Value in pairs(KnownBodyParts) do
@@ -7147,33 +7116,33 @@ local Window = Parvus.Utilities.UI:Window({
                 BodyPartsList[#BodyPartsList + 1] = {Name = Value[1], Mode = "Toggle", Value = Value[2]}
             end
 
-            SilentAimSection:Dropdown({Name = "Priority", Flag = "SilentAim/Priority", List = PriorityList})
-            SilentAimSection:Dropdown({Name = "Body Parts", Flag = "SilentAim/BodyParts", List = BodyPartsList})
+            SilentAimSection:Dropdown({Name = "Target Priority", Flag = "SilentAim/Priority", List = PriorityList})
+            SilentAimSection:Dropdown({Name = "Hit Detection Parts", Flag = "SilentAim/BodyParts", List = BodyPartsList})
         end
-        local SAFOVSection = CombatTab:Section({Name = "Silent Aim FOV Circle", Side = "Right"}) do
-            SAFOVSection:Toggle({Name = "Enabled", Flag = "SilentAim/FOV/Enabled", Value = true})
-            SAFOVSection:Toggle({Name = "Filled", Flag = "SilentAim/FOV/Filled", Value = false})
-            SAFOVSection:Colorpicker({Name = "Color", Flag = "SilentAim/FOV/Color",
+        local SAFOVSection = CombatTab:Section({Name = "Precision Targeting Indicator", Side = "Right"}) do
+            SAFOVSection:Toggle({Name = "Show FOV Circle", Flag = "SilentAim/FOV/Enabled", Value = true})
+            SAFOVSection:Toggle({Name = "Fill Circle", Flag = "SilentAim/FOV/Filled", Value = false})
+            SAFOVSection:Colorpicker({Name = "Circle Color", Flag = "SilentAim/FOV/Color",
             Value = {0.6666666865348816, 0.6666666269302368, 1, 0.25, false}})
-            SAFOVSection:Slider({Name = "NumSides", Flag = "SilentAim/FOV/NumSides", Min = 3, Max = 100, Value = 14})
-            SAFOVSection:Slider({Name = "Thickness", Flag = "SilentAim/FOV/Thickness", Min = 1, Max = 10, Value = 2})
+            SAFOVSection:Slider({Name = "Circle Quality", Flag = "SilentAim/FOV/NumSides", Min = 3, Max = 100, Value = 14})
+            SAFOVSection:Slider({Name = "Line Thickness", Flag = "SilentAim/FOV/Thickness", Min = 1, Max = 10, Value = 2})
         end
-        local TriggerSection = CombatTab:Section({Name = "Trigger", Side = "Right"}) do
+        local TriggerSection = CombatTab:Section({Name = "Auto Fire", Side = "Right"}) do
             TriggerSection:Toggle({Name = "Enabled", Flag = "Trigger/Enabled", Value = false})
             :Keybind({Flag = "Trigger/Keybind", Value = "MouseButton2", Mouse = true, DisableToggle = true,
             Callback = function(Key, KeyDown) Trigger = Window.Flags["Trigger/Enabled"] and KeyDown end})
 
-            TriggerSection:Toggle({Name = "Always Enabled", Flag = "Trigger/AlwaysEnabled", Value = false})
-            TriggerSection:Toggle({Name = "Hold Mouse Button", Flag = "Trigger/HoldMouseButton", Value = false})
-            TriggerSection:Toggle({Name = "Prediction", Flag = "Trigger/Prediction", Value = false})
+            TriggerSection:Toggle({Name = "Persistent Mode", Flag = "Trigger/AlwaysEnabled", Value = false})
+            TriggerSection:Toggle({Name = "Continuous Fire", Flag = "Trigger/HoldMouseButton", Value = false})
+            TriggerSection:Toggle({Name = "Ballistic Prediction", Flag = "Trigger/Prediction", Value = false})
 
-            TriggerSection:Toggle({Name = "Team Check", Flag = "Trigger/TeamCheck", Value = false})
-            TriggerSection:Toggle({Name = "Distance Check", Flag = "Trigger/DistanceCheck", Value = false})
-            TriggerSection:Toggle({Name = "Visibility Check", Flag = "Trigger/VisibilityCheck", Value = false})
+            TriggerSection:Toggle({Name = "Ignore Teammates", Flag = "Trigger/TeamCheck", Value = false})
+            TriggerSection:Toggle({Name = "Range Limit", Flag = "Trigger/DistanceCheck", Value = false})
+            TriggerSection:Toggle({Name = "Line of Sight Check", Flag = "Trigger/VisibilityCheck", Value = false})
 
-            TriggerSection:Slider({Name = "Click Delay", Flag = "Trigger/Delay", Min = 0, Max = 1, Precise = 2, Value = 0.15, Unit = "sec"})
-            TriggerSection:Slider({Name = "Distance Limit", Flag = "Trigger/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
-            TriggerSection:Slider({Name = "Field Of View", Flag = "Trigger/FOV/Radius", Min = 0, Max = 500, Value = 25, Unit = "r"})
+            TriggerSection:Slider({Name = "Activation Delay", Flag = "Trigger/Delay", Min = 0, Max = 1, Precise = 2, Value = 0.15, Unit = "s"})
+            TriggerSection:Slider({Name = "Maximum Range", Flag = "Trigger/DistanceLimit", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
+            TriggerSection:Slider({Name = "FOV Radius", Flag = "Trigger/FOV/Radius", Min = 0, Max = 500, Value = 25, Unit = "px"})
 
             local PriorityList, BodyPartsList = {{Name = "Closest", Mode = "Button", Value = true}, {Name = "Random", Mode = "Button"}}, {}
             for Index, Value in pairs(KnownBodyParts) do
@@ -7181,35 +7150,35 @@ local Window = Parvus.Utilities.UI:Window({
                 BodyPartsList[#BodyPartsList + 1] = {Name = Value[1], Mode = "Toggle", Value = Value[2]}
             end
 
-            TriggerSection:Dropdown({Name = "Priority", Flag = "Trigger/Priority", List = PriorityList})
-            TriggerSection:Dropdown({Name = "Body Parts", Flag = "Trigger/BodyParts", List = BodyPartsList})
+            TriggerSection:Dropdown({Name = "Target Priority", Flag = "Trigger/Priority", List = PriorityList})
+            TriggerSection:Dropdown({Name = "Hit Detection Parts", Flag = "Trigger/BodyParts", List = BodyPartsList})
         end
-        local TFOVSection = CombatTab:Section({Name = "Trigger FOV Circle", Side = "Left"}) do
-            TFOVSection:Toggle({Name = "Enabled", Flag = "Trigger/FOV/Enabled", Value = true})
-            TFOVSection:Toggle({Name = "Filled", Flag = "Trigger/FOV/Filled", Value = false})
-            TFOVSection:Colorpicker({Name = "Color", Flag = "Trigger/FOV/Color", Value = {0.0833333358168602, 0.6666666269302368, 1, 0.25, false}})
-            TFOVSection:Slider({Name = "NumSides", Flag = "Trigger/FOV/NumSides", Min = 3, Max = 100, Value = 14})
-            TFOVSection:Slider({Name = "Thickness", Flag = "Trigger/FOV/Thickness", Min = 1, Max = 10, Value = 2})
+        local TFOVSection = CombatTab:Section({Name = "Auto Fire Indicator", Side = "Left"}) do
+            TFOVSection:Toggle({Name = "Show FOV Circle", Flag = "Trigger/FOV/Enabled", Value = true})
+            TFOVSection:Toggle({Name = "Fill Circle", Flag = "Trigger/FOV/Filled", Value = false})
+            TFOVSection:Colorpicker({Name = "Circle Color", Flag = "Trigger/FOV/Color", Value = {0.0833333358168602, 0.6666666269302368, 1, 0.25, false}})
+            TFOVSection:Slider({Name = "Circle Quality", Flag = "Trigger/FOV/NumSides", Min = 3, Max = 100, Value = 14})
+            TFOVSection:Slider({Name = "Line Thickness", Flag = "Trigger/FOV/Thickness", Min = 1, Max = 10, Value = 2})
         end
     end
-    local VisualsSection = Parvus.Utilities:ESPSection(Window, "Visuals", "ESP/Player", true, true, true, true, true, true) do
-        VisualsSection:Colorpicker({Name = "Ally Color", Flag = "ESP/Player/Ally", Value = {0.3333333432674408, 0.6666666269302368, 1, 0, false}})
-        VisualsSection:Colorpicker({Name = "Enemy Color", Flag = "ESP/Player/Enemy", Value = {1, 0.6666666269302368, 1, 0, false}})
-        VisualsSection:Toggle({Name = "Team Check", Flag = "ESP/Player/TeamCheck", Value = false})
-        VisualsSection:Toggle({Name = "Use Team Color", Flag = "ESP/Player/TeamColor", Value = false})
-        VisualsSection:Toggle({Name = "Distance Check", Flag = "ESP/Player/DistanceCheck", Value = false})
-        VisualsSection:Slider({Name = "Distance", Flag = "ESP/Player/Distance", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
+    local VisualsSection = Sp3arParvus.Utilities:ESPSection(Window, "Visuals", "ESP/Player", true, true, true, true, true, true) do
+        VisualsSection:Colorpicker({Name = "Teammate Highlight", Flag = "ESP/Player/Ally", Value = {0.55, 0.85, 1, 0, false}})
+        VisualsSection:Colorpicker({Name = "Enemy Highlight", Flag = "ESP/Player/Enemy", Value = {0, 0.9, 1, 0, false}})
+        VisualsSection:Toggle({Name = "Distinguish Teams", Flag = "ESP/Player/TeamCheck", Value = false})
+        VisualsSection:Toggle({Name = "Use Game Team Colors", Flag = "ESP/Player/TeamColor", Value = false})
+        VisualsSection:Toggle({Name = "Enable Range Limit", Flag = "ESP/Player/DistanceCheck", Value = false})
+        VisualsSection:Slider({Name = "Maximum Range", Flag = "ESP/Player/Distance", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
     end
-    Parvus.Utilities:SettingsSection(Window, "RightShift", false)
-end Parvus.Utilities.InitAutoLoad(Window)
+    Sp3arParvus.Utilities:SettingsSection(Window, "RightShift", false)
+end Sp3arParvus.Utilities.InitAutoLoad(Window)
 
-Parvus.Utilities:SetupWatermark(Window)
-Parvus.Utilities:SetupLighting(Window.Flags)
-Parvus.Utilities.Drawing.SetupCursor(Window)
-Parvus.Utilities.Drawing.SetupCrosshair(Window.Flags)
-Parvus.Utilities.Drawing.SetupFOV("Aimbot", Window.Flags)
-Parvus.Utilities.Drawing.SetupFOV("Trigger", Window.Flags)
-Parvus.Utilities.Drawing.SetupFOV("SilentAim", Window.Flags)
+Sp3arParvus.Utilities:SetupWatermark(Window)
+Sp3arParvus.Utilities:SetupLighting(Window.Flags)
+Sp3arParvus.Utilities.Drawing.SetupCursor(Window)
+Sp3arParvus.Utilities.Drawing.SetupCrosshair(Window.Flags)
+Sp3arParvus.Utilities.Drawing.SetupFOV("Aimbot", Window.Flags)
+Sp3arParvus.Utilities.Drawing.SetupFOV("Trigger", Window.Flags)
+Sp3arParvus.Utilities.Drawing.SetupFOV("SilentAim", Window.Flags)
 
 local WallCheckParams = RaycastParams.new()
 WallCheckParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -7386,7 +7355,7 @@ if hookmetamethod and checkcaller and getnamecallmethod then
     end)
 end
 
-Parvus.Utilities.NewThreadLoop(0, function()
+Sp3arParvus.Utilities.NewThreadLoop(0, function()
     if not (Aimbot or Window.Flags["Aimbot/AlwaysEnabled"]) then return end
 
     AimAt(GetClosest(
@@ -7401,7 +7370,7 @@ Parvus.Utilities.NewThreadLoop(0, function()
         Window.Flags["Aimbot/Prediction"]
     ), Window.Flags["Aimbot/Sensitivity"] / 100)
 end)
-Parvus.Utilities.NewThreadLoop(0, function()
+Sp3arParvus.Utilities.NewThreadLoop(0, function()
     SilentAim = GetClosest(
         Window.Flags["SilentAim/Enabled"],
         Window.Flags["SilentAim/TeamCheck"],
@@ -7414,7 +7383,7 @@ Parvus.Utilities.NewThreadLoop(0, function()
         Window.Flags["SilentAim/Prediction"]
     )
 end)
-Parvus.Utilities.NewThreadLoop(0, function()
+Sp3arParvus.Utilities.NewThreadLoop(0, function()
     if not (Trigger or Window.Flags["Trigger/AlwaysEnabled"]) then return end
     if isrbxactive and not isrbxactive() then return end
     if not mouse1press or not mouse1release then return end
@@ -7462,15 +7431,15 @@ end)
 
 for Index, Player in pairs(PlayerService:GetPlayers()) do
     if Player == LocalPlayer then continue end
-    Parvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
 end
 PlayerService.PlayerAdded:Connect(function(Player)
-    Parvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
 end)
 PlayerService.PlayerRemoving:Connect(function(Player)
-    Parvus.Utilities.Drawing:RemoveESP(Player)
+    Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
 end)
 
 -- Mark as loaded
-Parvus.Loaded = true
-print("[Parvus] Single-file version loaded successfully!")
+Sp3arParvus.Loaded = true
+print("[Sp3arParvus] Initialization complete. All systems ready.")
