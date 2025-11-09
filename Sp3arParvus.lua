@@ -6478,6 +6478,12 @@ function DrawingLibrary.RemoveESP(Self, Target)
     Self.ESP[Target] = nil
 end
 
+function DrawingLibrary.RebuildESP(Self, Target, Mode, Flag, Flags)
+    -- Remove existing ESP and create fresh one
+    Self:RemoveESP(Target)
+    Self:AddESP(Target, Mode, Flag, Flags)
+end
+
 function DrawingLibrary.RemoveObject(Self, Target)
     local ESP = Self.ObjectESP[Target]
     if not ESP then return end
@@ -7489,14 +7495,54 @@ Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
 end)
 
-for Index, Player in pairs(PlayerService:GetPlayers()) do
-    if Player == LocalPlayer then continue end
+-- Track CharacterAdded connections for proper cleanup on player leave/respawn
+local CharacterAddedConnections = {}
+
+-- Function to set up ESP for a player with CharacterAdded listener
+local function SetupPlayerESP(Player)
+    if Player == LocalPlayer then return end
+
+    -- Create initial ESP
     Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+
+    -- Set up CharacterAdded listener to rebuild ESP on respawn
+    local function OnCharacterAdded(Character)
+        -- Wait a moment for character to fully load
+        task.wait(0.1)
+        -- Rebuild ESP with fresh character reference
+        Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+    end
+
+    -- Connect to CharacterAdded
+    local Connection = Player.CharacterAdded:Connect(OnCharacterAdded)
+    CharacterAddedConnections[Player] = Connection
+
+    -- If player already has a character, set up ESP for it
+    if Player.Character then
+        OnCharacterAdded(Player.Character)
+    end
 end
+
+-- Set up ESP for existing players
+for Index, Player in pairs(PlayerService:GetPlayers()) do
+    SetupPlayerESP(Player)
+end
+
+-- Set up ESP for new players
 PlayerService.PlayerAdded:Connect(function(Player)
-    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+    SetupPlayerESP(Player)
 end)
+
+-- Clean up ESP and connections when player leaves
 PlayerService.PlayerRemoving:Connect(function(Player)
+    -- Disconnect CharacterAdded listener
+    local Connection = CharacterAddedConnections[Player]
+    if Connection then
+        Connection:Disconnect()
+        CharacterAddedConnections[Player] = nil
+    end
+
+    -- Remove ESP
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
 end)
 
