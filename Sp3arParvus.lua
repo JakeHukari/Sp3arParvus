@@ -4986,11 +4986,11 @@ function Bracket:Push(Notification)
             Vector2.new(NotificationAsset.Title.AbsoluteSize.X, NotificationAsset.Title.TextSize)
         ).Y
     )
-	NotificationAsset.Description.Size = UDim2.new(1, 0, 0,
+    NotificationAsset.Description.Size = UDim2.new(1, 0, 0,
         Bracket.Utilities.GetTextBounds(
-            NotificationAsset.Title.Text,
-            NotificationAsset.Title.Font.Name,
-            Vector2.new(NotificationAsset.Title.AbsoluteSize.X, NotificationAsset.Title.TextSize)
+            NotificationAsset.Description.Text,
+            NotificationAsset.Description.Font.Name,
+            Vector2.new(NotificationAsset.Description.AbsoluteSize.X, NotificationAsset.Description.TextSize)
         ).Y
     )
 
