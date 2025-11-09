@@ -5203,6 +5203,16 @@ local MAX_ESP_ERRORS = 3 -- Remove ESP after this many consecutive errors
 local ESPUpdateAccumulators = {}
 local ESPCleanupQueue = {}
 
+-- Expose tracking tables so callers can inspect or reset them safely
+DrawingLibrary.ESPErrorCounts = ESPErrorCounts
+DrawingLibrary.ESPUpdateAccumulators = ESPUpdateAccumulators
+
+function DrawingLibrary.ResetESPCounters(Self, Target)
+    if not Target then return end
+    ESPErrorCounts[Target] = nil
+    ESPUpdateAccumulators[Target] = nil
+end
+
 local function GetFlag(Flags, Flag, Option)
     return Flags[Flag .. Option]
 end
@@ -6538,8 +6548,7 @@ function DrawingLibrary.RemoveESP(Self, Target)
     Self.ESP[Target] = nil
 
     -- Clean up tracking tables to prevent memory leaks
-    ESPErrorCounts[Target] = nil
-    ESPUpdateAccumulators[Target] = nil
+    Self:ResetESPCounters(Target)
 
     -- Clear any reference to the ESP object
     ESP = nil
@@ -8213,9 +8222,11 @@ PlayerService.PlayerRemoving:Connect(function(Player)
     -- Remove ESP and clean up all tracking data
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
 
-    -- Clean up any remaining references in tracking tables
-    ESPErrorCounts[Player] = nil
-    ESPUpdateAccumulators[Player] = nil
+    -- Ensure any tracking counters are reset without touching module locals
+    local DrawingUtilities = Sp3arParvus.Utilities.Drawing
+    if DrawingUtilities and DrawingUtilities.ResetESPCounters then
+        DrawingUtilities:ResetESPCounters(Player)
+    end
 end)
 
 -- ============================================================
