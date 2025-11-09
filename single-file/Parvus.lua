@@ -6,6 +6,21 @@ if Parvus and Parvus.Loaded then return end
 
 getgenv().Parvus = {Loaded = false, Utilities = {}}
 
+Parvus.Games = {
+	["Universal"] = {Name = "Universal"},
+	["1168263273"] = {Name = "Bad Business"},
+	["3360073263"] = {Name = "Bad Business PTR"},
+	["1586272220"] = {Name = "Steel Titans"},
+	["807930589"] = {Name = "The Wild West"},
+	["580765040"] = {Name = "RAGDOLL UNIVERSE"},
+	["187796008"] = {Name = "Those Who Remain"},
+	["358276974"] = {Name = "Apocalypse Rising 2"},
+	["3495983524"] = {Name = "Apocalypse Rising 2 Dev."},
+	["1054526971"] = {Name = "Blackhawk Rescue Mission 5"}
+}
+
+Parvus.Game = Parvus.Games[tostring(game.GameId)] or Parvus.Games["Universal"]
+
 -- ===== PHYSICS MODULE =====
 Parvus.Utilities.Physics = (function()
 --[[
