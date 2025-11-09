@@ -7047,10 +7047,10 @@ local Window = Sp3arParvus.Utilities.UI:Window({
             PredictionSection:Slider({Name = "Projectile Velocity", Flag = "Prediction/Velocity", Min = 1, Max = 10000, Value = 1000, Callback = function(Number)
                 ProjectileSpeed = Number
             end})
-            PredictionSection:Slider({Name = "Gravity Force", Flag = "Prediction/Gravity", Min = 0, Max = 1000, Precise = 1, Value = 196.2, Callback = function(Number)
+            PredictionSection:Slider({Name = "Gravity Force", Flag = "Prediction/GravityForce", Min = 0, Max = 1000, Precise = 1, Value = 196.2, Callback = function(Number)
                 ProjectileGravity = Number
             end})
-            PredictionSection:Slider({Name = "Gravity Multiplier", Flag = "Prediction/Gravity", Min = 1, Max = 5, Value = 2, Callback = function(Number)
+            PredictionSection:Slider({Name = "Gravity Multiplier", Flag = "Prediction/GravityMultiplier", Min = 1, Max = 5, Value = 2, Callback = function(Number)
                 GravityCorrection = Number
             end})
         end
@@ -7170,7 +7170,13 @@ local Window = Sp3arParvus.Utilities.UI:Window({
         VisualsSection:Slider({Name = "Maximum Range", Flag = "ESP/Player/Distance", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
     end
     Sp3arParvus.Utilities:SettingsSection(Window, "RightShift", false)
-end Sp3arParvus.Utilities.InitAutoLoad(Window)
+end
+
+Sp3arParvus.Utilities.InitAutoLoad(Window)
+
+ProjectileSpeed = Window.Flags["Prediction/Velocity"]
+ProjectileGravity = Window.Flags["Prediction/GravityForce"]
+GravityCorrection = Window.Flags["Prediction/GravityMultiplier"]
 
 Sp3arParvus.Utilities:SetupWatermark(Window)
 Sp3arParvus.Utilities:SetupLighting(Window.Flags)
