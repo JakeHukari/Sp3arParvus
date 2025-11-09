@@ -676,6 +676,21 @@ end
 function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, HeadEnabled, TracerEnabled, OoVEnabled, LightingEnabled)
     local VisualsTab = Window:Tab({Name = Name}) do
         local GlobalSection = VisualsTab:Section({Name = "Global", Side = "Left"})
+
+        GlobalSection:Toggle({Name = "Enable ESP", Flag = Flag .. "/Enabled", Value = false, Callback = function(Value)
+            local DrawingUtilities = Sp3arParvus.Utilities and Sp3arParvus.Utilities.Drawing
+            if not DrawingUtilities then return end
+
+            if not Value then
+                if DrawingUtilities.HideAll then
+                    DrawingUtilities:HideAll()
+                end
+            else
+                if DrawingUtilities.ResetAllESPCounters then
+                    DrawingUtilities:ResetAllESPCounters()
+                end
+            end
+        end})
         if BoxEnabled then
             local BoxSection = VisualsTab:Section({Name = "Boxes", Side = "Left"}) do
                 BoxSection:Toggle({Name = "Box Enabled", Flag = Flag .. "/Box/Enabled", Value = false})
@@ -5213,6 +5228,24 @@ function DrawingLibrary.ResetESPCounters(Self, Target)
     ESPUpdateAccumulators[Target] = nil
 end
 
+function DrawingLibrary.ResetAllESPCounters(Self)
+    table.clear(ESPErrorCounts)
+    table.clear(ESPUpdateAccumulators)
+    table.clear(ESPCleanupQueue)
+end
+
+function DrawingLibrary.HideAll(Self)
+    for _, ESP in pairs(Self.ESP) do
+        HideESPDrawings(ESP)
+    end
+
+    for _, ESP in pairs(Self.ObjectESP) do
+        if ESP.Name then
+            ESP.Name.Visible = false
+        end
+    end
+end
+
 local function GetFlag(Flags, Flag, Option)
     return Flags[Flag .. Option]
 end
@@ -5582,6 +5615,11 @@ end
 function DrawingLibrary.Update(ESP, Target)
     local Textboxes = ESP.Drawing.Textboxes
     local Mode, Flag, Flags = ESP.Mode, ESP.Flag, ESP.Flags
+
+    if not GetFlag(Flags, Flag, "/Enabled") then
+        HideESPDrawings(ESP)
+        return
+    end
 
     local Character, RootPart = nil, nil
     local ScreenPosition, OnScreen = Vector2.zero, false
