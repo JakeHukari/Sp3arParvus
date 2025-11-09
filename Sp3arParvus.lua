@@ -7276,7 +7276,7 @@ local Window -- Declare Window at file scope (will be assigned below)
 
 local function ResolveUIRoot()
     local cached = Sp3arParvus and Sp3arParvus.UIRoot
-    if cached and cached.Parent then
+    if cached and cached.Parent and cached:IsDescendantOf(game) then
         return cached
     end
 
@@ -7301,6 +7301,9 @@ local function ReloadScript()
             Sp3arParvus.UIRoot = nil
         end
     end
+
+    performanceLabel = nil
+    closestPlayerTrackerLabel = nil
 
     -- Clean up ESP objects
     if Sp3arParvus and Sp3arParvus.Utilities and Sp3arParvus.Utilities.Drawing then
@@ -7396,10 +7399,19 @@ end
 -- PERFORMANCE DISPLAY FEATURE FUNCTIONS
 -- ============================================================
 local function CreatePerformanceDisplay()
-    if performanceLabel then return end
-
     local ScreenGui = ResolveUIRoot()
     if not ScreenGui then return end
+
+    if performanceLabel then
+        if performanceLabel.Parent and performanceLabel:IsDescendantOf(game) then
+            if performanceLabel.Parent ~= ScreenGui then
+                performanceLabel.Parent = ScreenGui
+            end
+            return
+        end
+
+        performanceLabel = nil
+    end
 
     performanceLabel = Instance.new("TextLabel")
     performanceLabel.Name = "PerfMetrics"
@@ -7488,10 +7500,19 @@ end
 -- CLOSEST PLAYER TRACKER FEATURE FUNCTIONS
 -- ============================================================
 local function CreateClosestPlayerTracker()
-    if closestPlayerTrackerLabel then return end
-
     local ScreenGui = ResolveUIRoot()
     if not ScreenGui then return end
+
+    if closestPlayerTrackerLabel then
+        if closestPlayerTrackerLabel.Parent and closestPlayerTrackerLabel:IsDescendantOf(game) then
+            if closestPlayerTrackerLabel.Parent ~= ScreenGui then
+                closestPlayerTrackerLabel.Parent = ScreenGui
+            end
+            return
+        end
+
+        closestPlayerTrackerLabel = nil
+    end
 
     closestPlayerTrackerLabel = Instance.new("TextLabel")
     closestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
