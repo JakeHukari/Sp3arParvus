@@ -23,14 +23,23 @@ local LocalPlayer = PlayerService.LocalPlayer
 
 local Branch, NotificationTime, IsLocal = ...
 --local ClearTeleportQueue = clear_teleport_queue
-local QueueOnTeleport = queue_on_teleport
+local QueueOnTeleport = queue_on_teleport or function() end
 
 local function GetFile(File)
-    return IsLocal and readfile("Parvus/" .. File)
-    or game:HttpGet(("%s%s"):format(Parvus.Source, File))
+    if IsLocal then
+        if not readfile then
+            error("readfile function not available - cannot load local files")
+        end
+        return readfile("Parvus/" .. File)
+    else
+        return game:HttpGet(("%s%s"):format(Parvus.Source, File))
+    end
 end
 
 local function LoadScript(Script)
+    if not loadstring then
+        error("loadstring function not available - cannot load scripts")
+    end
     return loadstring(GetFile(Script .. ".lua"), Script)()
 end
 
@@ -75,7 +84,9 @@ Parvus.Loadstring = Parvus.Loadstring:format(
 LocalPlayer.OnTeleport:Connect(function(State)
     if State == Enum.TeleportState.InProgress then
         --ClearTeleportQueue()
-        QueueOnTeleport(Parvus.Loadstring)
+        if queue_on_teleport then
+            QueueOnTeleport(Parvus.Loadstring)
+        end
     end
 end)
 

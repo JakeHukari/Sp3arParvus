@@ -15,20 +15,23 @@ local Utility = { DefaultLighting = {} }
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = PlayerService.LocalPlayer
 local Request = request or (http and http.request)
-local SetIdentity = setthreadidentity
+local SetIdentity = setthreadidentity or function() end
 
-do -- Thanks to Kiriot22
-    local OldPluginManager, Message = nil, nil
+-- Anti-plugin crash (only runs if executor functions are available)
+if setthreadidentity and hookfunction and getrenv then
+    do -- Thanks to Kiriot22
+        local OldPluginManager, Message = nil, nil
 
-    task.spawn(function()
-        SetIdentity(2)
-        local Success, Error = pcall(getrenv().PluginManager)
-        Message = Error
-    end)
+        task.spawn(function()
+            SetIdentity(2)
+            local Success, Error = pcall(getrenv().PluginManager)
+            Message = Error
+        end)
 
-    OldPluginManager = hookfunction(getrenv().PluginManager, function()
-        return error(Message)
-    end)
+        OldPluginManager = hookfunction(getrenv().PluginManager, function()
+            return error(Message)
+        end)
+    end
 end
 
 repeat task.wait() until Stats.Network:FindFirstChild("ServerStatsItem")
@@ -149,6 +152,7 @@ function Utility.NewThreadLoop(Wait, Function)
     end)
 end
 function Utility.FixUpValue(fn, hook, gvar)
+    if not hookfunction then return end
     if gvar then
         old = hookfunction(fn, function(...)
             return hook(old, ...)
@@ -321,10 +325,14 @@ function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
             MenuSection:Button({Name = "Rejoin", Callback = Self.ReJoin})
             MenuSection:Button({Name = "Server Hop", Callback = Self.ServerHop})
             MenuSection:Button({Name = "Copy Lua Invite", Callback = function()
-                setclipboard("game:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. game.PlaceId .. ", \"" .. game.JobId .. "\")")
+                if setclipboard then
+                    setclipboard("game:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. game.PlaceId .. ", \"" .. game.JobId .. "\")")
+                end
             end})
             MenuSection:Button({Name = "Copy JS Invite", Callback = function()
-                setclipboard("Roblox.GameLauncher.joinGameInstance(" .. game.PlaceId .. ", \"" .. game.JobId .. "\");")
+                if setclipboard then
+                    setclipboard("Roblox.GameLauncher.joinGameInstance(" .. game.PlaceId .. ", \"" .. game.JobId .. "\");")
+                end
             end})
         end
         OptionsTab:AddConfigSection("Parvus", "Left")
@@ -377,7 +385,9 @@ function Utility.SettingsSection(Self, Window, UIKeybind, CustomMouse)
         end
         local DiscordSection = OptionsTab:Section({Name = "Discord", Side = "Right"}) do
             DiscordSection:Label({Text = "Invite Code: sYqDpbPYb7"})
-            DiscordSection:Button({Name = "Copy Invite Link", Callback = function() setclipboard("https://discord.gg/sYqDpbPYb7") end})
+            DiscordSection:Button({Name = "Copy Invite Link", Callback = function()
+                if setclipboard then setclipboard("https://discord.gg/sYqDpbPYb7") end
+            end})
             DiscordSection:Button({Name = "Join Through Discord App", Callback = Self.JoinDiscord})
         end
         local CreditsSection = OptionsTab:Section({Name = "Credits", Side = "Right"}) do
@@ -502,8 +512,13 @@ function Utility.LightingSection(Self, Tab, Side)
         LightingSection:Toggle({Name = "GlobalShadows", Flag = "Lighting/GlobalShadows", Value = false})
         LightingSection:Colorpicker({Name = "OutdoorAmbient", Flag = "Lighting/OutdoorAmbient", Value = {1, 0, 1, 0, false}})
         LightingSection:Slider({Name = "ShadowSoftness", Flag = "Lighting/ShadowSoftness", Min = 0, Max = 1, Precise = 2, Value = 0})
-        LightingSection:Toggle({Name = "Terrain Decoration", Flag = "Terrain/Decoration", Value = gethiddenproperty(Terrain, "Decoration"),
-        Callback = function(Value) sethiddenproperty(Terrain, "Decoration", Value) end})
+        LightingSection:Toggle({Name = "Terrain Decoration", Flag = "Terrain/Decoration",
+        Value = gethiddenproperty and gethiddenproperty(Terrain, "Decoration") or false,
+        Callback = function(Value)
+            if sethiddenproperty then
+                sethiddenproperty(Terrain, "Decoration", Value)
+            end
+        end})
     end
 end
 function Utility.SetupLighting(Self, Flags)

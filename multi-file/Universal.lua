@@ -274,6 +274,7 @@ local function GetClosest(Enabled,
 end
 local function AimAt(Hitbox, Sensitivity)
     if not Hitbox then return end
+    if not mousemoverel then return end
     local MouseLocation = UserInputService:GetMouseLocation()
 
     mousemoverel(
@@ -283,53 +284,57 @@ local function AimAt(Hitbox, Sensitivity)
 end
 
 local OldIndex = nil
-OldIndex = hookmetamethod(game, "__index", function(Self, Index)
-    if checkcaller() then return OldIndex(Self, Index) end
+if hookmetamethod and checkcaller then
+    OldIndex = hookmetamethod(game, "__index", function(Self, Index)
+        if checkcaller() then return OldIndex(Self, Index) end
 
-    if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
-        local Mode = Window.Flags["SilentAim/Mode"]
-        if Self == Mouse then
-            if Index == "Target" and table.find(Mode, Index) then
-                return SilentAim[3]
-            elseif Index== "Hit" and table.find(Mode, Index) then
-                return SilentAim[3].CFrame
+        if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
+            local Mode = Window.Flags["SilentAim/Mode"]
+            if Self == Mouse then
+                if Index == "Target" and table.find(Mode, Index) then
+                    return SilentAim[3]
+                elseif Index== "Hit" and table.find(Mode, Index) then
+                    return SilentAim[3].CFrame
+                end
             end
         end
-    end
 
-    return OldIndex(Self, Index)
-end)
+        return OldIndex(Self, Index)
+    end)
+end
 
 local OldNamecall = nil
-OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-    if checkcaller() then return OldNamecall(Self, ...) end
+if hookmetamethod and checkcaller and getnamecallmethod then
+    OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
+        if checkcaller() then return OldNamecall(Self, ...) end
 
-    if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
-        local Args, Method, Mode = {...}, getnamecallmethod(), Window.Flags["SilentAim/Mode"]
+        if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
+            local Args, Method, Mode = {...}, getnamecallmethod(), Window.Flags["SilentAim/Mode"]
 
-        if Self == Workspace then
-            if Method == "Raycast" and table.find(Mode, Method) then
-                Args[2] = SilentAim[3].Position - Args[1]
-                return OldNamecall(Self, unpack(Args))
-            elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
-            or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
-            or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
-                Args[1] = Ray.new(Args[1].Origin, SilentAim[3].Position - Args[1].Origin)
-                return OldNamecall(Self, unpack(Args))
-            end
-        elseif Self == Camera then
-            if (Method == "ScreenPointToRay" and table.find(Mode, Method))
-            or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
-                return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
-            elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
-            or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
-                Args[1] = SilentAim[3].Position return OldNamecall(Self, unpack(Args))
+            if Self == Workspace then
+                if Method == "Raycast" and table.find(Mode, Method) then
+                    Args[2] = SilentAim[3].Position - Args[1]
+                    return OldNamecall(Self, unpack(Args))
+                elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
+                or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
+                or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
+                    Args[1] = Ray.new(Args[1].Origin, SilentAim[3].Position - Args[1].Origin)
+                    return OldNamecall(Self, unpack(Args))
+                end
+            elseif Self == Camera then
+                if (Method == "ScreenPointToRay" and table.find(Mode, Method))
+                or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
+                    return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
+                elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
+                or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
+                    Args[1] = SilentAim[3].Position return OldNamecall(Self, unpack(Args))
+                end
             end
         end
-    end
 
-    return OldNamecall(Self, ...)
-end)
+        return OldNamecall(Self, ...)
+    end)
+end
 
 Parvus.Utilities.NewThreadLoop(0, function()
     if not (Aimbot or Window.Flags["Aimbot/AlwaysEnabled"]) then return end
@@ -361,7 +366,8 @@ Parvus.Utilities.NewThreadLoop(0, function()
 end)
 Parvus.Utilities.NewThreadLoop(0, function()
     if not (Trigger or Window.Flags["Trigger/AlwaysEnabled"]) then return end
-    if not isrbxactive() then return end
+    if isrbxactive and not isrbxactive() then return end
+    if not mouse1press or not mouse1release then return end
 
     local TriggerClosest = GetClosest(
         Window.Flags["Trigger/Enabled"],
