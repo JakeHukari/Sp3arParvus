@@ -7232,7 +7232,10 @@ local function ObjectOccluded(Enabled, Origin, Position, Object)
     return Raycast(Origin, Position - Origin, {Object, LocalPlayer.Character})
 end
 local function SolveTrajectory(Origin, Velocity, Time, Gravity)
-    return Origin + Velocity * Time + Gravity * Time * Time / GravityCorrection
+    -- Gravity is a scalar (number), so we apply it only to Y-axis
+    -- Negative because gravity pulls down
+    local GravityVector = Vector3.new(0, -Gravity * Time * Time / GravityCorrection, 0)
+    return Origin + Velocity * Time + GravityVector
 end
 local function GetClosest(Enabled,
     TeamCheck, VisibilityCheck, DistanceCheck,
