@@ -891,7 +891,7 @@ end
 return Utility
 
 -- ===== UI MODULE (Bracket V2) =====
-Parvus.Utilities.UI = loadstring([[
+Parvus.Utilities.UI = loadstring([=[
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
@@ -5051,10 +5051,10 @@ function Bracket:Toast(Notification)
 end
 
 return Bracket
-]])()
+]=])()
 
 -- ===== DRAWING/ESP MODULE =====
-Parvus.Utilities.Drawing = loadstring([[
+Parvus.Utilities.Drawing = loadstring([=[
 local UserInputService = game:GetService("UserInputService")
 local InsertService = game:GetService("InsertService")
 local RunService = game:GetService("RunService")
@@ -6899,7 +6899,7 @@ end)
 end)]]
 
 return DrawingLibrary
-]])()
+]=])()
 
 -- ===== UNIVERSAL GAME SCRIPT =====
 local UserInputService = game:GetService("UserInputService")
