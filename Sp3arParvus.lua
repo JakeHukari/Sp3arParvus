@@ -8277,10 +8277,24 @@ local function SetupPlayerESP(Player)
 
     -- Set up CharacterAdded listener to rebuild ESP on respawn
     local function OnCharacterAdded(Character)
-        -- Wait a moment for character to fully load
-        task.wait(0.1)
+        -- Wait for character to fully load, especially for distant characters
+        task.wait(0.3)
+
+        -- Retry mechanism: wait for HumanoidRootPart to ensure character is fully loaded
+        local maxRetries = 5
+        local retryCount = 0
+        while retryCount < maxRetries do
+            if Character and Character:FindFirstChild("HumanoidRootPart") then
+                break
+            end
+            retryCount = retryCount + 1
+            task.wait(0.2)
+        end
+
         -- Rebuild ESP with fresh character reference
-        Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+        pcall(function()
+            Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+        end)
     end
 
     -- Connect to CharacterAdded
@@ -8289,7 +8303,9 @@ local function SetupPlayerESP(Player)
 
     -- If player already has a character, set up ESP for it
     if Player.Character then
-        OnCharacterAdded(Player.Character)
+        task.spawn(function()
+            OnCharacterAdded(Player.Character)
+        end)
     end
 end
 
@@ -8319,6 +8335,73 @@ PlayerService.PlayerRemoving:Connect(function(Player)
     local DrawingUtilities = Sp3arParvus.Utilities.Drawing
     if DrawingUtilities and DrawingUtilities.ResetESPCounters then
         DrawingUtilities:ResetESPCounters(Player)
+    end
+end)
+
+-- ============================================================
+-- CONTINUOUS CHARACTER MONITORING
+-- ============================================================
+-- Periodically check for players whose characters have loaded after initial setup
+-- This handles cases where characters stream in from far distances
+local CharacterMonitorInterval = 2 -- Check every 2 seconds
+local LastCharacterStates = {} -- Track whether each player had a character last check
+
+task.spawn(function()
+    while task.wait(CharacterMonitorInterval) do
+        for _, Player in pairs(PlayerService:GetPlayers()) do
+            if Player ~= LocalPlayer then
+                local hasCharacterNow = Player.Character ~= nil
+                local hadCharacterBefore = LastCharacterStates[Player]
+
+                -- If player now has a character but didn't before, rebuild ESP
+                if hasCharacterNow and not hadCharacterBefore then
+                    pcall(function()
+                        Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+                    end)
+                end
+
+                -- Update state
+                LastCharacterStates[Player] = hasCharacterNow
+            end
+        end
+    end
+end)
+
+-- Clean up character state tracking when players leave
+PlayerService.PlayerRemoving:Connect(function(Player)
+    LastCharacterStates[Player] = nil
+end)
+
+-- ============================================================
+-- AGGRESSIVE ESP REFRESH SYSTEM
+-- ============================================================
+-- Force rebuild ESP for all players periodically to catch any edge cases
+-- This ensures ESP always works even on very large maps with streaming issues
+local AggressiveRefreshInterval = 10 -- Full refresh every 10 seconds
+local PlayerRefreshIndex = 1
+
+task.spawn(function()
+    while task.wait(AggressiveRefreshInterval) do
+        local players = PlayerService:GetPlayers()
+        -- Refresh one player at a time to avoid performance spikes
+        if #players > 0 then
+            -- Cycle through players
+            if PlayerRefreshIndex > #players then
+                PlayerRefreshIndex = 1
+            end
+
+            local Player = players[PlayerRefreshIndex]
+            if Player and Player ~= LocalPlayer and Player.Character then
+                pcall(function()
+                    -- Only rebuild if ESP exists but might be stale
+                    if Sp3arParvus.Utilities.Drawing.ESP[Player] then
+                        Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+                    end
+                end)
+            end
+
+            PlayerRefreshIndex = PlayerRefreshIndex + 1
+        end
     end
 end)
 
