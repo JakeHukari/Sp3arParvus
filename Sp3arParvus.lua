@@ -710,19 +710,19 @@ function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, H
         end})
         if BoxEnabled then
             local BoxSection = VisualsTab:Section({Name = "Boxes", Side = "Left"}) do
-                BoxSection:Toggle({Name = "Box Enabled", Flag = Flag .. "/Box/Enabled", Value = false})
-                BoxSection:Toggle({Name = "Healthbar", Flag = Flag .. "/Box/HealthBar", Value = false})
+                BoxSection:Toggle({Name = "Box Enabled", Flag = Flag .. "/Box/Enabled", Value = true})
+                BoxSection:Toggle({Name = "Healthbar", Flag = Flag .. "/Box/HealthBar", Value = true})
 
-                BoxSection:Toggle({Name = "Filled", Flag = Flag .. "/Box/Filled", Value = false})
+                BoxSection:Toggle({Name = "Filled", Flag = Flag .. "/Box/Filled", Value = true})
                 BoxSection:Toggle({Name = "Outline", Flag = Flag .. "/Box/Outline", Value = true})
                 BoxSection:Slider({Name = "Thickness", Flag = Flag .. "/Box/Thickness", Min = 1, Max = 19, Value = 1, OnlyOdd = true})
                 BoxSection:Slider({Name = "Transparency", Flag = Flag .. "/Box/Transparency", Min = 0, Max = 1, Precise = 2, Value = 0})
                 BoxSection:Slider({Name = "Corner Size", Flag = Flag .. "/Box/CornerSize", Min = 10, Max = 100, Value = 50, Unit = "%"})
                 BoxSection:Divider()
-                BoxSection:Toggle({Name = "Name Enabled", Flag = Flag .. "/Name/Enabled", Value = false})
-                BoxSection:Toggle({Name = "Health Enabled", Flag = Flag .. "/Health/Enabled", Value = false})
-                BoxSection:Toggle({Name = "Distance Enabled", Flag = Flag .. "/Distance/Enabled", Value = false})
-                BoxSection:Toggle({Name = "Weapon Enabled", Flag = Flag .. "/Weapon/Enabled", Value = false})
+                BoxSection:Toggle({Name = "Name Enabled", Flag = Flag .. "/Name/Enabled", Value = true})
+                BoxSection:Toggle({Name = "Health Enabled", Flag = Flag .. "/Health/Enabled", Value = true})
+                BoxSection:Toggle({Name = "Distance Enabled", Flag = Flag .. "/Distance/Enabled", Value = true})
+                BoxSection:Toggle({Name = "Weapon Enabled", Flag = Flag .. "/Weapon/Enabled", Value = true})
                 BoxSection:Toggle({Name = "Outline", Flag = Flag .. "/Name/Outline", Value = true})
                 BoxSection:Toggle({Name = "Autoscale", Flag = Flag .. "/Name/Autoscale", Value = true})
                 BoxSection:Slider({Name = "Size", Flag = Flag .. "/Name/Size", Min = 1, Max = 100, Value = 8})
@@ -740,7 +740,7 @@ function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, H
         end]]
         if HeadEnabled then
             local HeadSection = VisualsTab:Section({Name = "Head Dots", Side = "Right"}) do
-                HeadSection:Toggle({Name = "Enabled", Flag = Flag .. "/HeadDot/Enabled", Value = false})
+                HeadSection:Toggle({Name = "Enabled", Flag = Flag .. "/HeadDot/Enabled", Value = true})
                 HeadSection:Toggle({Name = "Filled", Flag = Flag .. "/HeadDot/Filled", Value = true})
                 HeadSection:Toggle({Name = "Outline", Flag = Flag .. "/HeadDot/Outline", Value = true})
                 HeadSection:Toggle({Name = "Autoscale", Flag = Flag .. "/HeadDot/Autoscale", Value = true})
@@ -753,7 +753,7 @@ function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, H
         end
         if TracerEnabled then
             local TracerSection = VisualsTab:Section({Name = "Tracers", Side = "Right"}) do
-                TracerSection:Toggle({Name = "Enabled", Flag = Flag .. "/Tracer/Enabled", Value = false})
+                TracerSection:Toggle({Name = "Enabled", Flag = Flag .. "/Tracer/Enabled", Value = true})
                 TracerSection:Toggle({Name = "Outline", Flag = Flag .. "/Tracer/Outline", Value = true})
                 TracerSection:Dropdown({Name = "Mode", Flag = Flag .. "/Tracer/Mode", List = {
                     {Name = "From Bottom", Mode = "Button", Value = true},
@@ -765,7 +765,7 @@ function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, H
         end
         if OoVEnabled then
             local OoVSection = VisualsTab:Section({Name = "Offscreen Arrows", Side = "Right"}) do
-                OoVSection:Toggle({Name = "Enabled", Flag = Flag .. "/Arrow/Enabled", Value = false})
+                OoVSection:Toggle({Name = "Enabled", Flag = Flag .. "/Arrow/Enabled", Value = true})
                 OoVSection:Toggle({Name = "Filled", Flag = Flag .. "/Arrow/Filled", Value = true})
                 OoVSection:Toggle({Name = "Outline", Flag = Flag .. "/Arrow/Outline", Value = true})
                 OoVSection:Slider({Name = "Width", Flag = Flag .. "/Arrow/Width", Min = 14, Max = 28, Value = 14})
