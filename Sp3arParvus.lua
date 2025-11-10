@@ -6731,9 +6731,10 @@ end)
 
 -- Performance optimization: throttle update rate based on distance
 local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 100 studs
-local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 100-300 studs
-local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 300-500 studs
-local MAX_DISTANCE = 500 -- Don't render beyond this distance
+local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 100-500 studs
+local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 500-1500 studs
+local VERY_FAR_UPDATE_INTERVAL = 0.2 -- ~5 FPS for players beyond 1500 studs
+local MAX_DISTANCE = 2000 -- Don't render beyond this distance
 
 DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
     debug.profilebegin("PARVUS_DRAWING")
@@ -6765,7 +6766,9 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
 
                     -- Determine update interval based on distance
                     local updateInterval = NEAR_UPDATE_INTERVAL
-                    if distance > 300 then
+                    if distance > 1500 then
+                        updateInterval = VERY_FAR_UPDATE_INTERVAL
+                    elseif distance > 500 then
                         updateInterval = FAR_UPDATE_INTERVAL
                     elseif distance > 100 then
                         updateInterval = MID_UPDATE_INTERVAL
