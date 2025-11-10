@@ -677,7 +677,7 @@ function Utility.ESPSection(Self, Window, Name, Flag, BoxEnabled, ChamEnabled, H
     local VisualsTab = Window:Tab({Name = Name}) do
         local GlobalSection = VisualsTab:Section({Name = "Global", Side = "Left"})
 
-        GlobalSection:Toggle({Name = "Enable ESP", Flag = Flag .. "/Enabled", Value = false, Callback = function(Value)
+        GlobalSection:Toggle({Name = "Enable ESP", Flag = Flag .. "/Enabled", Value = true, Callback = function(Value)
             local DrawingUtilities = Sp3arParvus.Utilities and Sp3arParvus.Utilities.Drawing
             if not DrawingUtilities then return end
 
@@ -5616,7 +5616,8 @@ function DrawingLibrary.Update(ESP, Target)
     local Textboxes = ESP.Drawing.Textboxes
     local Mode, Flag, Flags = ESP.Mode, ESP.Flag, ESP.Flags
 
-    if not GetFlag(Flags, Flag, "/Enabled") then
+    local enabledFlag = GetFlag(Flags, Flag, "/Enabled")
+    if enabledFlag == false then
         HideESPDrawings(ESP)
         return
     end
