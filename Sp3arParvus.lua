@@ -6753,12 +6753,12 @@ Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
 end)
 
--- Performance optimization: throttle update rate based on distance
-local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 100 studs
-local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 100-500 studs
-local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 500-2000 studs
-local VERY_FAR_UPDATE_INTERVAL = 0.25 -- ~4 FPS for players 2000-5000 studs
-local EXTREME_UPDATE_INTERVAL = 0.5 -- ~2 FPS for players beyond 5000 studs
+local FORCE_FULL_FPS_ESP = true -- Force every RenderStepped tick for ESP to prevent frozen tracers
+local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 1000 studs
+local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 1000-5000 studs
+local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 5000-20000 studs
+local VERY_FAR_UPDATE_INTERVAL = 0.25 -- ~4 FPS for players 20000-50000 studs
+local EXTREME_UPDATE_INTERVAL = 0.5 -- ~2 FPS for players beyond 50000 studs
 local MAX_DISTANCE = 10000 -- Don't render beyond this distance
 
 DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
@@ -6789,23 +6789,28 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
                         return
                     end
 
-                    -- Determine update interval based on distance
-                    local updateInterval = NEAR_UPDATE_INTERVAL
-                    if distance > 5000 then
-                        updateInterval = EXTREME_UPDATE_INTERVAL
-                    elseif distance > 2000 then
-                        updateInterval = VERY_FAR_UPDATE_INTERVAL
-                    elseif distance > 500 then
-                        updateInterval = FAR_UPDATE_INTERVAL
-                    elseif distance > 100 then
-                        updateInterval = MID_UPDATE_INTERVAL
-                    end
-
-                    -- Check accumulator for this target
-                    ESPUpdateAccumulators[Target] = (ESPUpdateAccumulators[Target] or 0) + dt
-                    if ESPUpdateAccumulators[Target] >= updateInterval then
+                    if FORCE_FULL_FPS_ESP then
                         ESPUpdateAccumulators[Target] = 0
                         shouldUpdate = true
+                    else
+                        -- Determine update interval based on distance
+                        local updateInterval = NEAR_UPDATE_INTERVAL
+                        if distance > 50000 then
+                            updateInterval = EXTREME_UPDATE_INTERVAL
+                        elseif distance > 20000 then
+                            updateInterval = VERY_FAR_UPDATE_INTERVAL
+                        elseif distance > 5000 then
+                            updateInterval = FAR_UPDATE_INTERVAL
+                        elseif distance > 1000 then
+                            updateInterval = MID_UPDATE_INTERVAL
+                        end
+
+                        -- Check accumulator for this target
+                        ESPUpdateAccumulators[Target] = (ESPUpdateAccumulators[Target] or 0) + dt
+                        if ESPUpdateAccumulators[Target] >= updateInterval then
+                            ESPUpdateAccumulators[Target] = 0
+                            shouldUpdate = true
+                        end
                     end
                 else
                     shouldUpdate = true
