@@ -13,7 +13,7 @@
 - [Requirements](#-requirements)
 - [Features](#combat-features)
 - [Game-Specific Support](#-game-specific-support)
-- [Controls](#-controls)
+- [Controls](#%EF%B8%8F-controls)
 - [Troubleshooting](#-troubleshooting)
 - [Technical Details](#-technical-details)
 - [Credits](#-credits)
