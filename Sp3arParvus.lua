@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.2.0
+-- VERSION: 1.2.1
 --
 -- VERSIONING RULES (Semantic Versioning):
 -- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
@@ -18,6 +18,11 @@
 -- ALWAYS update version on every commit that changes functionality
 --
 -- RECENT ADDITIONS:
+-- v1.2.1 - ESP Zone Enhancements:
+--   - Increased ESP render/detection range to 15,000 studs with close/mid/far zones
+--   - Color-coded tracers & nametags per zone with per-tick refresh logic
+--   - Simplified ESP update throttling so distance checks align with the three zones
+--
 -- v1.2.0 - ESP Optimization & Always-On Features:
 --   - All ESP features now enabled by default (boxes, tracers, nametags, etc.)
 --   - Fixed 10,000 stud detection range (no distance modifiers or exceptions)
@@ -41,7 +46,7 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.2.0"
+local SP3ARPARVUS_VERSION = "1.2.1"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
@@ -6928,6 +6933,9 @@ end)
 
             if ESP.Target.OnScreen then
                 ESP.Target.Distance = GetDistance(ESP.Target.RootPart.Position)
+                local targetZone, targetZoneColor = GetDistanceZone(ESP.Target.Distance)
+                ESP.CurrentZone = targetZone
+                ESP.ZoneColor = targetZoneColor
                 ESP.Target.InTheRange = IsWithinReach(GetFlag(ESP.Flags, ESP.Flag, "/DistanceCheck"), GetFlag(ESP.Flags, ESP.Flag, "/Distance"), ESP.Target.Distance)
 
                 if ESP.Target.InTheRange then
@@ -6961,7 +6969,9 @@ end)
                                 FromPosition = (FromPosition[1] == "From Mouse" and UserInputService:GetMouseLocation())
                                 or (FromPosition[1] == "From Bottom" and V2New(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y))
 
-                                ESP.Drawing.Tracer.Main.Color = ESP.Target.Color
+                                local tracerColor = (ESP.ZoneColor or targetZoneColor or ESP.Target.Color)
+                                ESP.Drawing.Tracer.Main.Color = tracerColor
+                                ESP.Drawing.Tracer.Outline.Color = tracerColor
 
                                 ESP.Drawing.Tracer.Main.Thickness = Thickness
                                 ESP.Drawing.Tracer.Outline.Thickness = Thickness + 2
@@ -7207,6 +7217,7 @@ end)
                                 Textboxes.Name.Size = Autoscale
                                 Textboxes.Name.Text = ESP.Mode == "Player" and Target.Name
                                 or (InEnemyTeam and "Enemy NPC" or "Ally NPC")
+                                Textboxes.Name.Color = (ESP.ZoneColor or targetZoneColor or ESP.Target.Color)
 
                                 Textboxes.Name.Position = AntiAliasingXY(
                                     ESP.Target.ScreenPosition.X,
