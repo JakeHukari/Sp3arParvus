@@ -14,7 +14,7 @@
 - [Features](#combat-features)
 - [Game-Specific Support](#-game-specific-support)
 - [Controls](#-controls)
-- [Troubleshooting](#-troubleshooting
+- [Troubleshooting](#-troubleshooting)
 - [Technical Details](#-technical-details)
 - [Credits](#-credits)
 
