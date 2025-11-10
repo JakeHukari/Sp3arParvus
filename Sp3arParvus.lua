@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.2.2
+-- VERSION: 1.2.3
 --
 -- VERSIONING RULES (Semantic Versioning):
 -- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
@@ -18,6 +18,10 @@
 -- ALWAYS update version on every commit that changes functionality
 --
 -- RECENT ADDITIONS:
+-- v1.2.3 - Lifecycle & Cleanup Hardening:
+--   - Added managed connection tracker so Reload/Shutdown disconnect RunService/UserInput/Workspace hooks safely
+--   - Guarded background loops with Sp3arParvus.Active to stop aimbot/silent aim/trigger logic instantly on cleanup
+--   - UI/Drawing modules now re-register cursors, crosshairs, and ESP renders without leaving duplicate artifacts
 -- v1.2.2 - ESP Stability Fixes:
 --   - Hide ESP drawings instantly when characters despawn to prevent frozen tracers
 --   - Added fallback guards inside the render loop so stale targets reset cleanly
@@ -50,13 +54,27 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.2.2"
+local SP3ARPARVUS_VERSION = "1.2.3"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
-repeat task.wait() until game.IsLoaded
+repeat task.wait() until game:IsLoaded()
 if Sp3arParvus and Sp3arParvus.Loaded then return end
 
 getgenv().Sp3arParvus = {Loaded = false, Utilities = {}, DefaultCursor = DEFAULT_CURSOR_DATA, Cursor = DEFAULT_CURSOR_DATA}
+Sp3arParvus.Active = true
+Sp3arParvus.Connections = {}
+
+local ManagedConnections = Sp3arParvus.Connections
+
+local function TrackConnection(connection)
+	if connection then
+		table.insert(ManagedConnections, connection)
+	end
+
+	return connection
+end
+
+getgenv().Sp3arParvusTrackConnection = TrackConnection
 
 Sp3arParvus.Games = {
 	["Universal"] = {Name = "Universal"},
@@ -352,6 +370,51 @@ local LocalPlayer = PlayerService.LocalPlayer
 local Request = request or (http and http.request)
 local SetIdentity = setthreadidentity or function() end
 
+local hoverHL = nil
+local CharacterAddedConnections = {}
+local MovementActionNames = {"Forward", "Backward", "Left", "Right", "Up", "Down"}
+
+local function DisconnectManagedConnections()
+	for index, connection in ipairs(ManagedConnections) do
+		if connection and connection.Disconnect then
+			pcall(function() connection:Disconnect() end)
+		end
+		ManagedConnections[index] = nil
+	end
+end
+
+local function DisconnectCharacterConnections()
+	for player, connection in pairs(CharacterAddedConnections) do
+		pcall(function() connection:Disconnect() end)
+		CharacterAddedConnections[player] = nil
+	end
+end
+
+local function UnbindMovementActions()
+	for _, actionName in ipairs(MovementActionNames) do
+		ContextActionService:UnbindAction(actionName)
+	end
+end
+
+local function DeactivateScript()
+	if not (Sp3arParvus and Sp3arParvus.Active) then return end
+
+	Sp3arParvus.Active = false
+
+	DisconnectCharacterConnections()
+	UnbindMovementActions()
+	DisconnectManagedConnections()
+
+	if hoverHL then
+		pcall(function() hoverHL:Destroy() end)
+		hoverHL = nil
+	end
+
+	getgenv().Sp3arParvusTrackConnection = nil
+end
+
+Sp3arParvus.Cleanup = DeactivateScript
+
 -- Anti-plugin crash (only runs if executor functions are available)
 if setthreadidentity and hookfunction and getrenv then
     do -- Thanks to Kiriot22
@@ -392,9 +455,9 @@ ContextActionService:BindAction("Right", MovementBind, false, Enum.KeyCode.D)
 ContextActionService:BindAction("Up", MovementBind, false, Enum.KeyCode.Space)
 ContextActionService:BindAction("Down", MovementBind, false, Enum.KeyCode.LeftShift)
 
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
-end)
+end))
 
 --[[function Utility.HideObject(Object)
     Object.Parent = gethui()
@@ -474,7 +537,7 @@ function Utility.MakeBeam(Origin, Position, Color)
 end
 function Utility.NewThreadLoop(Wait, Function)
     task.spawn(function()
-        while true do
+        while Sp3arParvus and Sp3arParvus.Active do
             local Delta = task.wait(Wait)
             local Success, Error = pcall(Function, Delta)
             if not Success then
@@ -541,14 +604,14 @@ end
 function Utility.SetupWatermark(Self, Window)
     local GetFPS = Self:SetupFPS()
 
-    RunService.Heartbeat:Connect(function()
+    TrackConnection(RunService.Heartbeat:Connect(function()
         if Window.Watermark.Enabled then
             Window.Watermark.Title = string.format(
                 "Sp3arParvus    %s    %i FPS    %i MS",
                 os.date("%X"), GetFPS(), math.round(Ping:GetValue())
             )
         end
-    end)
+    end))
 end
 
 -- UI Theme Configuration
@@ -851,7 +914,7 @@ function Utility.SetupLighting(Self, Flags)
         ShadowSoftness = Lighting.ShadowSoftness
     }
 
-    Lighting.Changed:Connect(function(Property)
+    TrackConnection(Lighting.Changed:Connect(function(Property)
         if Property == "TimeOfDay" then return end local Value = nil
         if not pcall(function() Value = Lighting[Property] end) then return end
         local CustomValue, FormatedValue = Flags["Lighting/" .. Property], Value
@@ -873,8 +936,8 @@ function Utility.SetupLighting(Self, Flags)
             --print("default prop", Property, Value)
             Self.DefaultLighting[Property] = Value
         end
-    end)
-    RunService.Heartbeat:Connect(function()
+    end))
+    TrackConnection(RunService.Heartbeat:Connect(function()
         if Flags["Lighting/Enabled"] then
             for Property in pairs(Self.DefaultLighting) do
                 local CustomValue = Flags["Lighting/" .. Property]
@@ -886,7 +949,7 @@ function Utility.SetupLighting(Self, Flags)
                 end
             end
         end
-    end)
+    end))
 end
 
 for Key, Value in pairs(Utility) do
@@ -903,6 +966,14 @@ local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local PlayerService = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+
+local function RegisterConnection(connection)
+	local tracker = rawget(getgenv and getgenv() or _G, "Sp3arParvusTrackConnection")
+	if tracker then
+		tracker(connection)
+	end
+	return connection
+end
 
 local GuiInset = GuiService:GetGuiInset()
 local LocalPlayer = PlayerService.LocalPlayer
@@ -985,7 +1056,7 @@ Bracket.Utilities = {
 				StartPosition = Object.AbsolutePosition
 			end
 		end)
-		UserInputService.InputChanged:Connect(function(Input)
+		RegisterConnection(UserInputService.InputChanged:Connect(function(Input)
 			if StartPosition and Input.UserInputType == Enum.UserInputType.MouseMovement then
 				local Mouse = UserInputService:GetMouseLocation()
 				local Delta = Mouse - Position
@@ -994,7 +1065,7 @@ Bracket.Utilities = {
 				Delta = Object.Position + UDim2.fromOffset(Delta.X, Delta.Y)
 				if OnChange then OnChange(Delta) end
 			end
-		end)
+		end))
 		Dragger.InputEnded:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if OnEnd then OnEnd(Object.Position, StartPosition) end
@@ -1011,7 +1082,7 @@ Bracket.Utilities = {
 				StartSize = Object.AbsoluteSize
 			end
 		end)
-		UserInputService.InputChanged:Connect(function(Input)
+		RegisterConnection(UserInputService.InputChanged:Connect(function(Input)
 			if StartSize and Input.UserInputType == Enum.UserInputType.MouseMovement then
 				local Mouse = UserInputService:GetMouseLocation()
 				local Delta = Mouse - Position
@@ -1025,7 +1096,7 @@ Bracket.Utilities = {
 
 				OnChange(UDim2.fromOffset(SizeX, SizeY))
 			end
-		end)
+		end))
 		Dragger.InputEnded:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if OnEnd then OnEnd(Object.Size, StartSize) end
@@ -3172,15 +3243,15 @@ Bracket.Elements = {
 			WindowAsset.TabButtonContainer.CanvasSize = UDim2.fromOffset(WindowAsset.TabButtonContainer.ListLayout.AbsoluteContentSize.X, 0)
 		end)
 
-		UserInputService.InputChanged:Connect(function(Input)
+		RegisterConnection(UserInputService.InputChanged:Connect(function(Input)
 			if WindowAsset.Visible and Input.UserInputType == Enum.UserInputType.MouseMovement then
 				local Mouse = UserInputService:GetMouseLocation()
 				Bracket.Screen.ToolTip.Position = UDim2.fromOffset(Mouse.X + 5, Mouse.Y - 5)
 			end
-		end)
-		RunService.RenderStepped:Connect(function()
+		end))
+		RegisterConnection(RunService.RenderStepped:Connect(function()
 			Window.RainbowHue = os.clock() % Window.RainbowSpeed / Window.RainbowSpeed
-		end)
+		end))
 
 		Window:GetPropertyChangedSignal("Enabled"):Connect(function(Enabled)
 			WindowAsset.Visible = Enabled
@@ -3755,11 +3826,11 @@ Bracket.Elements = {
 				Slider.Active = false
 			end
 		end)
-		UserInputService.InputChanged:Connect(function(Input)
+		RegisterConnection(UserInputService.InputChanged:Connect(function(Input)
 			if Slider.Active and Input.UserInputType == Enum.UserInputType.MouseMovement then
 				AttachToMouse(Input)
 			end
-		end)
+		end))
 
 		Slider:GetPropertyChangedSignal("Name"):Connect(function(Name)
 			SliderAsset.Title.Text = Name
@@ -3903,7 +3974,7 @@ Bracket.Elements = {
 			Window.Colorable[Keybind.ListMimic.Asset.Tick] = Keybind.ListMimic.ColorConfig
 		end
 
-		UserInputService.InputBegan:Connect(function(Input, GameProcessedEvent)
+		RegisterConnection(UserInputService.InputBegan:Connect(function(Input, GameProcessedEvent)
 			if GameProcessedEvent then return end
 			local Key = Input.KeyCode.Name
 			if Keybind.WaitingForBind and Input.UserInputType.Name == "Keyboard" then
@@ -3935,8 +4006,8 @@ Bracket.Elements = {
 					end
 				end
 			end
-		end)
-		UserInputService.InputEnded:Connect(function(Input, GameProcessedEvent)
+		end))
+		RegisterConnection(UserInputService.InputEnded:Connect(function(Input, GameProcessedEvent)
 			if GameProcessedEvent then return end
 			local Key = Input.KeyCode.Name
 			if Input.UserInputType.Name == "Keyboard" then
@@ -3961,7 +4032,7 @@ Bracket.Elements = {
 					end
 				end
 			end
-		end)
+		end))
 
 		Keybind:GetPropertyChangedSignal("Name"):Connect(function(Name)
 			KeybindAsset.Title.Text = Name
@@ -4014,7 +4085,7 @@ Bracket.Elements = {
 			Window.Colorable[Keybind.ListMimic.Asset.Tick] = Keybind.ListMimic.ColorConfig
 		end
 
-		UserInputService.InputBegan:Connect(function(Input, GameProcessedEvent)
+		RegisterConnection(UserInputService.InputBegan:Connect(function(Input, GameProcessedEvent)
 			if GameProcessedEvent then return end
 			local Key = Input.KeyCode.Name
 			if Keybind.WaitingForBind and Input.UserInputType.Name == "Keyboard" then
@@ -4038,8 +4109,8 @@ Bracket.Elements = {
 					end
 				end
 			end
-		end)
-		UserInputService.InputEnded:Connect(function(Input, GameProcessedEvent)
+		end))
+		RegisterConnection(UserInputService.InputEnded:Connect(function(Input, GameProcessedEvent)
 			if GameProcessedEvent then return end
 			local Key = Input.KeyCode.Name
 			if Input.UserInputType.Name == "Keyboard" then
@@ -4056,7 +4127,7 @@ Bracket.Elements = {
 					end
 				end
 			end
-		end)
+		end))
 
 		Toggle:GetPropertyChangedSignal("Value"):Connect(function(Value)
 			if Keybind.ListMimic then
@@ -4101,7 +4172,7 @@ Bracket.Elements = {
 				Bracket.Utilities.ClosePopUps()
 				OptionContainerAsset.Visible = true
 
-				ContainerRender = RunService.RenderStepped:Connect(function()
+				ContainerRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not OptionContainerAsset.Visible then ContainerRender:Disconnect() end
 
 					local TabPosition = Window.Asset.TabContainer.AbsolutePosition.Y + Window.Asset.TabContainer.AbsoluteSize.Y
@@ -4125,7 +4196,7 @@ Bracket.Elements = {
 						math.clamp(OptionContainerAsset.ListLayout.AbsoluteContentSize.Y, 16, 112) + 4
 						--OptionContainerAsset.ListLayout.AbsoluteContentSize.Y + 2
 					)
-				end)
+				end))
 			else
 				OptionContainerAsset.Visible = false
 			end
@@ -4336,7 +4407,7 @@ Bracket.Elements = {
 				Bracket.Utilities.ClosePopUps()
 				PaletteAsset.Visible = true
 
-				PaletteRender = RunService.RenderStepped:Connect(function()
+				PaletteRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then PaletteRender:Disconnect() end
 
 					local TabPosition = Window.Asset.TabContainer.AbsolutePosition.Y + Window.Asset.TabContainer.AbsoluteSize.Y
@@ -4355,7 +4426,7 @@ Bracket.Elements = {
 						(ColorpickerAsset.Color.AbsolutePosition.X - PaletteAsset.AbsoluteSize.X) + 20,
 						(ColorpickerAsset.Color.AbsolutePosition.Y + GuiInset.Y) + 14
 					)
-				end)
+				end))
 			else
 				PaletteAsset.Visible = false
 			end
@@ -4370,7 +4441,7 @@ Bracket.Elements = {
 		PaletteAsset.SVPicker.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if SVRender then SVRender:Disconnect() end
-				SVRender = RunService.RenderStepped:Connect(function()
+				SVRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then SVRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.SVPicker.AbsolutePosition.X, 0, PaletteAsset.SVPicker.AbsoluteSize.X) / PaletteAsset.SVPicker.AbsoluteSize.X
@@ -4379,7 +4450,7 @@ Bracket.Elements = {
 					Colorpicker.Value[2] = ColorX
 					Colorpicker.Value[3] = 1 - ColorY
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.SVPicker.InputEnded:Connect(function(Input)
@@ -4390,7 +4461,7 @@ Bracket.Elements = {
 		PaletteAsset.Hue.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if HueRender then HueRender:Disconnect() end
-				HueRender = RunService.RenderStepped:Connect(function()
+				HueRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then HueRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.Hue.AbsolutePosition.X, 0, PaletteAsset.Hue.AbsoluteSize.X) / PaletteAsset.Hue.AbsoluteSize.X
@@ -4407,13 +4478,13 @@ Bracket.Elements = {
 		PaletteAsset.Alpha.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if AlphaRender then AlphaRender:Disconnect() end
-				AlphaRender = RunService.RenderStepped:Connect(function()
+				AlphaRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then AlphaRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.Alpha.AbsolutePosition.X, 0, PaletteAsset.Alpha.AbsoluteSize.X) / PaletteAsset.Alpha.AbsoluteSize.X
 					Colorpicker.Value[4] = math.floor(ColorX * 10^2) / (10^2) -- idk %.2f little bit broken with this
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.Alpha.InputEnded:Connect(function(Input)
@@ -4442,7 +4513,7 @@ Bracket.Elements = {
 			Colorpicker.Value = Colorpicker.Value
 		end)
 
-		RunService.Heartbeat:Connect(function()
+		RegisterConnection(RunService.Heartbeat:Connect(function()
 			if Colorpicker.Value[5] then
 				if PaletteAsset.Visible then
 					Colorpicker.Value[1] = Window.RainbowHue
@@ -4455,7 +4526,7 @@ Bracket.Elements = {
 					Colorpicker.Callback(Colorpicker.Value, Colorpicker.Value[6])
 				end
 			end
-		end)
+		end))
 
 		Colorpicker:GetPropertyChangedSignal("Name"):Connect(function(Name)
 			ColorpickerAsset.Title.Text = Name
@@ -4505,7 +4576,7 @@ Bracket.Elements = {
 				Bracket.Utilities.ClosePopUps()
 				PaletteAsset.Visible = true
 
-				PaletteRender = RunService.RenderStepped:Connect(function()
+				PaletteRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then PaletteRender:Disconnect() end
 
 					local TabPosition = Window.Asset.TabContainer.AbsolutePosition.Y + Window.Asset.TabContainer.AbsoluteSize.Y
@@ -4524,7 +4595,7 @@ Bracket.Elements = {
 						(ColorpickerAsset.AbsolutePosition.X - PaletteAsset.AbsoluteSize.X) + 24,
 						(ColorpickerAsset.AbsolutePosition.Y + GuiInset.Y) + 16
 					)
-				end)
+				end))
 			else
 				PaletteAsset.Visible = false
 			end
@@ -4539,7 +4610,7 @@ Bracket.Elements = {
 		PaletteAsset.SVPicker.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if SVRender then SVRender:Disconnect() end
-				SVRender = RunService.RenderStepped:Connect(function()
+				SVRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then SVRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.SVPicker.AbsolutePosition.X, 0, PaletteAsset.SVPicker.AbsoluteSize.X) / PaletteAsset.SVPicker.AbsoluteSize.X
@@ -4548,7 +4619,7 @@ Bracket.Elements = {
 					Colorpicker.Value[2] = ColorX
 					Colorpicker.Value[3] = 1 - ColorY
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.SVPicker.InputEnded:Connect(function(Input)
@@ -4559,13 +4630,13 @@ Bracket.Elements = {
 		PaletteAsset.Hue.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if HueRender then HueRender:Disconnect() end
-				HueRender = RunService.RenderStepped:Connect(function()
+				HueRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then HueRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.Hue.AbsolutePosition.X, 0, PaletteAsset.Hue.AbsoluteSize.X) / PaletteAsset.Hue.AbsoluteSize.X
 					Colorpicker.Value[1] = 1 - ColorX
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.Hue.InputEnded:Connect(function(Input)
@@ -4576,13 +4647,13 @@ Bracket.Elements = {
 		PaletteAsset.Alpha.InputBegan:Connect(function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 				if AlphaRender then AlphaRender:Disconnect() end
-				AlphaRender = RunService.RenderStepped:Connect(function()
+				AlphaRender = RegisterConnection(RunService.RenderStepped:Connect(function()
 					if not PaletteAsset.Visible then AlphaRender:Disconnect() end
 					local Mouse = UserInputService:GetMouseLocation()
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.Alpha.AbsolutePosition.X, 0, PaletteAsset.Alpha.AbsoluteSize.X) / PaletteAsset.Alpha.AbsoluteSize.X
 					Colorpicker.Value[4] = math.floor(ColorX * 10^2) / (10^2) -- idk %.2f little bit broken with this
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.Alpha.InputEnded:Connect(function(Input)
@@ -4611,7 +4682,7 @@ Bracket.Elements = {
 			Colorpicker.Value = Colorpicker.Value
 		end)
 
-		RunService.Heartbeat:Connect(function()
+		RegisterConnection(RunService.Heartbeat:Connect(function()
 			if Colorpicker.Value[5] then
 				if PaletteAsset.Visible then
 					Colorpicker.Value[1] = Window.RainbowHue
@@ -4624,7 +4695,7 @@ Bracket.Elements = {
 					Colorpicker.Callback(Colorpicker.Value, Colorpicker.Value[6])
 				end
 			end
-		end)
+		end))
 		Colorpicker:GetPropertyChangedSignal("Value"):Connect(function(Value)
 			Value[6] = Bracket.Utilities.TableToColor(Value)
 			Colorpicker.ColorConfig[1] = Colorpicker.Value[5]
@@ -5137,6 +5208,14 @@ local RunService = game:GetService("RunService")
 local PlayerService = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
+
+local function RegisterConnection(connection)
+	local tracker = rawget(getgenv and getgenv() or _G, "Sp3arParvusTrackConnection")
+	if tracker then
+		tracker(connection)
+	end
+	return connection
+end
 
 repeat task.wait() until PlayerService.LocalPlayer
 local LocalPlayer = PlayerService.LocalPlayer
@@ -6690,7 +6769,7 @@ function DrawingLibrary.SetupCursor(Window)
 
     local LastVisibility = nil
 
-    RunService.Heartbeat:Connect(function()
+    RegisterConnection(RunService.Heartbeat:Connect(function()
         local ShouldShow = Window.Flags["Mouse/Enabled"] and Window.Enabled and UserInputService.MouseBehavior == Enum.MouseBehavior.Default
         Cursor.Visible = ShouldShow
         if ShouldShow then Cursor.Position = UserInputService:GetMouseLocation() - Cursor.Size / 2 end
@@ -6699,7 +6778,7 @@ function DrawingLibrary.SetupCursor(Window)
             UserInputService.MouseIconEnabled = not ShouldShow
             LastVisibility = ShouldShow
         end
-    end)
+    end))
 end
 
 function DrawingLibrary.SetupCrosshair(Flags)
@@ -6708,7 +6787,7 @@ function DrawingLibrary.SetupCrosshair(Flags)
     local CrosshairT = AddDrawing("Line", { Thickness = 1.5, Transparency = 1, Visible = false, ZIndex = 2 })
     local CrosshairB = AddDrawing("Line", { Thickness = 1.5, Transparency = 1, Visible = false, ZIndex = 2 })
 
-    RunService.Heartbeat:Connect(function()
+    RegisterConnection(RunService.Heartbeat:Connect(function()
         local CrosshairEnabled = Flags["Crosshair/Enabled"] and UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default and not UserInputService.MouseIconEnabled
         CrosshairL.Visible, CrosshairR.Visible, CrosshairT.Visible, CrosshairB.Visible = CrosshairEnabled, CrosshairEnabled, CrosshairEnabled, CrosshairEnabled
 
@@ -6740,14 +6819,14 @@ function DrawingLibrary.SetupCrosshair(Flags)
             CrosshairB.From = MouseLocation + V2New(0, Gap + 1)
             CrosshairB.To = MouseLocation + V2New(0, Size + (Gap + 1))
         end
-    end)
+    end))
 end
 
 function DrawingLibrary.SetupFOV(Flag, Flags)
     local FOV = AddDrawing("Circle", { ZIndex = 4 })
     local FOVOutline = AddDrawing("Circle", { ZIndex = 3 })
 
-    RunService.Heartbeat:Connect(function()
+    RegisterConnection(RunService.Heartbeat:Connect(function()
         local Visible = GetFlag(Flags, Flag, "/Enabled")
         and GetFlag(Flags, Flag, "/FOV/Enabled")
 
@@ -6781,15 +6860,15 @@ function DrawingLibrary.SetupFOV(Flag, Flags)
             FOV.Radius = Radius
             FOVOutline.Radius = Radius
 
-            FOV.Position = MouseLocation
-            FOVOutline.Position = MouseLocation
-        end
-    end)
+        FOV.Position = MouseLocation
+        FOVOutline.Position = MouseLocation
+    end
+    end))
 end
 
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
-end)
+end))
 
 local FORCE_FULL_FPS_ESP = true -- Force every RenderStepped tick for ESP to prevent frozen tracers
 local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 5k studs
@@ -6797,7 +6876,7 @@ local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players between 5k-10k studs
 local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players between 10k-15k studs
 local MAX_DISTANCE = FAR_ZONE_MAX -- Don't render beyond far zone ceiling
 
-DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
+DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(function(dt)
     debug.profilebegin("PARVUS_DRAWING")
 
     -- Process ESP updates with distance-based throttling and error recovery
@@ -6926,7 +7005,7 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
         end
     end
     debug.profileend()
-end)
+end))
 
 --[[DrawingLibrary.Connection = RunService.RenderStepped:Connect(function()
     debug.profilebegin("PARVUS_DRAWING")
@@ -7404,7 +7483,6 @@ local brokenSet = {}
 local brokenCacheDirty = true
 local undoStack = {}
 local UNDO_LIMIT = 25
-local hoverHL
 local CTRL_HELD = false
 
 -- ============================================================
@@ -7430,6 +7508,7 @@ end
 
 local function ReloadScript()
     print(string.format("[Sp3arParvus v%s] Reloading script...", SP3ARPARVUS_VERSION))
+    DeactivateScript()
 
     -- Clean up existing UI
     local ScreenGui = ResolveUIRoot()
@@ -7468,6 +7547,7 @@ end
 
 local function ShutdownScript()
     print(string.format("[Sp3arParvus v%s] Shutting down...", SP3ARPARVUS_VERSION))
+    DeactivateScript()
 
     -- Clean up UI
     local ScreenGui = ResolveUIRoot()
@@ -8308,7 +8388,8 @@ Sp3arParvus.Utilities.NewThreadLoop(0, function()
     mouse1press()
 
     if Window.Flags["Trigger/HoldMouseButton"] then
-        while task.wait() do
+        while Sp3arParvus and Sp3arParvus.Active do
+            task.wait()
             TriggerClosest = GetClosest(
                 Window.Flags["Trigger/Enabled"],
                 Window.Flags["Trigger/TeamCheck"],
@@ -8323,17 +8404,20 @@ Sp3arParvus.Utilities.NewThreadLoop(0, function()
 
             if not TriggerClosest or not Trigger then break end
         end
+        if not (Sp3arParvus and Sp3arParvus.Active) then
+            mouse1release()
+            return
+        end
     end
 
     mouse1release()
 end)
 
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
-end)
+end))
 
 -- Track CharacterAdded connections for proper cleanup on player leave/respawn
-local CharacterAddedConnections = {}
 
 -- Function to set up ESP for a player with CharacterAdded listener
 local function SetupPlayerESP(Player)
@@ -8389,12 +8473,12 @@ for Index, Player in pairs(PlayerService:GetPlayers()) do
 end
 
 -- Set up ESP for new players
-PlayerService.PlayerAdded:Connect(function(Player)
+TrackConnection(PlayerService.PlayerAdded:Connect(function(Player)
     SetupPlayerESP(Player)
-end)
+end))
 
 -- Clean up ESP and connections when player leaves
-PlayerService.PlayerRemoving:Connect(function(Player)
+TrackConnection(PlayerService.PlayerRemoving:Connect(function(Player)
     -- Disconnect CharacterAdded listener
     local Connection = CharacterAddedConnections[Player]
     if Connection then
@@ -8410,7 +8494,7 @@ PlayerService.PlayerRemoving:Connect(function(Player)
     if DrawingUtilities and DrawingUtilities.ResetESPCounters then
         DrawingUtilities:ResetESPCounters(Player)
     end
-end)
+end))
 
 -- ============================================================
 -- CONTINUOUS CHARACTER MONITORING
@@ -8421,7 +8505,9 @@ local CharacterMonitorInterval = 2 -- Check every 2 seconds
 local LastCharacterStates = {} -- Track whether each player had a character last check
 
 task.spawn(function()
-    while task.wait(CharacterMonitorInterval) do
+    while Sp3arParvus and Sp3arParvus.Active do
+        task.wait(CharacterMonitorInterval)
+        if not (Sp3arParvus and Sp3arParvus.Active) then break end
         for _, Player in pairs(PlayerService:GetPlayers()) do
             if Player ~= LocalPlayer then
                 local hasCharacterNow = Player.Character ~= nil
@@ -8442,9 +8528,9 @@ task.spawn(function()
 end)
 
 -- Clean up character state tracking when players leave
-PlayerService.PlayerRemoving:Connect(function(Player)
+TrackConnection(PlayerService.PlayerRemoving:Connect(function(Player)
     LastCharacterStates[Player] = nil
-end)
+end))
 
 -- ============================================================
 -- AGGRESSIVE ESP REFRESH SYSTEM
@@ -8455,7 +8541,9 @@ local AggressiveRefreshInterval = 10 -- Full refresh every 10 seconds
 local PlayerRefreshIndex = 1
 
 task.spawn(function()
-    while task.wait(AggressiveRefreshInterval) do
+    while Sp3arParvus and Sp3arParvus.Active do
+        task.wait(AggressiveRefreshInterval)
+        if not (Sp3arParvus and Sp3arParvus.Active) then break end
         local players = PlayerService:GetPlayers()
         -- Refresh one player at a time to avoid performance spikes
         if #players > 0 then
@@ -8484,7 +8572,7 @@ end)
 -- ============================================================
 CreateHoverHighlight()
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
+TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
     -- Track Ctrl key
@@ -8507,14 +8595,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if Window.Flags["Misc/Br3ak3r"] and CTRL_HELD and input.KeyCode == Enum.KeyCode.Z then
         UnbreakLast()
     end
-end)
+end))
 
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
+TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
     -- Release Ctrl key
     if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
         CTRL_HELD = false
     end
-end)
+end))
 
 -- ============================================================
 -- MAIN UPDATE LOOP
@@ -8522,7 +8610,7 @@ end)
 local nearestPlayerAccum = 0
 local closestTrackerAccum = 0
 
-RunService.Heartbeat:Connect(function(dt)
+TrackConnection(RunService.Heartbeat:Connect(function(dt)
     -- Update nearest player for Closest Player Tracker (throttled to 20 Hz)
     if Window.Flags["Misc/ClosestPlayerTracker"] then
         nearestPlayerAccum = nearestPlayerAccum + dt
@@ -8569,7 +8657,7 @@ RunService.Heartbeat:Connect(function(dt)
     elseif hoverHL then
         hoverHL.Enabled = false
     end
-end)
+end))
 
 -- Mark as loaded
 Sp3arParvus.Loaded = true

@@ -62,6 +62,12 @@ This version includes **critical stability fixes** that resolve tens of thousand
    - Safe fallback values when data unavailable
    - Prevents cascading errors in rendering loops
 
+6. **?? Lifecycle Cleanup & ESP Reliability**
+   - Managed connection tracker tears down every RunService/UserInputService/Workspace hook during Reload/Shutdown so nothing lingers
+   - Background threads (aimbot, silent aim, triggerbot, ESP refreshers) respect a global `Sp3arParvus.Active` flag and stop instantly when requested
+   - UI/Drawing modules no longer spawn duplicate cursors, crosshairs, or ESP artifacts after multiple reloads
+
+
 ---
 
 ## ✅ Requirements
@@ -469,9 +475,9 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 ---
 ## 📝 Version Information
 
-**Current Version:** Sp3arParvus v1.0.0
+**Current Version:** Sp3arParvus v1.2.3
 **Based on:** Parvus Hub by AlexR32
-**Last Updated:** 2025-11-09
+**Last Updated:** 2025-11-10
 **Script Size:** ~8,140 lines
 **File Size:** ~320 KB
 
@@ -480,6 +486,12 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 - Version is displayed in UI title, console logs, and all documentation
 
 ### Changelog
+
+**v1.2.3 (2025-11-10) - Lifecycle & Connection Hardening**
+  - ⚙️ **Managed Connection Pool** - Every RunService, UserInputService, Workspace, and Lighting signal now registers through a central tracker so Reload/Shutdown disconnect everything deterministically.
+  - 🧠 **Safe Thread Shutdown** - Aimbot, Silent Aim, Triggerbot, ESP refreshers, and monitoring jobs now respect a global `Sp3arParvus.Active` flag, preventing stray logic from running after cleanup.
+  - 🎯 **UI/Drawing Cleanup** - Cursor, crosshair, FOV circles, palette renders, and notification widgets no longer spawn duplicate overlays or stuck highlights when reloading.
+  - ♻️ **Reload/Shutdown Reliability** - Both commands call the new cleanup pipeline before reinitializing, eliminating stacked ESP, cursor glitches, and memory leaks from repeated runs.
 
 **v1.0.0 (2025-11-09) - Comprehensive Audit & Fixes**
   - 🔧 **CRITICAL FIX:** Resolved all scoping issues causing "attempt to call a nil value" errors
@@ -496,7 +508,7 @@ Enable "Open On Load" in Options to automatically open UI on script load.
     - Cleans up global state completely
   - 📌 **Versioning System** - Track updates across all instances
     - Version constant at script top (SP3ARPARVUS_VERSION)
-    - Displayed in Window title: "Sp3arParvus v1.0.0"
+    - Displayed in Window title: "Sp3arParvus v1.2.3"
     - Shown in console logs and Script Control section
     - Documentation synchronized with script version
   - ✅ Fixed AR2 missing GetTeam function (squad detection)
