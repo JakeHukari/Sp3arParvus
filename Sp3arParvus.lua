@@ -6866,7 +6866,7 @@ function DrawingLibrary.SetupFOV(Flag, Flags)
     end))
 end
 
-TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+RegisterConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     Camera = Workspace.CurrentCamera
 end))
 
