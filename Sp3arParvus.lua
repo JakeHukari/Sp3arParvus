@@ -4467,7 +4467,7 @@ Bracket.Elements = {
 					local ColorX = math.clamp(Mouse.X - PaletteAsset.Hue.AbsolutePosition.X, 0, PaletteAsset.Hue.AbsoluteSize.X) / PaletteAsset.Hue.AbsoluteSize.X
 					Colorpicker.Value[1] = 1 - ColorX
 					Colorpicker.Value = Colorpicker.Value
-				end)
+				end))
 			end
 		end)
 		PaletteAsset.Hue.InputEnded:Connect(function(Input)
