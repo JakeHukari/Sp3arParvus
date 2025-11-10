@@ -1,23 +1,40 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.0.1
--- Every update bumps version by 0.0.1
--- Current version is displayed in UI, console, and all documentation
+-- VERSION: 1.1.0
 --
--- RECENT ADDITIONS (Ported from Totem Buff Script):
--- - Performance Display: Real-time FPS, ping, and player count monitoring
--- - Closest Player Tracker: Tracks and displays nearest player with distance
--- - Br3ak3r (Part Breaker): Hide/remove parts with Ctrl+LMB, undo with Ctrl+Z
--- - Enhanced ESP System: Fixed stuck tracers/nametags with CharacterAdded listeners
+-- VERSIONING RULES (Semantic Versioning):
+-- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
 --
--- All features include minimizable UI cards and are fully integrated with
--- Sp3arParvus's existing toggle system in the Miscellaneous tab.
+-- MAJOR (X.0.0): Breaking changes, major rewrites, incompatible changes
+-- MINOR (1.X.0): New features, functionality additions, significant improvements
+-- PATCH (1.1.X): Bug fixes, small tweaks, optimization improvements
+--
+-- WHEN TO BUMP:
+-- - Add new features or systems → Bump MINOR (1.0.0 → 1.1.0)
+-- - Fix bugs or make small changes → Bump PATCH (1.1.0 → 1.1.1)
+-- - Major rewrite or breaking changes → Bump MAJOR (1.1.0 → 2.0.0)
+--
+-- ALWAYS update version on every commit that changes functionality
+--
+-- RECENT ADDITIONS:
+-- v1.1.0 - Overpowered ESP System:
+--   - Increased maximum ESP distance from 500 to 10,000 studs
+--   - Continuous character monitoring (checks every 2s for new characters)
+--   - Aggressive ESP refresh system (rebuilds stale ESP every 10s)
+--   - Enhanced character loading with retry mechanism
+--   - Fixes players outside render distance not being detected
+--
+-- v1.0.1 - Performance & Utility Features:
+--   - Performance Display: Real-time FPS, ping, and player count monitoring
+--   - Closest Player Tracker: Tracks and displays nearest player with distance
+--   - Br3ak3r (Part Breaker): Hide/remove parts with Ctrl+LMB, undo with Ctrl+Z
+--   - Enhanced ESP System: Fixed stuck tracers/nametags with CharacterAdded listeners
 
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.0.1"
+local SP3ARPARVUS_VERSION = "1.1.0"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
