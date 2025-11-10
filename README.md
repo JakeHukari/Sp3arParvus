@@ -526,5 +526,6 @@ Enable "Open On Load" in Options to automatically open UI on script load.
 
 ---
 
-**Made with ❤️ by the Parvus community**
 **For educational and development purposes only**
+
+Special thanks to @AlexR32, original author of Parvus
