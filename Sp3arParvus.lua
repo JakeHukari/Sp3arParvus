@@ -7866,16 +7866,8 @@ local function UpdateClosestPlayerTracker()
                 nearestPlayerRef = nil -- Clear invalid reference
             end
         end
-        else
-            ESP.Target.OnScreen = false
-            ESP.Target.InTheRange = false
-            ESP.Target.IsAlive = false
-            HideESPDrawings(ESP)
-        end
     end
 
-    -- Character or core parts missing; hide stale drawings to prevent frozen ESP
-    HideESPDrawings(ESP)
 end
 
 -- ============================================================
