@@ -1,4 +1,4 @@
-# Sp3arParvus - Single File Edition
+# Sp3arParvus - Single File, Sp3ar Version of Parvus
 ## loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua",true))()
 **A fully localized, offline-ready fork of [Parvus Hub](https://github.com/AlexR32/Parvus)** - Complete Roblox development toolkit with game-specific features, optimized for stability and ease of use.
 
