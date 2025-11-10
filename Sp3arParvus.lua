@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.1.0
+-- VERSION: 1.2.0
 --
 -- VERSIONING RULES (Semantic Versioning):
 -- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
@@ -18,6 +18,13 @@
 -- ALWAYS update version on every commit that changes functionality
 --
 -- RECENT ADDITIONS:
+-- v1.2.0 - ESP Optimization & Always-On Features:
+--   - All ESP features now enabled by default (boxes, tracers, nametags, etc.)
+--   - Fixed 10,000 stud detection range (no distance modifiers or exceptions)
+--   - Removed distance UI controls (range is always 10,000 studs)
+--   - ESP automatically updates when players enter/exit range
+--   - Enhanced ESP cleanup when players leave, die, or exit proximity
+--
 -- v1.1.0 - Overpowered ESP System:
 --   - Increased maximum ESP distance from 500 to 10,000 studs
 --   - Continuous character monitoring (checks every 2s for new characters)
@@ -34,7 +41,7 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.1.0"
+local SP3ARPARVUS_VERSION = "1.2.0"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
@@ -5270,8 +5277,8 @@ local function GetDistance(Position)
     return (Position - Camera.CFrame.Position).Magnitude
 end
 local function IsWithinReach(Enabled, Limit, Distance)
-    if not Enabled then return true end
-    return Distance < Limit
+    -- Fixed 10000 stud range - always active, no exceptions
+    return Distance <= 10000
 end
 local function GetScaleFactor(Enabled, Size, Distance)
     if not Enabled then return Size end
@@ -7948,8 +7955,6 @@ Window = Sp3arParvus.Utilities.UI:Window({
         VisualsSection:Colorpicker({Name = "Enemy Highlight", Flag = "ESP/Player/Enemy", Value = {0, 0.9, 1, 0, false}})
         VisualsSection:Toggle({Name = "Distinguish Teams", Flag = "ESP/Player/TeamCheck", Value = false})
         VisualsSection:Toggle({Name = "Use Game Team Colors", Flag = "ESP/Player/TeamColor", Value = false})
-        VisualsSection:Toggle({Name = "Enable Range Limit", Flag = "ESP/Player/DistanceCheck", Value = false})
-        VisualsSection:Slider({Name = "Maximum Range", Flag = "ESP/Player/Distance", Min = 25, Max = 1000, Value = 250, Unit = "studs"})
     end
 
     -- ============================================================
