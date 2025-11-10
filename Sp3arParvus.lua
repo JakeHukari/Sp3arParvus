@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.2.1
+-- VERSION: 1.2.2
 --
 -- VERSIONING RULES (Semantic Versioning):
 -- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
@@ -18,6 +18,10 @@
 -- ALWAYS update version on every commit that changes functionality
 --
 -- RECENT ADDITIONS:
+-- v1.2.2 - ESP Stability Fixes:
+--   - Hide ESP drawings instantly when characters despawn to prevent frozen tracers
+--   - Added fallback guards inside the render loop so stale targets reset cleanly
+--
 -- v1.2.1 - ESP Zone Enhancements:
 --   - Increased ESP render/detection range to 15,000 studs with close/mid/far zones
 --   - Color-coded tracers & nametags per zone with per-tick refresh logic
@@ -46,7 +50,7 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.2.1"
+local SP3ARPARVUS_VERSION = "1.2.2"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
@@ -6996,8 +7000,8 @@ end)
 
                                 ESP.Drawing.HeadDot.Main.Color = ESP.Target.Color
 
-                                ESP.Drawing.HeadDot.Main.Transparency = Transparency
-                                ESP.Drawing.HeadDot.Outline.Transparency = Transparency
+                            ESP.Drawing.HeadDot.Main.Transparency = Transparency
+                            ESP.Drawing.HeadDot.Outline.Transparency = Transparency
 
                                 ESP.Drawing.HeadDot.Main.NumSides = NumSides
                                 ESP.Drawing.HeadDot.Outline.NumSides = NumSides
@@ -7010,8 +7014,8 @@ end)
 
                                 ESP.Drawing.HeadDot.Main.Filled = Filled
 
-                                ESP.Drawing.HeadDot.Main.Position = HeadPosition
-                                ESP.Drawing.HeadDot.Outline.Position = HeadPosition
+                        ESP.Drawing.HeadDot.Main.Position = HeadPosition
+                        ESP.Drawing.HeadDot.Outline.Position = HeadPosition
                             end
                         end
                     end
@@ -7782,7 +7786,16 @@ local function UpdateClosestPlayerTracker()
                 nearestPlayerRef = nil -- Clear invalid reference
             end
         end
+        else
+            ESP.Target.OnScreen = false
+            ESP.Target.InTheRange = false
+            ESP.Target.IsAlive = false
+            HideESPDrawings(ESP)
+        end
     end
+
+    -- Character or core parts missing; hide stale drawings to prevent frozen ESP
+    HideESPDrawings(ESP)
 end
 
 -- ============================================================
