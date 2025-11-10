@@ -8,16 +8,15 @@
 
 ## 📋 Table of Contents
 
-- [What's This?](#https://github.com/JakeHukari/Sp3arParvus?tab=readme-ov-file#-whats-this)
-- [Recent Fixes](#https://github.com/JakeHukari/Sp3arParvus?tab=readme-ov-file#recent-fixes)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-- [Features](#features)
-- [Game-Specific Support](#game-specific-support)
-- [Controls](#controls)
-- [Troubleshooting](#troubleshooting)
-- [Technical Details](#technical-details)
-- [Credits](#credits)
+- [What's This?](#-whats-this)
+- [Recent Fixes](#-recent-fixes-latest-update)
+- [Requirements](#-requirements)
+- [Features](#combat-features)
+- [Game-Specific Support](#-game-specific-support)
+- [Controls](#-controls)
+- [Troubleshooting](#-troubleshooting
+- [Technical Details](#-technical-details)
+- [Credits](#-credits)
 
 ---
 
