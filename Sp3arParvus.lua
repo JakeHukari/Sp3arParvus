@@ -5276,9 +5276,30 @@ end
 local function GetDistance(Position)
     return (Position - Camera.CFrame.Position).Magnitude
 end
+local CLOSE_ZONE_MAX = 5000
+local MID_ZONE_MAX = 10000
+local FAR_ZONE_MAX = 15000
+local ZONE_COLORS = {
+	Close = Color3.fromRGB(255, 0, 0),
+	Mid = Color3.fromRGB(255, 140, 0),
+	Far = Color3.fromRGB(0, 255, 0)
+}
+local function GetDistanceZone(distance)
+	if not distance then
+		return "Far", ZONE_COLORS.Far
+	elseif distance <= CLOSE_ZONE_MAX then
+		return "Close", ZONE_COLORS.Close
+	elseif distance <= MID_ZONE_MAX then
+		return "Mid", ZONE_COLORS.Mid
+	elseif distance <= FAR_ZONE_MAX then
+		return "Far", ZONE_COLORS.Far
+	else
+		return "OutOfRange", ZONE_COLORS.Far
+	end
+end
 local function IsWithinReach(Enabled, Limit, Distance)
-    -- Fixed 10000 stud range - always active, no exceptions
-    return Distance <= 10000
+	-- Fixed 15000 stud range - always active, no exceptions
+	return Distance <= FAR_ZONE_MAX
 end
 local function GetScaleFactor(Enabled, Size, Distance)
     if not Enabled then return Size end
@@ -5652,6 +5673,7 @@ function DrawingLibrary.Update(ESP, Target)
     local Health, MaxHealth, IsAlive = 100, 100, false
     local InEnemyTeam, TeamColor = true, WhiteColor
     local Color = WhiteColor
+    local ZoneName, ZoneColor = "OutOfRange", ZONE_COLORS.Far
 
     Character, RootPart = GetCharacter(Target, Mode)
     if Character and RootPart then
@@ -5659,6 +5681,9 @@ function DrawingLibrary.Update(ESP, Target)
 
         if OnScreen then
             Distance = GetDistance(RootPart.Position)
+            ZoneName, ZoneColor = GetDistanceZone(Distance)
+            ESP.CurrentZone = ZoneName
+            ESP.ZoneColor = ZoneColor
             InTheRange = IsWithinReach(GetFlag(Flags, Flag, "/DistanceCheck"), GetFlag(Flags, Flag, "/Distance"), Distance)
 
             if InTheRange then
@@ -5692,7 +5717,9 @@ function DrawingLibrary.Update(ESP, Target)
                             FromPosition = (FromPosition[1] == "From Mouse" and UserInputService:GetMouseLocation())
                             or (FromPosition[1] == "From Bottom" and V2New(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y))
 
-                            ESP.Drawing.Tracer.Main.Color = Color
+                            local TracerColor = ZoneColor or Color
+                            ESP.Drawing.Tracer.Main.Color = TracerColor
+                            ESP.Drawing.Tracer.Outline.Color = TracerColor
 
                             ESP.Drawing.Tracer.Main.Thickness = Thickness
                             ESP.Drawing.Tracer.Outline.Thickness = Thickness + 2
@@ -5937,6 +5964,7 @@ function DrawingLibrary.Update(ESP, Target)
                             Textboxes.Name.Size = Autoscale
                             Textboxes.Name.Text = Mode == "Player" and Target.Name
                             or (InEnemyTeam and "Enemy NPC" or "Ally NPC")
+                            Textboxes.Name.Color = ZoneColor or Color
 
                             Textboxes.Name.Position = AntiAliasingXY(
                                 ScreenPosition.X,
@@ -6370,6 +6398,7 @@ end
                                 Textboxes.Name.Size = Autoscale
                                 Textboxes.Name.Text = Mode == "Player" and Target.Name
                                 or (InEnemyTeam and "Enemy NPC" or "Ally NPC")
+                                Textboxes.Name.Color = ZoneColor or Color
 
                                 Textboxes.Name.Position = AntiAliasingXY(
                                     ScreenPosition.X,
@@ -6754,12 +6783,10 @@ Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 end)
 
 local FORCE_FULL_FPS_ESP = true -- Force every RenderStepped tick for ESP to prevent frozen tracers
-local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 1000 studs
-local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players 1000-5000 studs
-local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players 5000-20000 studs
-local VERY_FAR_UPDATE_INTERVAL = 0.25 -- ~4 FPS for players 20000-50000 studs
-local EXTREME_UPDATE_INTERVAL = 0.5 -- ~2 FPS for players beyond 50000 studs
-local MAX_DISTANCE = 10000 -- Don't render beyond this distance
+local NEAR_UPDATE_INTERVAL = 0 -- Update every frame for players within 5k studs
+local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players between 5k-10k studs
+local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players between 10k-15k studs
+local MAX_DISTANCE = FAR_ZONE_MAX -- Don't render beyond far zone ceiling
 
 DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
     debug.profilebegin("PARVUS_DRAWING")
@@ -6795,13 +6822,9 @@ DrawingLibrary.Connection = RunService.RenderStepped:Connect(function(dt)
                     else
                         -- Determine update interval based on distance
                         local updateInterval = NEAR_UPDATE_INTERVAL
-                        if distance > 50000 then
-                            updateInterval = EXTREME_UPDATE_INTERVAL
-                        elseif distance > 20000 then
-                            updateInterval = VERY_FAR_UPDATE_INTERVAL
-                        elseif distance > 5000 then
+                        if distance > MID_ZONE_MAX then
                             updateInterval = FAR_UPDATE_INTERVAL
-                        elseif distance > 1000 then
+                        elseif distance > CLOSE_ZONE_MAX then
                             updateInterval = MID_UPDATE_INTERVAL
                         end
 
