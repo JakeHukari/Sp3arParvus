@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.0.0
+-- VERSION: 1.0.1
 -- Every update bumps version by 0.0.1
 -- Current version is displayed in UI, console, and all documentation
 --
@@ -17,7 +17,7 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.0.0"
+local SP3ARPARVUS_VERSION = "1.0.1"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game.IsLoaded
