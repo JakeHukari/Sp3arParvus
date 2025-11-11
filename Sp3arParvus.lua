@@ -7066,6 +7066,13 @@ DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(
 
         -- If quick check failed, mark for cleanup
         if not quickCheck then
+            if not (Target and typeof(Target) == "Instance") then
+                if Target ~= nil then
+                    DrawingLibrary:RemoveESP(Target)
+                end
+                continue
+            end
+
             ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
             if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
                 table.insert(ESPCleanupQueue, Target)
@@ -7075,6 +7082,13 @@ DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(
             -- Perform actual ESP update with error handling
             local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
             if not Success then
+                if not (Target and typeof(Target) == "Instance") then
+                    if Target ~= nil then
+                        DrawingLibrary:RemoveESP(Target)
+                    end
+                    continue
+                end
+
                 -- Increment error count
                 ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
 
