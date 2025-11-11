@@ -8441,11 +8441,15 @@ if hookmetamethod and checkcaller then
     end)
 end
 
+local function Pack(...)
+    return {n = select('#', ...), ...}
+end
+
 local OldNamecall = nil
 if hookmetamethod and checkcaller and getnamecallmethod then
     OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
         local args = {...}
-        local success, result = pcall(function()
+        local results = Pack(pcall(function()
             if checkcaller() then
                 return OldNamecall(Self, unpack(args))
             end
@@ -8476,14 +8480,14 @@ if hookmetamethod and checkcaller and getnamecallmethod then
             end
 
             return OldNamecall(Self, unpack(args))
-        end)
+        end))
 
-        if not success then
-            warn("__namecall hook error:", result)
+        if not results[1] then
+            warn("__namecall hook error:", results[2])
             return OldNamecall(Self, unpack(args))
         end
 
-        return result
+        return unpack(results, 2, results.n)
     end)
 end
 
