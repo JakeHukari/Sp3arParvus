@@ -58,23 +58,41 @@ local SP3ARPARVUS_VERSION = "1.2.3"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game:IsLoaded()
-if Sp3arParvus and Sp3arParvus.Loaded then return end
+local globalEnvironment = getgenv and getgenv() or _G
+local existingInstance = rawget(globalEnvironment, "Sp3arParvus")
+if existingInstance then
+    if existingInstance.Loaded then
+        return warn("Sp3arParvus is already loaded!")
+    end
+    return warn("Sp3arParvus is still initializing, aborting duplicate load.")
+end
 
-getgenv().Sp3arParvus = {Loaded = false, Utilities = {}, DefaultCursor = DEFAULT_CURSOR_DATA, Cursor = DEFAULT_CURSOR_DATA}
+globalEnvironment.Sp3arParvus = {
+    Loaded = false,
+    Utilities = {},
+    DefaultCursor = DEFAULT_CURSOR_DATA,
+    Cursor = DEFAULT_CURSOR_DATA,
+}
 Sp3arParvus.Active = true
 Sp3arParvus.Connections = {}
 
 local ManagedConnections = Sp3arParvus.Connections
 
 local function TrackConnection(connection)
-	if connection then
-		table.insert(ManagedConnections, connection)
-	end
+    if connection and typeof(connection) == "RBXScriptConnection" then
+        table.insert(ManagedConnections, connection)
+    elseif connection ~= nil then
+        warn("Ignoring non-RBXScriptConnection passed to TrackConnection", connection)
+    end
 
-	return connection
+    return connection
 end
 
-getgenv().Sp3arParvusTrackConnection = TrackConnection
+if getgenv then
+    getgenv().Sp3arParvusTrackConnection = TrackConnection
+else
+    _G.Sp3arParvusTrackConnection = TrackConnection
+end
 
 Sp3arParvus.Games = {
 	["Universal"] = {Name = "Universal"},
@@ -322,29 +340,32 @@ function module.SolveTrajectory(origin, targetPosition, targetVelocity, projecti
 	local delta = targetPosition - origin
 	gravity = -gravity / gravityCorrection
 
-	local solutions = solveQuartic(
-		gravity * gravity,
-		-2 * targetVelocity.Y * gravity,
-		targetVelocity.Y * targetVelocity.Y - 2 * delta.Y * gravity - projectileSpeed * projectileSpeed + targetVelocity.X * targetVelocity.X + targetVelocity.Z * targetVelocity.Z,
-		2 * delta.Y * targetVelocity.Y + 2 * delta.X * targetVelocity.X + 2 * delta.Z * targetVelocity.Z,
-		delta.Y * delta.Y + delta.X * delta.X + delta.Z * delta.Z
-	)
+        local solutions = solveQuartic(
+                gravity * gravity,
+                -2 * targetVelocity.Y * gravity,
+                targetVelocity.Y * targetVelocity.Y - 2 * delta.Y * gravity - projectileSpeed * projectileSpeed + targetVelocity.X * targetVelocity.X + targetVelocity.Z * targetVelocity.Z,
+                2 * delta.Y * targetVelocity.Y + 2 * delta.X * targetVelocity.X + 2 * delta.Z * targetVelocity.Z,
+                delta.Y * delta.Y + delta.X * delta.X + delta.Z * delta.Z
+        )
 
-	if solutions then
-		for index = 1, #solutions do
-			if solutions[index] > 0 then
-				local tof = solutions[index] -- time of flight
+        if not solutions or #solutions == 0 then
+                return targetPosition
+        end
 
-				return origin + Vector3.new(
-					(delta.X + targetVelocity.X * tof) / tof,
-					(delta.Y + targetVelocity.Y * tof - gravity * tof * tof) / tof,
-					(delta.Z + targetVelocity.Z * tof) / tof
-				)
-			end
-		end
-	end
+        for index = 1, #solutions do
+                local solution = solutions[index]
+                if solution and solution > 0 then
+                                local tof = solution -- time of flight
 
-	return targetPosition
+                                return origin + Vector3.new(
+                                        (delta.X + targetVelocity.X * tof) / tof,
+                                        (delta.Y + targetVelocity.Y * tof - gravity * tof * tof) / tof,
+                                        (delta.Z + targetVelocity.Z * tof) / tof
+                                )
+                        end
+        end
+
+        return targetPosition
 end
 
 return module
@@ -373,14 +394,15 @@ local SetIdentity = setthreadidentity or function() end
 local hoverHL = nil
 local CharacterAddedConnections = {}
 local MovementActionNames = {"Forward", "Backward", "Left", "Right", "Up", "Down"}
+local MAX_TRIGGER_ITERATIONS = 1000
 
 local function DisconnectManagedConnections()
-	for index, connection in ipairs(ManagedConnections) do
-		if connection and connection.Disconnect then
-			pcall(function() connection:Disconnect() end)
-		end
-		ManagedConnections[index] = nil
-	end
+        for index, connection in ipairs(ManagedConnections) do
+                if connection and typeof(connection) == "RBXScriptConnection" and connection.Disconnect then
+                        pcall(function() connection:Disconnect() end)
+                end
+                ManagedConnections[index] = nil
+        end
 end
 
 local function DisconnectCharacterConnections()
@@ -410,7 +432,11 @@ local function DeactivateScript()
 		hoverHL = nil
 	end
 
-	getgenv().Sp3arParvusTrackConnection = nil
+        if getgenv then
+            getgenv().Sp3arParvusTrackConnection = nil
+        else
+            _G.Sp3arParvusTrackConnection = nil
+        end
 end
 
 Sp3arParvus.Cleanup = DeactivateScript
@@ -432,8 +458,31 @@ if setthreadidentity and hookfunction and getrenv then
     end
 end
 
-repeat task.wait() until Stats.Network:FindFirstChild("ServerStatsItem")
-local Ping = Stats.Network.ServerStatsItem["Data Ping"]
+local Ping
+do
+    local MAX_WAIT = 10
+    local elapsed = 0
+    local serverStats = Stats.Network:FindFirstChild("ServerStatsItem")
+
+    while not serverStats and elapsed < MAX_WAIT do
+        task.wait(0.1)
+        elapsed = elapsed + 0.1
+        serverStats = Stats.Network:FindFirstChild("ServerStatsItem")
+    end
+
+    if not serverStats then
+        warn("Could not find ServerStatsItem after", MAX_WAIT, "seconds")
+        Ping = {GetValue = function() return 0 end}
+    else
+        local dataPing = serverStats:FindFirstChild("Data Ping")
+        if not dataPing or type(dataPing.GetValue) ~= "function" then
+            warn("ServerStatsItem is missing 'Data Ping', using fallback")
+            Ping = {GetValue = function() return 0 end}
+        else
+            Ping = dataPing
+        end
+    end
+end
 
 repeat task.wait() until Workspace:FindFirstChildOfClass("Terrain")
 local Terrain = Workspace:FindFirstChildOfClass("Terrain")
@@ -456,7 +505,10 @@ ContextActionService:BindAction("Up", MovementBind, false, Enum.KeyCode.Space)
 ContextActionService:BindAction("Down", MovementBind, false, Enum.KeyCode.LeftShift)
 
 TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    Camera = Workspace.CurrentCamera
+    local newCamera = Workspace.CurrentCamera
+    if newCamera then
+        Camera = newCamera
+    end
 end))
 
 --[[function Utility.HideObject(Object)
@@ -605,6 +657,10 @@ function Utility.SetupWatermark(Self, Window)
     local GetFPS = Self:SetupFPS()
 
     TrackConnection(RunService.Heartbeat:Connect(function()
+        if not (Sp3arParvus and Sp3arParvus.Active) then
+            return
+        end
+
         if Window.Watermark.Enabled then
             Window.Watermark.Title = string.format(
                 "Sp3arParvus    %s    %i FPS    %i MS",
@@ -4493,16 +4549,42 @@ Bracket.Elements = {
 			end
 		end)
 
-		PaletteAsset.RGB.RGBBox.FocusLost:Connect(function(Enter)
-			if not Enter then return end
-			local ColorString = string.split(string.gsub(PaletteAsset.RGB.RGBBox.Text, " ", ""), ", ")
-			local Hue, Saturation, Value = Color3.fromRGB(ColorString[1], ColorString[2], ColorString[3]):ToHSV()
-			PaletteAsset.RGB.RGBBox.Text = ""
-			Colorpicker.Value[1] = Hue
-			Colorpicker.Value[2] = Saturation
-			Colorpicker.Value[3] = Value
-			Colorpicker.Value = Colorpicker.Value
-		end)
+                PaletteAsset.RGB.RGBBox.FocusLost:Connect(function(Enter)
+                        if not Enter then return end
+
+                        local rawText = PaletteAsset.RGB.RGBBox.Text or ""
+                        local sanitized = string.gsub(rawText, "%s", "")
+                        local ColorString = string.split(sanitized, ",")
+
+                        if #ColorString ~= 3 then
+                                warn("Invalid RGB format, expected three comma-separated values")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        local r = tonumber(ColorString[1])
+                        local g = tonumber(ColorString[2])
+                        local b = tonumber(ColorString[3])
+
+                        if not (r and g and b) then
+                                warn("Invalid RGB values, expected numbers")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then
+                                warn("RGB values must be between 0 and 255")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        local Hue, Saturation, Value = Color3.fromRGB(r, g, b):ToHSV()
+                        PaletteAsset.RGB.RGBBox.Text = ""
+                        Colorpicker.Value[1] = Hue
+                        Colorpicker.Value[2] = Saturation
+                        Colorpicker.Value[3] = Value
+                        Colorpicker.Value = Colorpicker.Value
+                end)
 		PaletteAsset.HEX.HEXBox.FocusLost:Connect(function(Enter)
 			if not Enter then return end
 			local Hue, Saturation, Value = Color3.fromHex("#" .. PaletteAsset.HEX.HEXBox.Text):ToHSV()
@@ -4662,16 +4744,42 @@ Bracket.Elements = {
 			end
 		end)
 
-		PaletteAsset.RGB.RGBBox.FocusLost:Connect(function(Enter)
-			if not Enter then return end
-			local ColorString = string.split(string.gsub(PaletteAsset.RGB.RGBBox.Text, " ", ""), ", ")
-			local Hue, Saturation, Value = Color3.fromRGB(ColorString[1], ColorString[2], ColorString[3]):ToHSV()
-			PaletteAsset.RGB.RGBBox.Text = ""
-			Colorpicker.Value[1] = Hue
-			Colorpicker.Value[2] = Saturation
-			Colorpicker.Value[3] = Value
-			Colorpicker.Value = Colorpicker.Value
-		end)
+                PaletteAsset.RGB.RGBBox.FocusLost:Connect(function(Enter)
+                        if not Enter then return end
+
+                        local rawText = PaletteAsset.RGB.RGBBox.Text or ""
+                        local sanitized = string.gsub(rawText, "%s", "")
+                        local ColorString = string.split(sanitized, ",")
+
+                        if #ColorString ~= 3 then
+                                warn("Invalid RGB format, expected three comma-separated values")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        local r = tonumber(ColorString[1])
+                        local g = tonumber(ColorString[2])
+                        local b = tonumber(ColorString[3])
+
+                        if not (r and g and b) then
+                                warn("Invalid RGB values, expected numbers")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then
+                                warn("RGB values must be between 0 and 255")
+                                PaletteAsset.RGB.RGBBox.Text = ""
+                                return
+                        end
+
+                        local Hue, Saturation, Value = Color3.fromRGB(r, g, b):ToHSV()
+                        PaletteAsset.RGB.RGBBox.Text = ""
+                        Colorpicker.Value[1] = Hue
+                        Colorpicker.Value[2] = Saturation
+                        Colorpicker.Value[3] = Value
+                        Colorpicker.Value = Colorpicker.Value
+                end)
 		PaletteAsset.HEX.HEXBox.FocusLost:Connect(function(Enter)
 			if not Enter then return end
 			local Hue, Saturation, Value = Color3.fromHex("#" .. PaletteAsset.HEX.HEXBox.Text):ToHSV()
@@ -5276,15 +5384,29 @@ local function AddDrawing(Type, Properties)
     return DrawingObject
 end
 local function ClearDrawing(Table)
-    for _, Value in pairs(Table) do
+    for Index, Value in pairs(Table) do
         if typeof(Value) == "table" then
             ClearDrawing(Value)
         else
-            if isrenderobj and not isrenderobj(Value) then
-                continue
-            end
-            pcall(function() Value:Destroy() end)
+            pcall(function()
+                if Value then
+                    if Value.Visible ~= nil then
+                        Value.Visible = false
+                    end
+                    if Value.OutlineVisible ~= nil then
+                        Value.OutlineVisible = false
+                    end
+
+                    if Value.Remove then
+                        Value:Remove()
+                    elseif Value.Destroy then
+                        Value:Destroy()
+                    end
+                end
+            end)
         end
+
+        Table[Index] = nil
     end
 end
 
@@ -5471,7 +5593,7 @@ end
 function GetTeam(Target, Character, Mode)
     if Mode == "Player" then
         -- Safely check team with error handling
-        local Success, IsEnemy, TeamColor = pcall(function()
+        local Success, EnemyStatus, TeamColor = pcall(function()
             -- Check if player is neutral
             if Target.Neutral then
                 return true, WhiteColor
@@ -5495,10 +5617,11 @@ function GetTeam(Target, Character, Mode)
 
         -- If error occurred, assume enemy for safety
         if not Success then
+            warn("GetTeam error for player:", Target and Target.Name or "nil", "Error:", EnemyStatus)
             return true, WhiteColor
         end
 
-        return IsEnemy, TeamColor
+        return EnemyStatus, TeamColor
     else
         return true, WhiteColor
     end
@@ -5765,6 +5888,12 @@ function DrawingLibrary.Update(ESP, Target)
     local ZoneName, ZoneColor = "OutOfRange", ZONE_COLORS.Far
 
     Character, RootPart = GetCharacter(Target, Mode)
+
+    if not Character or not Character.Parent or not RootPart or not RootPart.Parent then
+        HideESPDrawings(ESP)
+        return
+    end
+
     -- SAFETY: Validate both Character and RootPart exist and are valid
     if Character and RootPart and RootPart.Parent then
         ScreenPosition, OnScreen = WorldToScreen(RootPart.Position)
@@ -6878,101 +7007,21 @@ local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players between 5k-10k studs
 local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players between 10k-15k studs
 local MAX_DISTANCE = FAR_ZONE_MAX -- Don't render beyond far zone ceiling
 
-DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(function(dt)
+DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(function()
     debug.profilebegin("PARVUS_DRAWING")
-
-    -- Process ESP updates with distance-based throttling and error recovery
     for Target, ESP in pairs(DrawingLibrary.ESP) do
-        local shouldUpdate = false
-        local quickCheck = true
-
-        -- Quick validation check with enhanced nil safety
-        pcall(function()
-            -- SAFETY: Explicit Target validation before any property access
-            if not Target or typeof(Target) ~= "Instance" or not Target.Parent then
-                quickCheck = false
-                return
-            end
-
-            -- Distance-based throttling
-            local character = Target.Character
-            -- SAFETY: Validate character exists and is still in game
-            if character and character.Parent then
-                local rootPart = character:FindFirstChild("HumanoidRootPart")
-                if rootPart and Camera then
-                    local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
-
-                    -- Skip if beyond max distance
-                    if distance > MAX_DISTANCE then
-                        HideESPDrawings(ESP)
-                        return
-                    end
-
-                    if FORCE_FULL_FPS_ESP then
-                        ESPUpdateAccumulators[Target] = 0
-                        shouldUpdate = true
-                    else
-                        -- Determine update interval based on distance
-                        local updateInterval = NEAR_UPDATE_INTERVAL
-                        if distance > MID_ZONE_MAX then
-                            updateInterval = FAR_UPDATE_INTERVAL
-                        elseif distance > CLOSE_ZONE_MAX then
-                            updateInterval = MID_UPDATE_INTERVAL
-                        end
-
-                        -- Check accumulator for this target
-                        ESPUpdateAccumulators[Target] = (ESPUpdateAccumulators[Target] or 0) + dt
-                        if ESPUpdateAccumulators[Target] >= updateInterval then
-                            ESPUpdateAccumulators[Target] = 0
-                            shouldUpdate = true
-                        end
-                    end
-                else
-                    shouldUpdate = true
-                end
-            else
-                shouldUpdate = true
-            end
-        end)
-
-        -- If quick check failed, mark for cleanup
-        if not quickCheck then
-            ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
-            if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
-                table.insert(ESPCleanupQueue, Target)
-            end
-            HideESPDrawings(ESP)
-        elseif shouldUpdate then
-            -- Perform actual ESP update with error handling
-            local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
-            if not Success then
-                -- Increment error count
-                ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
-
-                -- If too many errors, mark for cleanup
-                if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
-                    table.insert(ESPCleanupQueue, Target)
-                end
-
-                HideESPDrawings(ESP)
-            else
-                -- Reset error count on success
-                ESPErrorCounts[Target] = 0
+        -- Wrap each ESP update in pcall to prevent one error from affecting others
+        local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
+        if not Success then
+            -- Hide ESP on error to prevent visual glitches
+            if ESP.Drawing and ESP.Drawing.Box then
+                ESP.Drawing.Box.Visible = false
             end
         end
     end
-
-    -- Clean up broken ESP objects
-    for _, Target in ipairs(ESPCleanupQueue) do
-        DrawingLibrary:RemoveESP(Target)
-        ESPErrorCounts[Target] = nil
-        ESPUpdateAccumulators[Target] = nil
-    end
-    table.clear(ESPCleanupQueue)
-
-    -- Update object ESP (items, etc.)
     for Object, ESP in pairs(DrawingLibrary.ObjectESP) do
         local Success, Error = pcall(function()
+            --DrawingLibrary.UpdateObject(ESP, Object)
             if not GetFlag(ESP.Flags, ESP.GlobalFlag, "/Enabled")
             or not GetFlag(ESP.Flags, ESP.Flag, "/Enabled") then
                 ESP.Name.Visible = false
@@ -6999,12 +7048,9 @@ DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(
         end)
 
         if not Success then
-            -- Hide ESP on error and remove if object is invalid
+            -- Hide ESP on error
             if ESP and ESP.Name then
                 ESP.Name.Visible = false
-            end
-            if not Object or not Object.Parent then
-                DrawingLibrary:RemoveObject(Object)
             end
         end
     end
@@ -7884,16 +7930,16 @@ local function MarkBroken(part)
     brokenSet[part] = true
     brokenCacheDirty = true
 
+    if #undoStack >= UNDO_LIMIT then
+        table.remove(undoStack, 1)
+    end
+
     table.insert(undoStack, {
         part = part,
         cc = part.CanCollide,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     })
-
-    if #undoStack > UNDO_LIMIT then
-        table.remove(undoStack, 1)
-    end
 
     part.CanCollide = false
     part.LocalTransparencyModifier = 1
@@ -8284,53 +8330,81 @@ end
 local OldIndex = nil
 if hookmetamethod and checkcaller then
     OldIndex = hookmetamethod(game, "__index", function(Self, Index)
-        if checkcaller() then return OldIndex(Self, Index) end
+        local success, result = pcall(function()
+            if checkcaller() then
+                return OldIndex(Self, Index)
+            end
 
-        if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
-            local Mode = Window.Flags["SilentAim/Mode"]
-            if Self == Mouse then
-                if Index == "Target" and table.find(Mode, Index) then
-                    return SilentAim[3]
-                elseif Index== "Hit" and table.find(Mode, Index) then
-                    return SilentAim[3].CFrame
+            if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
+                local Mode = Window.Flags["SilentAim/Mode"]
+                if Self == Mouse then
+                    if Index == "Target" and table.find(Mode, Index) then
+                        return SilentAim[3]
+                    elseif Index == "Hit" and table.find(Mode, Index) then
+                        return SilentAim[3].CFrame
+                    end
                 end
             end
+
+            return OldIndex(Self, Index)
+        end)
+
+        if not success then
+            warn("__index hook error:", result)
+            return OldIndex(Self, Index)
         end
 
-        return OldIndex(Self, Index)
+        return result
     end)
+end
+
+local function Pack(...)
+    return {n = select('#', ...), ...}
 end
 
 local OldNamecall = nil
 if hookmetamethod and checkcaller and getnamecallmethod then
     OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-        if checkcaller() then return OldNamecall(Self, ...) end
+        local args = {...}
+        local results = Pack(pcall(function()
+            if checkcaller() then
+                return OldNamecall(Self, unpack(args))
+            end
 
-        if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
-            local Args, Method, Mode = {...}, getnamecallmethod(), Window.Flags["SilentAim/Mode"]
+            if SilentAim and math.random(100) <= Window.Flags["SilentAim/HitChance"] then
+                local Method, Mode = getnamecallmethod(), Window.Flags["SilentAim/Mode"]
 
-            if Self == Workspace then
-                if Method == "Raycast" and table.find(Mode, Method) then
-                    Args[2] = SilentAim[3].Position - Args[1]
-                    return OldNamecall(Self, unpack(Args))
-                elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
-                or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
-                or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
-                    Args[1] = Ray.new(Args[1].Origin, SilentAim[3].Position - Args[1].Origin)
-                    return OldNamecall(Self, unpack(Args))
-                end
-            elseif Self == Camera then
-                if (Method == "ScreenPointToRay" and table.find(Mode, Method))
-                or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
-                    return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
-                elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
-                or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
-                    Args[1] = SilentAim[3].Position return OldNamecall(Self, unpack(Args))
+                if Self == Workspace then
+                    if Method == "Raycast" and table.find(Mode, Method) then
+                        args[2] = SilentAim[3].Position - args[1]
+                        return OldNamecall(Self, unpack(args))
+                    elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
+                    or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
+                    or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
+                        args[1] = Ray.new(args[1].Origin, SilentAim[3].Position - args[1].Origin)
+                        return OldNamecall(Self, unpack(args))
+                    end
+                elseif Self == Camera then
+                    if (Method == "ScreenPointToRay" and table.find(Mode, Method))
+                    or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
+                        return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
+                    elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
+                    or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
+                        args[1] = SilentAim[3].Position
+                        return OldNamecall(Self, unpack(args))
+                    end
                 end
             end
+
+            return OldNamecall(Self, unpack(args))
+        end))
+
+        if not results[1] then
+            warn("__namecall hook error:", results[2])
+            return OldNamecall(Self, unpack(args))
         end
 
-        return OldNamecall(Self, ...)
+        return unpack(results, 2, results.n)
     end)
 end
 
@@ -8384,7 +8458,9 @@ Sp3arParvus.Utilities.NewThreadLoop(0, function()
     mouse1press()
 
     if Window.Flags["Trigger/HoldMouseButton"] then
-        while Sp3arParvus and Sp3arParvus.Active do
+        local iterations = 0
+        while Sp3arParvus and Sp3arParvus.Active and iterations < MAX_TRIGGER_ITERATIONS do
+            iterations = iterations + 1
             task.wait()
             TriggerClosest = GetClosest(
                 Window.Flags["Trigger/Enabled"],
@@ -8400,7 +8476,13 @@ Sp3arParvus.Utilities.NewThreadLoop(0, function()
 
             if not TriggerClosest or not Trigger then break end
         end
-        if not (Sp3arParvus and Sp3arParvus.Active) then
+
+        if iterations >= MAX_TRIGGER_ITERATIONS then
+            warn("Trigger loop reached max iterations, resetting state")
+            Trigger = false
+        end
+
+        if not (Sp3arParvus and Sp3arParvus.Active) or not Trigger then
             mouse1release()
             return
         end
@@ -8410,86 +8492,23 @@ Sp3arParvus.Utilities.NewThreadLoop(0, function()
 end)
 
 TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    Camera = Workspace.CurrentCamera
+    local newCamera = Workspace.CurrentCamera
+    if newCamera then
+        Camera = newCamera
+    end
 end))
 
--- Track CharacterAdded connections for proper cleanup on player leave/respawn
-
--- Function to set up ESP for a player with CharacterAdded listener
-local function SetupPlayerESP(Player)
-    if Player == LocalPlayer then return end
-
-    -- Clean up any existing connection for this player (prevents accumulation)
-    local ExistingConnection = CharacterAddedConnections[Player]
-    if ExistingConnection then
-        ExistingConnection:Disconnect()
-        CharacterAddedConnections[Player] = nil
-    end
-
-    -- Create initial ESP
-    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
-
-    -- Set up CharacterAdded listener to rebuild ESP on respawn
-    local function OnCharacterAdded(Character)
-        -- Wait for character to fully load, especially for distant characters
-        task.wait(0.3)
-
-        -- Retry mechanism: wait for HumanoidRootPart to ensure character is fully loaded
-        local maxRetries = 5
-        local retryCount = 0
-        while retryCount < maxRetries do
-            if Character and Character:FindFirstChild("HumanoidRootPart") then
-                break
-            end
-            retryCount = retryCount + 1
-            task.wait(0.2)
-        end
-
-        -- Rebuild ESP with fresh character reference
-        pcall(function()
-            Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
-        end)
-    end
-
-    -- Connect to CharacterAdded
-    local Connection = Player.CharacterAdded:Connect(OnCharacterAdded)
-    CharacterAddedConnections[Player] = Connection
-
-    -- If player already has a character, set up ESP for it
-    if Player.Character then
-        task.spawn(function()
-            OnCharacterAdded(Player.Character)
-        end)
-    end
-end
-
--- Set up ESP for existing players
-for Index, Player in pairs(PlayerService:GetPlayers()) do
-    SetupPlayerESP(Player)
-end
-
--- Set up ESP for new players
 TrackConnection(PlayerService.PlayerAdded:Connect(function(Player)
-    SetupPlayerESP(Player)
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
 end))
 
--- Clean up ESP and connections when player leaves
+for Index, Player in pairs(PlayerService:GetPlayers()) do
+    if Player == LocalPlayer then continue end
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+end
+
 TrackConnection(PlayerService.PlayerRemoving:Connect(function(Player)
-    -- Disconnect CharacterAdded listener
-    local Connection = CharacterAddedConnections[Player]
-    if Connection then
-        pcall(function() Connection:Disconnect() end)
-        CharacterAddedConnections[Player] = nil
-    end
-
-    -- Remove ESP and clean up all tracking data
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
-
-    -- Ensure any tracking counters are reset without touching module locals
-    local DrawingUtilities = Sp3arParvus.Utilities.Drawing
-    if DrawingUtilities and DrawingUtilities.ResetESPCounters then
-        DrawingUtilities:ResetESPCounters(Player)
-    end
 end))
 
 -- ============================================================
