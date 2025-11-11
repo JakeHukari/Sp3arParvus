@@ -7007,115 +7007,21 @@ local MID_UPDATE_INTERVAL = 0.033 -- ~30 FPS for players between 5k-10k studs
 local FAR_UPDATE_INTERVAL = 0.1 -- ~10 FPS for players between 10k-15k studs
 local MAX_DISTANCE = FAR_ZONE_MAX -- Don't render beyond far zone ceiling
 
-DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(function(dt)
+DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(function()
     debug.profilebegin("PARVUS_DRAWING")
-
-    -- Process ESP updates with distance-based throttling and error recovery
     for Target, ESP in pairs(DrawingLibrary.ESP) do
-        local shouldUpdate = false
-        local quickCheck = true
-
-        -- Quick validation check with enhanced nil safety
-        pcall(function()
-            -- SAFETY: Explicit Target validation before any property access
-            if not Target or typeof(Target) ~= "Instance" or not Target.Parent then
-                quickCheck = false
-                return
-            end
-
-            -- Distance-based throttling
-            local character = Target.Character
-            -- SAFETY: Validate character exists and is still in game
-            if character and character.Parent then
-                local rootPart = character:FindFirstChild("HumanoidRootPart")
-                if rootPart and Camera then
-                    local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
-
-                    -- Skip if beyond max distance
-                    if distance > MAX_DISTANCE then
-                        HideESPDrawings(ESP)
-                        return
-                    end
-
-                    if FORCE_FULL_FPS_ESP then
-                        ESPUpdateAccumulators[Target] = 0
-                        shouldUpdate = true
-                    else
-                        -- Determine update interval based on distance
-                        local updateInterval = NEAR_UPDATE_INTERVAL
-                        if distance > MID_ZONE_MAX then
-                            updateInterval = FAR_UPDATE_INTERVAL
-                        elseif distance > CLOSE_ZONE_MAX then
-                            updateInterval = MID_UPDATE_INTERVAL
-                        end
-
-                        -- Check accumulator for this target
-                        ESPUpdateAccumulators[Target] = (ESPUpdateAccumulators[Target] or 0) + dt
-                        if ESPUpdateAccumulators[Target] >= updateInterval then
-                            ESPUpdateAccumulators[Target] = 0
-                            shouldUpdate = true
-                        end
-                    end
-                else
-                    shouldUpdate = true
-                end
-            else
-                shouldUpdate = true
-            end
-        end)
-
-        -- If quick check failed, mark for cleanup
-        if not quickCheck then
-            if not (Target and typeof(Target) == "Instance") then
-                if Target ~= nil then
-                    DrawingLibrary:RemoveESP(Target)
-                end
-                continue
-            end
-
-            ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
-            if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
-                table.insert(ESPCleanupQueue, Target)
-            end
-            HideESPDrawings(ESP)
-        elseif shouldUpdate then
-            -- Perform actual ESP update with error handling
-            local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
-            if not Success then
-                if not (Target and typeof(Target) == "Instance") then
-                    if Target ~= nil then
-                        DrawingLibrary:RemoveESP(Target)
-                    end
-                    continue
-                end
-
-                -- Increment error count
-                ESPErrorCounts[Target] = (ESPErrorCounts[Target] or 0) + 1
-
-                -- If too many errors, mark for cleanup
-                if ESPErrorCounts[Target] >= MAX_ESP_ERRORS then
-                    table.insert(ESPCleanupQueue, Target)
-                end
-
-                HideESPDrawings(ESP)
-            else
-                -- Reset error count on success
-                ESPErrorCounts[Target] = 0
+        -- Wrap each ESP update in pcall to prevent one error from affecting others
+        local Success, Error = pcall(DrawingLibrary.Update, ESP, Target)
+        if not Success then
+            -- Hide ESP on error to prevent visual glitches
+            if ESP.Drawing and ESP.Drawing.Box then
+                ESP.Drawing.Box.Visible = false
             end
         end
     end
-
-    -- Clean up broken ESP objects
-    for _, Target in ipairs(ESPCleanupQueue) do
-        DrawingLibrary:RemoveESP(Target)
-        ESPErrorCounts[Target] = nil
-        ESPUpdateAccumulators[Target] = nil
-    end
-    table.clear(ESPCleanupQueue)
-
-    -- Update object ESP (items, etc.)
     for Object, ESP in pairs(DrawingLibrary.ObjectESP) do
         local Success, Error = pcall(function()
+            --DrawingLibrary.UpdateObject(ESP, Object)
             if not GetFlag(ESP.Flags, ESP.GlobalFlag, "/Enabled")
             or not GetFlag(ESP.Flags, ESP.Flag, "/Enabled") then
                 ESP.Name.Visible = false
@@ -7142,12 +7048,9 @@ DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(
         end)
 
         if not Success then
-            -- Hide ESP on error and remove if object is invalid
+            -- Hide ESP on error
             if ESP and ESP.Name then
                 ESP.Name.Visible = false
-            end
-            if not Object or not Object.Parent then
-                DrawingLibrary:RemoveObject(Object)
             end
         end
     end
@@ -8595,90 +8498,17 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     end
 end))
 
--- Track CharacterAdded connections for proper cleanup on player leave/respawn
-
--- Function to set up ESP for a player with CharacterAdded listener
-local function SetupPlayerESP(Player)
-    if Player == LocalPlayer then return end
-
-    -- Clean up any existing connection for this player (prevents accumulation)
-    local ExistingConnection = CharacterAddedConnections[Player]
-    if ExistingConnection then
-        ExistingConnection:Disconnect()
-        CharacterAddedConnections[Player] = nil
-    end
-
-    -- Create initial ESP
-    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
-
-    -- Set up CharacterAdded listener to rebuild ESP on respawn
-    local function OnCharacterAdded(Character)
-        -- Wait for character to fully load, especially for distant characters
-        task.wait(0.3)
-
-        -- Retry mechanism: wait for HumanoidRootPart to ensure character is fully loaded
-        local maxRetries = 5
-        local retryCount = 0
-        while retryCount < maxRetries do
-            if Character and Character:FindFirstChild("HumanoidRootPart") then
-                break
-            end
-            retryCount = retryCount + 1
-            task.wait(0.2)
-        end
-
-        -- Rebuild ESP with fresh character reference
-        pcall(function()
-            Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
-            -- Reset error counters
-            Sp3arParvus.Utilities.Drawing:ResetESPCounters(Player)
-            -- CRITICAL FIX: Prime accumulator to force immediate update
-            -- The rendering loop adds dt each frame and only updates when accumulator >= throttle interval.
-            -- Setting it to 0.1 (FAR_UPDATE_INTERVAL, the max throttle) ensures next frame's
-            -- (0.1 + dt >= 0.1) will be true, triggering Update() immediately instead of waiting up to 0.1s.
-            Sp3arParvus.Utilities.Drawing.ESPUpdateAccumulators[Player] = 0.1
-        end)
-    end
-
-    -- Connect to CharacterAdded
-    local Connection = Player.CharacterAdded:Connect(OnCharacterAdded)
-    CharacterAddedConnections[Player] = Connection
-
-    -- If player already has a character, set up ESP for it
-    if Player.Character then
-        task.spawn(function()
-            OnCharacterAdded(Player.Character)
-        end)
-    end
-end
-
--- Set up ESP for existing players
-for Index, Player in pairs(PlayerService:GetPlayers()) do
-    SetupPlayerESP(Player)
-end
-
--- Set up ESP for new players
 TrackConnection(PlayerService.PlayerAdded:Connect(function(Player)
-    SetupPlayerESP(Player)
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
 end))
 
--- Clean up ESP and connections when player leaves
+for Index, Player in pairs(PlayerService:GetPlayers()) do
+    if Player == LocalPlayer then continue end
+    Sp3arParvus.Utilities.Drawing:AddESP(Player, "Player", "ESP/Player", Window.Flags)
+end
+
 TrackConnection(PlayerService.PlayerRemoving:Connect(function(Player)
-    -- Disconnect CharacterAdded listener
-    local Connection = CharacterAddedConnections[Player]
-    if Connection then
-        pcall(function() Connection:Disconnect() end)
-        CharacterAddedConnections[Player] = nil
-    end
-
-    -- Remove ESP and clean up all tracking data
     Sp3arParvus.Utilities.Drawing:RemoveESP(Player)
-
-    -- Ensure any tracking counters are reset without touching module locals
-    local DrawingUtilities = Sp3arParvus.Utilities.Drawing
-    if DrawingUtilities and DrawingUtilities.ResetESPCounters then
-        DrawingUtilities:ResetESPCounters(Player)
-    end
 end))
 
 -- ============================================================
