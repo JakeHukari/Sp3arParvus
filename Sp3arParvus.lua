@@ -5289,7 +5289,8 @@ local function ClearDrawing(Table)
 end
 
 local function HideESPDrawings(ESP)
-    if not ESP or not ESP.Drawing then return end
+    -- SAFETY: Enhanced nil validation before accessing ESP properties
+    if not ESP or type(ESP) ~= "table" or not ESP.Drawing then return end
 
     local function HideContainer(Container)
         local ContainerType = typeof(Container)
@@ -5764,7 +5765,8 @@ function DrawingLibrary.Update(ESP, Target)
     local ZoneName, ZoneColor = "OutOfRange", ZONE_COLORS.Far
 
     Character, RootPart = GetCharacter(Target, Mode)
-    if Character and RootPart then
+    -- SAFETY: Validate both Character and RootPart exist and are valid
+    if Character and RootPart and RootPart.Parent then
         ScreenPosition, OnScreen = WorldToScreen(RootPart.Position)
 
         if OnScreen then
@@ -6884,16 +6886,18 @@ DrawingLibrary.Connection = RegisterConnection(RunService.RenderStepped:Connect(
         local shouldUpdate = false
         local quickCheck = true
 
-        -- Quick validation check without pcall overhead
+        -- Quick validation check with enhanced nil safety
         pcall(function()
-            if not Target or not Target.Parent then
+            -- SAFETY: Explicit Target validation before any property access
+            if not Target or typeof(Target) ~= "Instance" or not Target.Parent then
                 quickCheck = false
                 return
             end
 
             -- Distance-based throttling
             local character = Target.Character
-            if character then
+            -- SAFETY: Validate character exists and is still in game
+            if character and character.Parent then
                 local rootPart = character:FindFirstChild("HumanoidRootPart")
                 if rootPart and Camera then
                     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
