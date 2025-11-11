@@ -958,17 +958,12 @@ end
 
 ### Apocalypse Rising 2 Specifics:
 
-AR2 typically uses **R6 character rigs** with these properties:
+Most Games typically use **R6 character rigs** with these properties:
 - HumanoidRootPart at hip level (Y ≈ 5 studs from ground)
 - Head at Y ≈ 7.5 studs from ground
 - Vertical offset: **2.5 studs**
 
-If AR2 uses custom character modifications:
-- Check for additional parts like "Armor" or "Vest"
-- Ensure raycast ignores equipment models
-- Verify HitBox parts haven't been renamed
-
-### Common Pitfalls to Avoid:
+Common Pitfalls to Avoid:
 
 1. **Don't mix character references** - Always use current `player.Character`, never cache it
 2. **Don't skip nil checks** - Every property access should be validated
