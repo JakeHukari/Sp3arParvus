@@ -1,7 +1,7 @@
 -- SP3ARPARVUS - ADVANCED GAME ENHANCEMENT SUITE
 -- Optimized single-file architecture for maximum performance
 --
--- VERSION: 1.2.3
+-- VERSION: 1.2.4
 --
 -- VERSIONING RULES (Semantic Versioning):
 -- Format: MAJOR.MINOR.PATCH (e.g., 1.1.0)
@@ -18,6 +18,12 @@
 -- ALWAYS update version on every commit that changes functionality
 --
 -- RECENT ADDITIONS:
+-- v1.2.4 - CRITICAL FIX: Stale Camera Reference Bug:
+--   - FIXED: Cached Camera.WorldToViewportPoint method was frozen to old camera on death
+--   - Now calls Camera:WorldToViewportPoint() directly each frame, always uses current camera
+--   - All nametags and tracers now update correctly after respawn without freezing
+--   - Reduced max ESP distance from 15k to 7k studs for better load management
+--   - Distance zones scaled: Close=2.5k, Mid=5k, Far=7k
 -- v1.2.3 - Lifecycle & Cleanup Hardening:
 --   - Added managed connection tracker so Reload/Shutdown disconnect RunService/UserInput/Workspace hooks safely
 --   - Guarded background loops with Sp3arParvus.Active to stop aimbot/silent aim/trigger logic instantly on cleanup
@@ -54,7 +60,7 @@
 -- ============================================================
 -- VERSIONING SYSTEM
 -- ============================================================
-local SP3ARPARVUS_VERSION = "1.2.3"
+local SP3ARPARVUS_VERSION = "1.2.4"
 local DEFAULT_CURSOR_DATA = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAPklEQVR4nO3RsQ0AIAhFQfZfGlsLKwVj4r0BPpcQIR2UUwAAAAD/AXJR23B1AG2vKhneRVw/DgAAAPAEQBUNAL1B2xVjF+gAAAAASUVORK5CYII="
 
 repeat task.wait() until game:IsLoaded()
@@ -5341,7 +5347,6 @@ local Atan2 = math.atan2
 local Clamp = math.clamp
 local Floor = math.floor
 
-local WTVP = Camera.WorldToViewportPoint
 local FindFirstChild = Workspace.FindFirstChild
 local FindFirstChildOfClass = Workspace.FindFirstChildOfClass
 local FindFirstChildWhichIsA = Workspace.FindFirstChildWhichIsA
@@ -5487,9 +5492,9 @@ end
 local function GetDistance(Position)
     return (Position - Camera.CFrame.Position).Magnitude
 end
-local CLOSE_ZONE_MAX = 5000
-local MID_ZONE_MAX = 10000
-local FAR_ZONE_MAX = 15000
+local CLOSE_ZONE_MAX = 2500
+local MID_ZONE_MAX = 5000
+local FAR_ZONE_MAX = 7000
 local ZONE_COLORS = {
 	Close = Color3.fromRGB(255, 0, 0),
 	Mid = Color3.fromRGB(255, 140, 0),
@@ -5528,7 +5533,7 @@ local function AntiAliasingP(P)
     return V2New(Floor(P.X), Floor(P.Y))
 end
 local function WorldToScreen(WorldPosition)
-    local Screen, OnScreen = WTVP(Camera, WorldPosition)
+    local Screen, OnScreen = Camera:WorldToViewportPoint(WorldPosition)
     return V2New(Screen.X, Screen.Y), OnScreen--, Screen.Z
 end
 
