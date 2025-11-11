@@ -8630,6 +8630,13 @@ local function SetupPlayerESP(Player)
         -- Rebuild ESP with fresh character reference
         pcall(function()
             Sp3arParvus.Utilities.Drawing:RebuildESP(Player, "Player", "ESP/Player", Window.Flags)
+            -- Reset error counters
+            Sp3arParvus.Utilities.Drawing:ResetESPCounters(Player)
+            -- CRITICAL FIX: Prime accumulator to force immediate update
+            -- The rendering loop adds dt each frame and only updates when accumulator >= throttle interval.
+            -- Setting it to 0.1 (FAR_UPDATE_INTERVAL, the max throttle) ensures next frame's
+            -- (0.1 + dt >= 0.1) will be true, triggering Update() immediately instead of waiting up to 0.1s.
+            Sp3arParvus.Utilities.Drawing.ESPUpdateAccumulators[Player] = 0.1
         end)
     end
 
