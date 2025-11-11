@@ -956,8 +956,6 @@ end
 
 ## Additional Notes
 
-### Apocalypse Rising 2 Specifics:
-
 Most Games typically use **R6 character rigs** with these properties:
 - HumanoidRootPart at hip level (Y ≈ 5 studs from ground)
 - Head at Y ≈ 7.5 studs from ground
