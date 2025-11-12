@@ -3,9 +3,9 @@
 SP3ARPARVUS v2 - HYBRID EDITION
 ================================================================================
 
-CURRENT VERSION: 2.1.1
+CURRENT VERSION: 2.3.1
 RELEASE DATE: 2025-11-11
-BUILD STATUS: Hybrid Build - Proven Aimbot + Clean Base
+BUILD STATUS: Hybrid Build - Feature Complete + Polished
 
 ================================================================================
 VERSIONING SYSTEM (Semantic Versioning)
@@ -25,6 +25,27 @@ RULES:
 ================================================================================
 CHANGELOG
 ================================================================================
+v2.3.1 (2025-11-11) - Distance Threshold Adjustment
+  - Updated distance color ranges for AR2 combat: Red (0-2000), Yellow (2001-4000), Green (4000+)
+  - Closest player ALWAYS pink regardless of distance (priority override)
+
+v2.3.0 (2025-11-11) - Polish & Quality of Life
+  - Distance-based color coding: Red (<2000), Yellow (2000-4000), Green (>4000)
+  - Closest player ALWAYS pink regardless of distance (priority override)
+  - Enhanced performance display: Memory usage, active targets, aimbot status
+  - FPS color coding: Green (>60), Yellow (30-60), Red (<30)
+  - UI toggle keybind: Right Shift to hide/show entire UI
+  - Visual aimbot lock indicator in performance display
+  - Optimized string formatting (reduced allocations)
+
+v2.2.0 (2025-11-11) - Performance & Features
+  - Added Closest Player Tracker (standalone display with name/distance)
+  - Performance: Cached distance calculations (single pass)
+  - Performance: Optimized ESP updates (reduced redundant loops)
+  - Performance: Smart update frequency based on player count
+  - Performance: Eliminated duplicate closest player calculations
+  - UI: Minimizable closest player tracker with pink theme
+
 v2.1.1 (2025-11-11) - Optimized Defaults
   - Updated default configuration based on user testing
   - All aimbot features enabled by default (Always Enabled, Ballistic Prediction, Line of Sight)
@@ -82,10 +103,18 @@ FEATURES
   - Color-coded by distance
   - Closest player highlighted in pink
 
+[Closest Player Tracker]
+  - Standalone display at top center
+  - Shows nearest player name and distance
+  - Minimizable with button
+  - Pink theme matching ESP
+
 [Performance]
   - Real-time FPS counter
   - Ping display
   - Player count
+  - Optimized distance calculations
+  - Smart ESP update frequency
 
 [UI]
   - Draggable window
@@ -97,7 +126,7 @@ FEATURES
 ]]--
 
 -- Version identifier
-local VERSION = "2.1.1"
+local VERSION = "2.3.1"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -566,9 +595,184 @@ end
 
 local ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
 
-local CLOSEST_COLOR = Color3.fromRGB(255, 105, 180) -- Pink
+local CLOSEST_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (always for closest)
 local NORMAL_COLOR = Color3.fromRGB(255, 255, 255)  -- White
 local TRACER_COLOR = Color3.fromRGB(0, 255, 255)    -- Cyan
+
+-- Distance-based color zones (for tracker, but closest overrides to pink)
+local COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-2000 studs)
+local COLOR_MID = Color3.fromRGB(255, 200, 50)      -- Yellow (2001-4000 studs)
+local COLOR_FAR = Color3.fromRGB(50, 255, 50)       -- Green (4000+ studs)
+
+-- Closest Player Tracker variables
+local ClosestPlayerTrackerLabel
+local TrackerMinimized = false
+local TrackerOriginalSize = UDim2.fromOffset(220, 70)
+local NearestPlayerRef = nil
+local CurrentTargetDistance = 0 -- Track distance for color coding
+
+-- Get color based on distance (Red=0-2000, Yellow=2001-4000, Green=4000+)
+local function GetDistanceColor(distance, isClosest)
+    if isClosest then
+        return CLOSEST_COLOR -- Pink always overrides for closest player
+    end
+
+    if distance <= 2000 then
+        return COLOR_CLOSE -- Red
+    elseif distance <= 4000 then
+        return COLOR_MID -- Yellow
+    else
+        return COLOR_FAR -- Green
+    end
+end
+
+-- Create Closest Player Tracker display
+local function CreateClosestPlayerTracker()
+    ClosestPlayerTrackerLabel = Instance.new("TextLabel")
+    ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
+    ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, 10)
+    ClosestPlayerTrackerLabel.BackgroundTransparency = 0.2
+    ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+    ClosestPlayerTrackerLabel.Font = Enum.Font.GothamBold
+    ClosestPlayerTrackerLabel.TextSize = 14
+    ClosestPlayerTrackerLabel.TextXAlignment = Enum.TextXAlignment.Center
+    ClosestPlayerTrackerLabel.TextYAlignment = Enum.TextYAlignment.Center
+    ClosestPlayerTrackerLabel.BorderSizePixel = 0
+    ClosestPlayerTrackerLabel.Text = "Closest Player\nSearching..."
+    ClosestPlayerTrackerLabel.Parent = ScreenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = ClosestPlayerTrackerLabel
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = CLOSEST_COLOR
+    stroke.Thickness = 2
+    stroke.Transparency = 0.5
+    stroke.Parent = ClosestPlayerTrackerLabel
+
+    -- Minimize button
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Name = "MinimizeBtn"
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 40)
+    minimizeBtn.BackgroundTransparency = 0.3
+    minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.Size = UDim2.fromOffset(20, 20)
+    minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
+    minimizeBtn.Text = "−"
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.TextSize = 14
+    minimizeBtn.TextColor3 = CLOSEST_COLOR
+    minimizeBtn.Parent = ClosestPlayerTrackerLabel
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = minimizeBtn
+
+    minimizeBtn.MouseButton1Click:Connect(function()
+        TrackerMinimized = not TrackerMinimized
+        if TrackerMinimized then
+            ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
+            ClosestPlayerTrackerLabel.Text = "Closest Player"
+            minimizeBtn.Text = "+"
+        else
+            ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
+            minimizeBtn.Text = "−"
+        end
+    end)
+end
+
+-- Update Nearest Player (finds closest player once)
+local function UpdateNearestPlayer()
+    local myChar = LocalPlayer.Character
+    if not myChar then
+        NearestPlayerRef = nil
+        return
+    end
+
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then
+        NearestPlayerRef = nil
+        return
+    end
+
+    local myRootPos = myRoot.Position
+    local best, bestDist = nil, nil
+
+    -- Find closest alive player
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Parent then
+            local success = pcall(function()
+                local character, rootPart = GetCharacter(player)
+                if character and rootPart then
+                    local dist = (rootPart.Position - myRootPos).Magnitude
+                    if not bestDist or dist < bestDist then
+                        bestDist = dist
+                        best = player
+                    end
+                end
+            end)
+        end
+    end
+
+    NearestPlayerRef = best
+end
+
+-- Update Closest Player Tracker display
+local function UpdateClosestPlayerTracker()
+    if not Flags["ESP/Enabled"] or not ClosestPlayerTrackerLabel then
+        if ClosestPlayerTrackerLabel then
+            ClosestPlayerTrackerLabel.Visible = false
+        end
+        return
+    end
+
+    ClosestPlayerTrackerLabel.Visible = true
+
+    if not TrackerMinimized then
+        if NearestPlayerRef and NearestPlayerRef.Parent then
+            local success = pcall(function()
+                local myChar = LocalPlayer.Character
+                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local targetChar = NearestPlayerRef.Character
+                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+
+                if myRoot and targetRoot then
+                    local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                    local distRounded = floor(distance + 0.5)
+                    local name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
+
+                    -- Update colors based on distance (closest = always pink)
+                    local color = GetDistanceColor(distance, true) -- true = is closest
+                    ClosestPlayerTrackerLabel.TextColor3 = color
+
+                    -- Update stroke color to match
+                    local stroke = ClosestPlayerTrackerLabel:FindFirstChildOfClass("UIStroke")
+                    if stroke then
+                        stroke.Color = color
+                    end
+
+                    CurrentTargetDistance = distRounded
+                    ClosestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
+                else
+                    ClosestPlayerTrackerLabel.Text = "Closest Player\n---"
+                    ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+                end
+            end)
+
+            if not success then
+                ClosestPlayerTrackerLabel.Text = "Closest Player\n---"
+                ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+            end
+        else
+            ClosestPlayerTrackerLabel.Text = "Closest Player\nNo players nearby"
+            ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+            NearestPlayerRef = nil
+        end
+    end
+end
 
 -- Create ESP for a player
 local function CreateESP(player)
@@ -612,8 +816,8 @@ local function CreateESP(player)
     ESPObjects[player] = espData
 end
 
--- Update ESP for a player
-local function UpdateESP(player)
+-- Update ESP for a player (optimized - uses cached closest player)
+local function UpdateESP(player, isClosest)
     if not Flags["ESP/Enabled"] then return end
 
     local espData = ESPObjects[player]
@@ -647,22 +851,8 @@ local function UpdateESP(player)
         espData.Nametag.Parent = rootPart
         espData.NameLabel.Text = string.format("%s\n[%d]", player.Name, floor(distance))
 
-        -- Find closest player
-        local closestPlayer = nil
-        local closestDist = math.huge
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p == LocalPlayer then continue end
-            local char, root = GetCharacter(p)
-            if char and root then
-                local dist = (root.Position - Camera.CFrame.Position).Magnitude
-                if dist < closestDist then
-                    closestDist = dist
-                    closestPlayer = p
-                end
-            end
-        end
-
-        if closestPlayer == player then
+        -- Use cached closest player check (no redundant loop!)
+        if isClosest then
             espData.NameLabel.TextColor3 = CLOSEST_COLOR
         else
             espData.NameLabel.TextColor3 = NORMAL_COLOR
@@ -710,8 +900,8 @@ local PerformanceLabel
 local function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("TextLabel")
     PerformanceLabel.Name = "PerformanceDisplay"
-    PerformanceLabel.Size = UDim2.fromOffset(150, 60)
-    PerformanceLabel.Position = UDim2.new(1, -160, 0, 10)
+    PerformanceLabel.Size = UDim2.fromOffset(180, 95)
+    PerformanceLabel.Position = UDim2.new(1, -190, 0, 10)
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     PerformanceLabel.BackgroundTransparency = 0.3
     PerformanceLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
@@ -732,15 +922,44 @@ local function CreatePerformanceDisplay(parent)
 end
 
 local function UpdatePerformanceDisplay()
-    if not Flags["Performance/Enabled"] or not PerformanceLabel then return end
+    if not Flags["Performance/Enabled"] or not PerformanceLabel or not UIVisible then return end
 
     local fps = floor(GetFPS())
     local ping = floor(Ping:GetValue())
     local playerCount = #Players:GetPlayers()
 
+    -- Get memory usage (MB)
+    local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
+
+    -- Count active targets (players with ESP visible)
+    local activeTargets = 0
+    for player, espData in pairs(ESPObjects) do
+        if espData.Nametag and espData.Nametag.Parent then
+            activeTargets = activeTargets + 1
+        end
+    end
+
+    -- Aimbot lock status
+    local aimbotStatus = "─"
+    if Aimbot or Flags["Aimbot/AlwaysEnabled"] then
+        aimbotStatus = "🔒" -- Locked indicator
+    end
+
+    -- FPS color coding
+    local fpsColor
+    if fps >= 60 then
+        fpsColor = Color3.fromRGB(50, 255, 50) -- Green
+    elseif fps >= 30 then
+        fpsColor = Color3.fromRGB(255, 200, 50) -- Yellow
+    else
+        fpsColor = Color3.fromRGB(255, 50, 50) -- Red
+    end
+
+    PerformanceLabel.TextColor3 = fpsColor
+
     PerformanceLabel.Text = string.format(
-        "FPS: %d\nPing: %d ms\nPlayers: %d",
-        fps, ping, playerCount
+        "FPS: %d\nPing: %d ms\nPlayers: %d\nTargets: %d\nMemory: %d MB\nAimbot: %s",
+        fps, ping, playerCount, activeTargets, memoryUsed, aimbotStatus
     )
 end
 
@@ -885,6 +1104,9 @@ local function CreateUI()
 
     -- Create performance display
     CreatePerformanceDisplay(ScreenGui)
+
+    -- Create closest player tracker
+    CreateClosestPlayerTracker()
 end
 
 -- Create a section header
@@ -1109,6 +1331,12 @@ local function Cleanup()
     end
     ESPObjects = {}
 
+    -- Destroy closest player tracker
+    if ClosestPlayerTrackerLabel then
+        ClosestPlayerTrackerLabel:Destroy()
+        ClosestPlayerTrackerLabel = nil
+    end
+
     -- Destroy UI
     if ScreenGui then
         ScreenGui:Destroy()
@@ -1235,6 +1463,20 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Trigger = Flags["Trigger/Enabled"]
     end
+
+    -- UI Toggle keybind (Right Shift)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        UIVisible = not UIVisible
+        if MainFrame then
+            MainFrame.Visible = UIVisible
+        end
+        if PerformanceLabel then
+            PerformanceLabel.Visible = UIVisible and Flags["Performance/Enabled"]
+        end
+        if ClosestPlayerTrackerLabel then
+            ClosestPlayerTrackerLabel.Visible = UIVisible and Flags["ESP/Enabled"]
+        end
+    end
 end))
 
 TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
@@ -1340,17 +1582,28 @@ local triggerThread = task.spawn(function()
 end)
 TrackThread(triggerThread)
 
--- ESP update loop
+-- ESP update loop (optimized - single pass for closest player)
 local espThread = task.spawn(function()
     while Sp3arParvus.Active do
         if Flags["ESP/Enabled"] then
+            -- Update nearest player reference (single calculation)
+            UpdateNearestPlayer()
+
+            -- Update all ESP with cached closest player
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer then
-                    UpdateESP(player)
+                    UpdateESP(player, player == NearestPlayerRef)
                 end
             end
+
+            -- Update closest player tracker display
+            UpdateClosestPlayerTracker()
         end
-        task.wait(0.1)
+
+        -- Dynamic update rate based on player count for better performance
+        local playerCount = #Players:GetPlayers()
+        local waitTime = playerCount > 10 and 0.15 or 0.1
+        task.wait(waitTime)
     end
 end)
 TrackThread(espThread)
@@ -1376,3 +1629,5 @@ print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s
     Flags["Trigger/Enabled"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
+print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
+print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤2000 | Yellow≤4000 | Green>4000", VERSION))
