@@ -3,9 +3,9 @@
 SP3ARPARVUS v2 - HYBRID EDITION
 ================================================================================
 
-CURRENT VERSION: 2.3.1
+CURRENT VERSION: 2.3.2
 RELEASE DATE: 2025-11-11
-BUILD STATUS: Hybrid Build - Feature Complete + Polished
+BUILD STATUS: Hybrid Build - Stable
 
 ================================================================================
 VERSIONING SYSTEM (Semantic Versioning)
@@ -25,6 +25,12 @@ RULES:
 ================================================================================
 CHANGELOG
 ================================================================================
+v2.3.2 (2025-11-11) - Critical Bug Fixes
+  - FIXED: ESP nametags now show distance-based colors (were stuck on white)
+  - FIXED: Performance display now shows metrics correctly (was blank/showing "label")
+  - FIXED: UIVisible check preventing performance display from updating
+  - Performance display now has "Loading..." initial text
+
 v2.3.1 (2025-11-11) - Distance Threshold Adjustment
   - Updated distance color ranges for AR2 combat: Red (0-2000), Yellow (2001-4000), Green (4000+)
   - Closest player ALWAYS pink regardless of distance (priority override)
@@ -126,7 +132,7 @@ FEATURES
 ]]--
 
 -- Version identifier
-local VERSION = "2.3.1"
+local VERSION = "2.3.2"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -851,12 +857,9 @@ local function UpdateESP(player, isClosest)
         espData.Nametag.Parent = rootPart
         espData.NameLabel.Text = string.format("%s\n[%d]", player.Name, floor(distance))
 
-        -- Use cached closest player check (no redundant loop!)
-        if isClosest then
-            espData.NameLabel.TextColor3 = CLOSEST_COLOR
-        else
-            espData.NameLabel.TextColor3 = NORMAL_COLOR
-        end
+        -- Use cached closest player check with distance-based colors
+        local nameColor = GetDistanceColor(distance, isClosest)
+        espData.NameLabel.TextColor3 = nameColor
     else
         espData.Nametag.Parent = nil
     end
@@ -908,6 +911,7 @@ local function CreatePerformanceDisplay(parent)
     PerformanceLabel.Font = Enum.Font.Code
     PerformanceLabel.TextSize = 10
     PerformanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PerformanceLabel.Text = "Loading..." -- Initial text
     PerformanceLabel.BorderSizePixel = 0
     PerformanceLabel.Parent = parent
 
@@ -922,7 +926,10 @@ local function CreatePerformanceDisplay(parent)
 end
 
 local function UpdatePerformanceDisplay()
-    if not Flags["Performance/Enabled"] or not PerformanceLabel or not UIVisible then return end
+    if not Flags["Performance/Enabled"] or not PerformanceLabel then return end
+
+    -- Only update if visible (performance optimization)
+    if not PerformanceLabel.Visible then return end
 
     local fps = floor(GetFPS())
     local ping = floor(Ping:GetValue())
