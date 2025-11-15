@@ -3,7 +3,7 @@
 SP3ARPARVUS v2 - HYBRID EDITION
 ================================================================================
 
-CURRENT VERSION: 2.3.4
+CURRENT VERSION: 2.3.5
 RELEASE DATE: 2025-11-15
 BUILD STATUS: Hybrid Build - Stable
 
@@ -25,6 +25,12 @@ RULES:
 ================================================================================
 CHANGELOG
 ================================================================================
+v2.3.5 (2025-11-15) - RaycastFilterType Compatibility Fix
+  - Moved FilterType enum resolution to happen during script initialization with caching
+  - Added typeof() validation to prevent invalid enum values
+  - Only sets FilterType if a valid EnumItem is cached
+  - Added debug output to help diagnose enum compatibility issues
+
 v2.3.4 (2025-11-15) - Enhanced Enum Validation
   - Added typeof() validation to ensure ResolveEnumItem returns valid EnumItems
   - Improved RaycastFilterType enum resolution reliability
@@ -140,7 +146,7 @@ FEATURES
 ]]--
 
 -- Version identifier
-local VERSION = "2.3.4"
+local VERSION = "2.3.5"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -417,18 +423,49 @@ end
 -- ============================================================
 
 -- Raycast for visibility check
-local WallCheckParams = RaycastParams.new()
-local wallCheckFilterType = ResolveEnumItem(Enum.RaycastFilterType, {"Exclude", "Blacklist"})
-if not wallCheckFilterType then
-    error("Sp3arParvus: Unable to resolve RaycastFilterType (Exclude/Blacklist)")
-end
+-- Cache the FilterType enum value once
+local CachedFilterType = (function()
+    -- Try Exclude first (modern)
+    local ok, val = pcall(function()
+        local ft = Enum.RaycastFilterType.Exclude
+        -- Validate it's actually an EnumItem
+        if typeof(ft) == "EnumItem" then
+            return ft
+        end
+    end)
+    if ok and val then
+        print("[Sp3arParvus] Successfully cached RaycastFilterType.Exclude")
+        return val
+    end
 
-WallCheckParams.FilterType = wallCheckFilterType
-WallCheckParams.IgnoreWater = true
+    -- Try Blacklist (legacy)
+    ok, val = pcall(function()
+        local ft = Enum.RaycastFilterType.Blacklist
+        if typeof(ft) == "EnumItem" then
+            return ft
+        end
+    end)
+    if ok and val then
+        print("[Sp3arParvus] Successfully cached RaycastFilterType.Blacklist")
+        return val
+    end
+
+    -- Return nil if neither works
+    warn("[Sp3arParvus] WARNING: Could not cache any RaycastFilterType enum - raycasts may not filter properly")
+    return nil
+end)()
 
 local function Raycast(Origin, Direction, Filter)
-    WallCheckParams.FilterDescendantsInstances = Filter
-    return Workspace:Raycast(Origin, Direction, WallCheckParams)
+    local params = RaycastParams.new()
+    params.IgnoreWater = true
+    params.FilterDescendantsInstances = Filter
+
+    -- Only set FilterType if we successfully cached a valid enum
+    if CachedFilterType then
+        params.FilterType = CachedFilterType
+    end
+
+    return Workspace:Raycast(Origin, Direction, params)
 end
 
 local function WithinReach(Enabled, Distance, Limit)
