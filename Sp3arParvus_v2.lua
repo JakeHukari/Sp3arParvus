@@ -3,8 +3,8 @@
 SP3ARPARVUS v2 - HYBRID EDITION
 ================================================================================
 
-CURRENT VERSION: 2.3.3
-RELEASE DATE: 2025-11-12
+CURRENT VERSION: 2.3.4
+RELEASE DATE: 2025-11-15
 BUILD STATUS: Hybrid Build - Stable
 
 ================================================================================
@@ -25,6 +25,10 @@ RULES:
 ================================================================================
 CHANGELOG
 ================================================================================
+v2.3.4 (2025-11-15) - Enhanced Enum Validation
+  - Added typeof() validation to ensure ResolveEnumItem returns valid EnumItems
+  - Improved RaycastFilterType enum resolution reliability
+
 v2.3.3 (2025-11-12) - Roblox Enum Compatibility
   - Updated raycast filter configuration to support Roblox's new Exclude/Include enums
   - Prevented "Invalid value for enum RaycastFilterType" errors when launching the script
@@ -136,7 +140,7 @@ FEATURES
 ]]--
 
 -- Version identifier
-local VERSION = "2.3.3"
+local VERSION = "2.3.4"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -173,7 +177,8 @@ local function ResolveEnumItem(enumContainer, possibleNames)
             return enumContainer[name]
         end)
 
-        if success and enumItem then
+        -- Validate that we got a valid EnumItem, not just any truthy value
+        if success and enumItem and typeof(enumItem) == "EnumItem" then
             return enumItem
         end
     end
