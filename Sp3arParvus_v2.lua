@@ -3,8 +3,8 @@
 SP3ARPARVUS v2 - HYBRID EDITION
 ================================================================================
 
-CURRENT VERSION: 2.3.2
-RELEASE DATE: 2025-11-11
+CURRENT VERSION: 2.3.3
+RELEASE DATE: 2025-11-12
 BUILD STATUS: Hybrid Build - Stable
 
 ================================================================================
@@ -25,6 +25,10 @@ RULES:
 ================================================================================
 CHANGELOG
 ================================================================================
+v2.3.3 (2025-11-12) - Roblox Enum Compatibility
+  - Updated raycast filter configuration to support Roblox's new Exclude/Include enums
+  - Prevented "Invalid value for enum RaycastFilterType" errors when launching the script
+
 v2.3.2 (2025-11-11) - Critical Bug Fixes
   - FIXED: ESP nametags now show distance-based colors (were stuck on white)
   - FIXED: Performance display now shows metrics correctly (was blank/showing "label")
@@ -132,7 +136,7 @@ FEATURES
 ]]--
 
 -- Version identifier
-local VERSION = "2.3.2"
+local VERSION = "2.3.3"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -161,6 +165,21 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
+
+-- Utility to resolve enums that may have been renamed by Roblox updates
+local function ResolveEnumItem(enumContainer, possibleNames)
+    for _, name in ipairs(possibleNames) do
+        local success, enumItem = pcall(function()
+            return enumContainer[name]
+        end)
+
+        if success and enumItem then
+            return enumItem
+        end
+    end
+
+    return nil
+end
 
 -- ============================================================
 -- LOCAL REFERENCES
@@ -394,7 +413,12 @@ end
 
 -- Raycast for visibility check
 local WallCheckParams = RaycastParams.new()
-WallCheckParams.FilterType = Enum.RaycastFilterType.Blacklist
+local wallCheckFilterType = ResolveEnumItem(Enum.RaycastFilterType, {"Exclude", "Blacklist"})
+if not wallCheckFilterType then
+    error("Sp3arParvus: Unable to resolve RaycastFilterType (Exclude/Blacklist)")
+end
+
+WallCheckParams.FilterType = wallCheckFilterType
 WallCheckParams.IgnoreWater = true
 
 local function Raycast(Origin, Direction, Filter)
