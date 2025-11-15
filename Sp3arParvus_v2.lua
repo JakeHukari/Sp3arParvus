@@ -252,9 +252,9 @@ local Flags = {
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/DistanceCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 20,
+    ["Aimbot/Sensitivity"] = 29,
     ["Aimbot/FOV/Radius"] = 100,
-    ["Aimbot/DistanceLimit"] = 981,
+    ["Aimbot/DistanceLimit"] = 1000,
     ["Aimbot/Priority"] = "Closest",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
 
@@ -266,7 +266,7 @@ local Flags = {
     ["SilentAim/VisibilityCheck"] = true,
     ["SilentAim/HitChance"] = 100,
     ["SilentAim/FOV/Radius"] = 100,
-    ["SilentAim/DistanceLimit"] = 995,
+    ["SilentAim/DistanceLimit"] = 1000,
     ["SilentAim/Priority"] = "Closest",
     ["SilentAim/BodyParts"] = {"Head", "HumanoidRootPart"},
     ["SilentAim/Mode"] = {
@@ -419,7 +419,7 @@ local function SolveTrajectory(origin, velocity, time, gravity)
 end
 
 -- ============================================================
--- AIMBOT CORE (EXACT CODE FROM WORKING PARVUS)
+-- AIMBOT CORE (EXACT CODE FROM PARVUS)
 -- ============================================================
 
 -- Raycast for visibility check
@@ -689,9 +689,9 @@ local function GetDistanceColor(distance, isClosest)
         return CLOSEST_COLOR -- Pink always overrides for closest player
     end
 
-    if distance <= 2000 then
+    if distance <= 1000 then
         return COLOR_CLOSE -- Red
-    elseif distance <= 4000 then
+    elseif distance <= 2000 then
         return COLOR_MID -- Yellow
     else
         return COLOR_FAR -- Green
