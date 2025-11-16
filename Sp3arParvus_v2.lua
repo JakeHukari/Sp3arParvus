@@ -1439,7 +1439,7 @@ end)
 CreateSlider("Gravity Multiplier", "Prediction/GravityMultiplier", 1, 5, 2, "x", function(value)
     GravityCorrection = value
 end)
-
+--Change these for defaults 
 -- AIMBOT SECTION
 CreateSection("Aim Assist")
 CreateToggle("Enabled", "Aimbot/Enabled", true)
@@ -1449,7 +1449,7 @@ CreateToggle("Ignore Teammates", "Aimbot/TeamCheck", false)
 CreateToggle("Line of Sight Check", "Aimbot/VisibilityCheck", true)
 CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 30, "%")
 CreateSlider("FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
-CreateSlider("Maximum Range", "Aimbot/DistanceLimit", 25, 1000, 981, " studs")
+CreateSlider("Maximum Range", "Aimbot/DistanceLimit", 25, 1000, 1000, " studs")
 
 -- SILENT AIM SECTION
 CreateSection("Precision Targeting (Silent Aim)")
@@ -1459,7 +1459,7 @@ CreateToggle("Ignore Teammates", "SilentAim/TeamCheck", false)
 CreateToggle("Line of Sight Check", "SilentAim/VisibilityCheck", true)
 CreateSlider("Accuracy", "SilentAim/HitChance", 0, 100, 100, "%")
 CreateSlider("FOV Radius", "SilentAim/FOV/Radius", 0, 500, 100, "px")
-CreateSlider("Maximum Range", "SilentAim/DistanceLimit", 25, 1000, 995, " studs")
+CreateSlider("Maximum Range", "SilentAim/DistanceLimit", 25, 1000, 1000, " studs")
 
 -- TRIGGER BOT SECTION
 CreateSection("Auto Fire (Trigger Bot)")
