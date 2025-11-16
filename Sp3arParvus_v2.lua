@@ -252,7 +252,7 @@ local Flags = {
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/DistanceCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 29,
+    ["Aimbot/Sensitivity"] = 30,
     ["Aimbot/FOV/Radius"] = 100,
     ["Aimbot/DistanceLimit"] = 1000,
     ["Aimbot/Priority"] = "Closest",
@@ -1447,7 +1447,7 @@ CreateToggle("Always Enabled", "Aimbot/AlwaysEnabled", true)
 CreateToggle("Ballistic Prediction", "Aimbot/Prediction", true)
 CreateToggle("Ignore Teammates", "Aimbot/TeamCheck", false)
 CreateToggle("Line of Sight Check", "Aimbot/VisibilityCheck", true)
-CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 20, "%")
+CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 30, "%")
 CreateSlider("FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
 CreateSlider("Maximum Range", "Aimbot/DistanceLimit", 25, 1000, 981, " studs")
 
