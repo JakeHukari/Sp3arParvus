@@ -1447,7 +1447,7 @@ CreateToggle("Always Enabled", "Aimbot/AlwaysEnabled", true)
 CreateToggle("Ballistic Prediction", "Aimbot/Prediction", true)
 CreateToggle("Ignore Teammates", "Aimbot/TeamCheck", false)
 CreateToggle("Line of Sight Check", "Aimbot/VisibilityCheck", true)
-CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 30, "%")
+CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 10, "%")
 CreateSlider("FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
 CreateSlider("Maximum Range", "Aimbot/DistanceLimit", 25, 1000, 1000, " studs")
 
@@ -1477,7 +1477,7 @@ CreateSlider("Maximum Range", "Trigger/DistanceLimit", 25, 1000, 1000, " studs")
 CreateSection("ESP")
 CreateToggle("ESP Enabled", "ESP/Enabled", true)
 CreateToggle("Nametags", "ESP/Nametags", true)
-CreateToggle("Tracers", "ESP/Tracers", true)
+CreateToggle("Tracers", "ESP/Tracers", false)
 CreateSlider("Max Distance", "ESP/MaxDistance", 100, 5000, 5000, " studs")
 
 -- PERFORMANCE SECTION
