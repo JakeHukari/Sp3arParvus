@@ -370,9 +370,10 @@ local function InEnemyTeam(Enabled, Player)
     end
 
     -- AR2 Squad check
-    local success1, localSquad = pcall(function() return LocalPlayer:FindFirstChild("Squad") end)
-    local success2, playerSquad = pcall(function() return Player:FindFirstChild("Squad") end)
-    if success1 and success2 and localSquad and playerSquad then
+    local localSquad = LocalPlayer:FindFirstChild("Squad")
+    local playerSquad = Player:FindFirstChild("Squad")
+    
+    if localSquad and playerSquad then
         if localSquad.Value == playerSquad.Value and localSquad.Value ~= nil then
             return false
         end
@@ -381,7 +382,7 @@ local function InEnemyTeam(Enabled, Player)
     return true
 end
 
--- Get character and check health (AR2-style)
+-- Get character and check health (Optimized)
 local function GetCharacter(player)
     if not player then return nil end
     local character = player.Character
@@ -390,18 +391,22 @@ local function GetCharacter(player)
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
     if not rootPart then return nil end
 
-    -- Check if alive (AR2 Stats.Health or standard Humanoid)
+    -- Optimization: Check standard Humanoid first (faster/more common)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        if humanoid.Health > 0 then
+            return character, rootPart
+        end
+        -- If humanoid exists but dead, return nil immediately
+        return nil
+    end
+
+    -- Fallback to AR2 Stats.Health check (only if no humanoid found)
     local success, health = pcall(function()
         return player.Stats.Health.Value
     end)
 
     if success and health and health > 0 then
-        return character, rootPart
-    end
-
-    -- Fallback to Humanoid check
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if humanoid and humanoid.Health > 0 then
         return character, rootPart
     end
 
@@ -455,17 +460,18 @@ local CachedFilterType = (function()
     return nil
 end)()
 
+local SharedRaycastParams = RaycastParams.new()
+SharedRaycastParams.IgnoreWater = true
+
 local function Raycast(Origin, Direction, Filter)
-    local params = RaycastParams.new()
-    params.IgnoreWater = true
-    params.FilterDescendantsInstances = Filter
+    SharedRaycastParams.FilterDescendantsInstances = Filter
 
     -- Only set FilterType if we successfully cached a valid enum
     if CachedFilterType then
-        params.FilterType = CachedFilterType
+        SharedRaycastParams.FilterType = CachedFilterType
     end
 
-    return Workspace:Raycast(Origin, Direction, params)
+    return Workspace:Raycast(Origin, Direction, SharedRaycastParams)
 end
 
 local function WithinReach(Enabled, Distance, Limit)
@@ -478,7 +484,7 @@ local function ObjectOccluded(Enabled, Origin, Position, Object)
     return Raycast(Origin, Position - Origin, {Object, LocalPlayer.Character})
 end
 
--- EXACT GetClosest function from working Parvus
+-- EXACT GetClosest function from working Parvus (Optimized)
 local function GetClosest(Enabled,
     TeamCheck, VisibilityCheck, DistanceCheck,
     DistanceLimit, FieldOfView, Priority, BodyParts,
@@ -486,13 +492,28 @@ local function GetClosest(Enabled,
 )
     if not Enabled then return end
     local CameraPosition, Closest = Camera.CFrame.Position, nil
+    
+    -- Optimization: Pre-calculate mouse location once
+    local MouseLocation = UserInputService:GetMouseLocation()
 
     for Index, Player in ipairs(Players:GetPlayers()) do
         if Player == LocalPlayer then continue end
 
+        -- Optimization: Quick team check before character search (if possible)
+        -- Note: We need character for Squad check, so we do standard checks first
+        if LocalPlayer.Team and Player.Team and LocalPlayer.Team == Player.Team and TeamCheck then
+             -- Simple team check failed, might still be squad, but usually good enough to skip if strictly simple teams
+             -- But we'll stick to full check to be safe
+        end
+
         local Character, RootPart = GetCharacter(Player)
         if not Character or not RootPart then continue end
         if not InEnemyTeam(TeamCheck, Player) then continue end
+
+        -- Optimization: Quick Distance Check using RootPart
+        -- Avoids iterating bodyparts if player is wildly out of range
+        local rootDist = (RootPart.Position - CameraPosition).Magnitude
+        if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
 
         if Priority == "Random" then
             local BodyPart = Character:FindFirstChild(BodyParts[math.random(#BodyParts)])
@@ -500,17 +521,19 @@ local function GetClosest(Enabled,
 
             local BodyPartPosition = BodyPart.Position
             local Distance = (BodyPartPosition - CameraPosition).Magnitude
+            
+            -- Strict distance check on actual body part
+            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
+
             BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
             ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
 
-            Distance = (BodyPartPosition - CameraPosition).Magnitude
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - UserInputService:GetMouseLocation()).Magnitude
+            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
             if Magnitude >= FieldOfView then continue end
 
             return {Player, Character, BodyPart, ScreenPosition}
@@ -520,17 +543,19 @@ local function GetClosest(Enabled,
 
             local BodyPartPosition = BodyPart.Position
             local Distance = (BodyPartPosition - CameraPosition).Magnitude
+            
+             -- Strict distance check
+            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
+
             BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
             ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
 
-            Distance = (BodyPartPosition - CameraPosition).Magnitude
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - UserInputService:GetMouseLocation()).Magnitude
+            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
             if Magnitude >= FieldOfView then continue end
 
             return {Player, Character, BodyPart, ScreenPosition}
@@ -542,17 +567,18 @@ local function GetClosest(Enabled,
 
             local BodyPartPosition = BodyPart.Position
             local Distance = (BodyPartPosition - CameraPosition).Magnitude
+            
+            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
+            
             BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
             ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
 
-            Distance = (BodyPartPosition - CameraPosition).Magnitude
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - UserInputService:GetMouseLocation()).Magnitude
+            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
             if Magnitude >= FieldOfView then continue end
 
             FieldOfView, Closest = Magnitude, {Player, Character, BodyPart, ScreenPosition}
@@ -1037,22 +1063,40 @@ local function UpdatePerformanceDisplay()
 end
 
 -- ============================================================
--- UI SYSTEM
+-- MODERN UI LIBRARY
 -- ============================================================
 
-local ScreenGui
-local MainFrame
-local ContentFrame
-local UIVisible = true
-local CurrentYOffset = 0
+local TweenService = game:GetService("TweenService")
+local UI = {}
+local UIState = {
+    MainFrame = nil,
+    Tabs = {},
+    CurrentTab = nil,
+    Visible = true
+}
 
-local function CreateUI()
-    -- Create ScreenGui
+-- UI Constants
+local UI_THEME = {
+    Background = Color3.fromRGB(18, 18, 18),
+    Sidebar = Color3.fromRGB(25, 25, 25),
+    Element = Color3.fromRGB(32, 32, 32),
+    Accent = Color3.fromRGB(0, 200, 255),
+    Text = Color3.fromRGB(240, 240, 240),
+    TextDark = Color3.fromRGB(150, 150, 150),
+    Success = Color3.fromRGB(0, 220, 100),
+    Fail = Color3.fromRGB(220, 50, 50)
+}
+
+function UI.CreateWindow(title)
+    -- Destroy old instances
+    if ScreenGui then ScreenGui:Destroy() end
+
+    -- ScreenGui
     ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "Sp3arParvusV2"
+    ScreenGui.Name = "Sp3arParvusUI"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
+    
     if gethui then
         ScreenGui.Parent = gethui()
     elseif syn and syn.protect_gui then
@@ -1062,80 +1106,122 @@ local function CreateUI()
         ScreenGui.Parent = game.CoreGui
     end
 
-    -- Create main frame
-    MainFrame = Instance.new("Frame")
+    -- Main Container
+    local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.fromOffset(350, 500)
-    MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    MainFrame.Size = UDim2.fromOffset(600, 400)
+    MainFrame.Position = UDim2.fromScale(0.5, 0.5)
+    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainFrame.BackgroundColor3 = UI_THEME.Background
     MainFrame.BorderSizePixel = 0
+    MainFrame.Visible = UIState.Visible
+    MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
 
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 8)
-    mainCorner.Parent = MainFrame
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = MainFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(45, 45, 45)
+    stroke.Thickness = 1
+    stroke.Parent = MainFrame
 
-    -- Title bar
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    titleBar.BorderSizePixel = 0
-    titleBar.Parent = MainFrame
+    -- Shadow
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    shadow.BackgroundTransparency = 1
+    shadow.Position = UDim2.fromScale(0.5, 0.5)
+    shadow.Size = UDim2.new(1, 100, 1, 100)
+    shadow.ZIndex = 0
+    shadow.Image = "rbxassetid://6015897843" -- Generic shadow
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.4
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(49, 49, 450, 450)
+    shadow.Parent = MainFrame
 
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 8)
-    titleCorner.Parent = titleBar
+    -- Sidebar
+    local Sidebar = Instance.new("Frame")
+    Sidebar.Name = "Sidebar"
+    Sidebar.Size = UDim2.new(0, 160, 1, 0)
+    Sidebar.BackgroundColor3 = UI_THEME.Sidebar
+    Sidebar.BorderSizePixel = 0
+    Sidebar.Parent = MainFrame
+    
+    local sbCorner = Instance.new("UICorner")
+    sbCorner.CornerRadius = UDim.new(0, 8)
+    sbCorner.Parent = Sidebar
+    
+    -- Fix rounded corner clipping on right side
+    local sbFix = Instance.new("Frame")
+    sbFix.BackgroundColor3 = UI_THEME.Sidebar
+    sbFix.BorderSizePixel = 0
+    sbFix.Size = UDim2.new(0, 10, 1, 0)
+    sbFix.Position = UDim2.new(1, -10, 0, 0)
+    sbFix.Parent = Sidebar
 
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Name = "TitleLabel"
-    titleLabel.Size = UDim2.new(1, -60, 1, 0)
-    titleLabel.Position = UDim2.fromOffset(10, 0)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextSize = 14
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Text = string.format("Sp3arParvus v%s", VERSION)
-    titleLabel.Parent = titleBar
+    -- Title
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -20, 0, 50)
+    TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = title
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 18
+    TitleLabel.TextColor3 = UI_THEME.Accent
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = Sidebar
 
-    -- Minimize button
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "MinimizeBtn"
-    minimizeBtn.Size = UDim2.fromOffset(20, 20)
-    minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.Text = "−"
-    minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 14
-    minimizeBtn.Parent = titleBar
+    -- Version
+    local VersionLabel = Instance.new("TextLabel")
+    VersionLabel.Size = UDim2.new(1, 0, 0, 20)
+    VersionLabel.Position = UDim2.new(0, 15, 0, 28)
+    VersionLabel.BackgroundTransparency = 1
+    VersionLabel.Text = "v" .. VERSION
+    VersionLabel.Font = Enum.Font.Gotham
+    VersionLabel.TextSize = 12
+    VersionLabel.TextColor3 = UI_THEME.TextDark
+    VersionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    VersionLabel.Parent = Sidebar
 
-    local minBtnCorner = Instance.new("UICorner")
-    minBtnCorner.CornerRadius = UDim.new(0, 4)
-    minBtnCorner.Parent = minimizeBtn
+    -- Tab Container
+    local TabContainer = Instance.new("ScrollingFrame")
+    TabContainer.Name = "Tabs"
+    TabContainer.Size = UDim2.new(1, 0, 1, -60)
+    TabContainer.Position = UDim2.new(0, 0, 0, 60)
+    TabContainer.BackgroundTransparency = 1
+    TabContainer.BorderSizePixel = 0
+    TabContainer.ScrollBarThickness = 2
+    TabContainer.Parent = Sidebar
 
-    -- Content frame (scrolling)
-    ContentFrame = Instance.new("ScrollingFrame")
-    ContentFrame.Name = "ContentFrame"
-    ContentFrame.Size = UDim2.new(1, -20, 1, -40)
-    ContentFrame.Position = UDim2.fromOffset(10, 35)
-    ContentFrame.BackgroundTransparency = 1
-    ContentFrame.ScrollBarThickness = 4
-    ContentFrame.BorderSizePixel = 0
-    ContentFrame.CanvasSize = UDim2.fromOffset(0, 0)
-    ContentFrame.Parent = MainFrame
+    local uiLayout = Instance.new("UIListLayout")
+    uiLayout.Padding = UDim.new(0, 5)
+    uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    uiLayout.Parent = TabContainer
 
-    -- Make draggable
+    -- Content Area
+    local ContentArea = Instance.new("Frame")
+    ContentArea.Name = "Content"
+    ContentArea.Size = UDim2.new(1, -170, 1, -20)
+    ContentArea.Position = UDim2.new(0, 170, 0, 10)
+    ContentArea.BackgroundTransparency = 1
+    ContentArea.Info.Parent = MainFrame
+    
+    UIState.MainFrame = MainFrame
+    UIState.ContentArea = ContentArea
+    UIState.TabContainer = TabContainer
+
+    -- Dragging Logic
     local dragging, dragInput, dragStart, startPos
-
-    titleBar.InputBegan:Connect(function(input)
+    MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPos = MainFrame.Position
-
+            
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -1143,394 +1229,432 @@ local function CreateUI()
             end)
         end
     end)
-
-    titleBar.InputChanged:Connect(function(input)
+    MainFrame.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement then
             dragInput = input
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
+            -- Use Tween for smooth dragging
+            TweenService:Create(MainFrame, TweenInfo.new(0.05), {
+                Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            }):Play()
         end
     end)
 
-    -- Minimize/maximize functionality
-    local isMinimized = false
-    minimizeBtn.MouseButton1Click:Connect(function()
-        isMinimized = not isMinimized
-        if isMinimized then
-            MainFrame.Size = UDim2.fromOffset(350, 30)
-            ContentFrame.Visible = false
-            minimizeBtn.Text = "+"
-        else
-            MainFrame.Size = UDim2.fromOffset(350, 500)
-            ContentFrame.Visible = true
-            minimizeBtn.Text = "−"
-        end
-    end)
-
-    -- Create performance display
-    CreatePerformanceDisplay(ScreenGui)
-
-    -- Create closest player tracker
-    CreateClosestPlayerTracker()
-end
-
--- Create a section header
-local function CreateSection(name)
-    local section = Instance.new("Frame")
-    section.Name = name .. "Section"
-    section.Size = UDim2.new(1, 0, 0, 25)
-    section.Position = UDim2.fromOffset(0, CurrentYOffset)
-    section.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    section.BorderSizePixel = 0
-    section.Parent = ContentFrame
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = section
-
-    local label = Instance.new("TextLabel")
-    label.Name = "Label"
-    label.Size = UDim2.new(1, -10, 1, 0)
-    label.Position = UDim2.fromOffset(10, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 12
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Text = name
-    label.Parent = section
-
-    CurrentYOffset = CurrentYOffset + 30
-    return section
-end
-
--- Create a toggle
-local function CreateToggle(name, flag, defaultValue, callback)
-    local toggle = Instance.new("Frame")
-    toggle.Name = name .. "Toggle"
-    toggle.Size = UDim2.new(1, 0, 0, 30)
-    toggle.Position = UDim2.fromOffset(0, CurrentYOffset)
-    toggle.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    toggle.BorderSizePixel = 0
-    toggle.Parent = ContentFrame
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = toggle
-
-    local label = Instance.new("TextLabel")
-    label.Name = "Label"
-    label.Size = UDim2.new(1, -50, 1, 0)
-    label.Position = UDim2.fromOffset(8, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 11
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Text = name
-    label.Parent = toggle
-
-    local button = Instance.new("TextButton")
-    button.Name = "Button"
-    button.Size = UDim2.fromOffset(35, 18)
-    button.Position = UDim2.new(1, -40, 0.5, -9)
-    button.BackgroundColor3 = defaultValue and Color3.fromRGB(0, 195, 120) or Color3.fromRGB(55, 55, 70)
-    button.BorderSizePixel = 0
-    button.Text = defaultValue and "ON" or "OFF"
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.GothamBold
-    button.TextSize = 9
-    button.Parent = toggle
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 9)
-    btnCorner.Parent = button
-
-    Flags[flag] = defaultValue
-    button.MouseButton1Click:Connect(function()
-        Flags[flag] = not Flags[flag]
-        button.BackgroundColor3 = Flags[flag] and Color3.fromRGB(0, 195, 120) or Color3.fromRGB(55, 55, 70)
-        button.Text = Flags[flag] and "ON" or "OFF"
-        if callback then callback(Flags[flag]) end
-    end)
-
-    CurrentYOffset = CurrentYOffset + 33
-    return toggle
-end
-
--- Create a slider
-local function CreateSlider(name, flag, min, max, default, unit, callback)
-    local slider = Instance.new("Frame")
-    slider.Name = name .. "Slider"
-    slider.Size = UDim2.new(1, 0, 0, 40)
-    slider.Position = UDim2.fromOffset(0, CurrentYOffset)
-    slider.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    slider.BorderSizePixel = 0
-    slider.Parent = ContentFrame
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = slider
-
-    local label = Instance.new("TextLabel")
-    label.Name = "Label"
-    label.Size = UDim2.new(1, -10, 0, 15)
-    label.Position = UDim2.fromOffset(8, 3)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 10
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Text = string.format("%s: %s%s", name, default, unit or "")
-    label.Parent = slider
-
-    local track = Instance.new("Frame")
-    track.Name = "Track"
-    track.Size = UDim2.new(1, -16, 0, 4)
-    track.Position = UDim2.new(0, 8, 1, -12)
-    track.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    track.BorderSizePixel = 0
-    track.Parent = slider
-
-    local trackCorner = Instance.new("UICorner")
-    trackCorner.CornerRadius = UDim.new(1, 0)
-    trackCorner.Parent = track
-
-    local fill = Instance.new("Frame")
-    fill.Name = "Fill"
-    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(0, 195, 120)
-    fill.BorderSizePixel = 0
-    fill.Parent = track
-
-    local fillCorner = Instance.new("UICorner")
-    fillCorner.CornerRadius = UDim.new(1, 0)
-    fillCorner.Parent = fill
-
-    Flags[flag] = default
-
-    local function UpdateSlider(percentage)
-        percentage = math.clamp(percentage, 0, 1)
-        local value = floor(min + (max - min) * percentage)
-        Flags[flag] = value
-        fill.Size = UDim2.new(percentage, 0, 1, 0)
-        label.Text = string.format("%s: %s%s", name, value, unit or "")
-        if callback then callback(value) end
-    end
-
-    track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local percentage = (input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X
-            UpdateSlider(percentage)
-
-            local connection
-            connection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    connection:Disconnect()
-                end
-            end)
-        end
-    end)
-
-    track.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                local percentage = (input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X
-                UpdateSlider(percentage)
+    -- Toggle Logic (Right Shift)
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if input.KeyCode == Enum.KeyCode.RightShift then
+            UIState.Visible = not UIState.Visible
+            MainFrame.Visible = UIState.Visible
+            -- Optional: Add tweening for open/close
+            if UIState.Visible then
+                MainFrame.Size = UDim2.fromOffset(0,0)
+                MainFrame.Visible = true 
+                TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = UDim2.fromOffset(600, 400)}):Play()
             end
         end
     end)
 
-    CurrentYOffset = CurrentYOffset + 43
-    return slider
+    return UI
 end
 
--- Create a button
-local function CreateButton(name, callback)
-    local button = Instance.new("TextButton")
-    button.Name = name .. "Button"
-    button.Size = UDim2.new(1, 0, 0, 35)
-    button.Position = UDim2.fromOffset(0, CurrentYOffset)
-    button.BackgroundColor3 = Color3.fromRGB(40, 100, 180)
-    button.BorderSizePixel = 0
-    button.Text = name
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.GothamBold
-    button.TextSize = 11
-    button.Parent = ContentFrame
+function UI.CreateTab(name, icon)
+    local TabButton = Instance.new("TextButton")
+    TabButton.Name = name .. "Tab"
+    TabButton.Size = UDim2.new(1, -20, 0, 32)
+    TabButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    TabButton.BackgroundTransparency = 1
+    TabButton.Text = ""
+    TabButton.Parent = UIState.TabContainer
 
+    local TabLabel = Instance.new("TextLabel")
+    TabLabel.Size = UDim2.new(1, -20, 1, 0)
+    TabLabel.Position = UDim2.new(0, 15, 0, 0)
+    TabLabel.BackgroundTransparency = 1
+    TabLabel.Text = name
+    TabLabel.Font = Enum.Font.GothamMedium
+    TabLabel.TextSize = 14
+    TabLabel.TextColor3 = UI_THEME.TextDark
+    TabLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TabLabel.Parent = TabButton
+    
+    local Indicator = Instance.new("Frame")
+    Indicator.Size = UDim2.new(0, 3, 0, 16)
+    Indicator.Position = UDim2.new(0, 0, 0.5, -8)
+    Indicator.BackgroundColor3 = UI_THEME.Accent
+    Indicator.BorderSizePixel = 0
+    Indicator.BackgroundTransparency = 1
+    Indicator.Parent = TabButton
+    local indCorner = Instance.new("UICorner"); indCorner.CornerRadius = UDim.new(1,0); indCorner.Parent = Indicator
+
+    -- Page Frame
+    local Page = Instance.new("ScrollingFrame")
+    Page.Name = name .. "Page"
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1
+    Page.BorderSizePixel = 0
+    Page.ScrollBarThickness = 2
+    Page.Visible = false
+    Page.Parent = UIState.ContentArea
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 8)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = Page
+    
+    local padding = Instance.new("UIPadding")
+    padding.PaddingRight = UDim.new(0, 5)
+    padding.Parent = Page
+
+    -- Tab Selection Logic
+    TabButton.MouseButton1Click:Connect(function()
+        -- Deselect all
+        for _, t in pairs(UIState.Tabs) do
+            TweenService:Create(t.Label, TweenInfo.new(0.2), {TextColor3 = UI_THEME.TextDark}):Play()
+            TweenService:Create(t.Indicator, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+            t.Page.Visible = false
+        end
+        -- Select current
+        TweenService:Create(TabLabel, TweenInfo.new(0.2), {TextColor3 = UI_THEME.Text}):Play()
+        TweenService:Create(Indicator, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
+        Page.Visible = true
+        UIState.CurrentTab = name
+    end)
+    
+    -- Register
+    table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page})
+    
+    -- Auto-select first tab
+    if #UIState.Tabs == 1 then
+        TabButton.MouseButton1Click:Fire()
+    end
+
+    return Page
+end
+
+function UI.CreateSection(page, name)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 30)
+    Container.BackgroundTransparency = 1
+    Container.Parent = page
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, 0, 1, 0)
+    Label.Position = UDim2.new(0, 2, 0, 5)
+    Label.BackgroundTransparency = 1
+    Label.Text = string.upper(name)
+    Label.Font = Enum.Font.GothamBold
+    Label.TextSize = 11
+    Label.TextColor3 = UI_THEME.Accent
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+end
+
+function UI.CreateToggle(page, text, flag, default, callback)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 36)
+    Frame.BackgroundColor3 = UI_THEME.Element
+    Frame.BorderSizePixel = 0
+    Frame.Parent = page
+    
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = button
-
-    button.MouseButton1Click:Connect(callback)
-
-    CurrentYOffset = CurrentYOffset + 38
-    return button
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = Frame
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.7, 0, 1, 0)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+    
+    local Switch = Instance.new("Frame")
+    Switch.Size = UDim2.new(0, 44, 0, 22)
+    Switch.AnchorPoint = Vector2.new(1, 0.5)
+    Switch.Position = UDim2.new(1, -12, 0.5, 0)
+    Switch.BackgroundColor3 = default and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
+    Switch.BorderSizePixel = 0
+    Switch.Parent = Frame
+    
+    local swCorner = Instance.new("UICorner")
+    swCorner.CornerRadius = UDim.new(1, 0)
+    swCorner.Parent = Switch
+    
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.AnchorPoint = Vector2.new(0, 0.5)
+    Knob.Position = default and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
+    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Knob.BorderSizePixel = 0
+    Knob.Parent = Switch
+    
+    local kbCorner = Instance.new("UICorner")
+    kbCorner.CornerRadius = UDim.new(1, 0)
+    kbCorner.Parent = Knob
+    
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(1, 0, 1, 0)
+    Button.BackgroundTransparency = 1
+    Button.Text = ""
+    Button.Parent = Frame
+    
+    Flags[flag] = default
+    
+    Button.MouseButton1Click:Connect(function()
+        Flags[flag] = not Flags[flag]
+        local state = Flags[flag]
+        
+        -- Animate
+        local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
+        local targetPos = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
+        
+        TweenService:Create(Switch, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(Knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        
+        if callback then callback(state) end
+    end)
 end
 
--- ============================================================
--- CLEANUP SYSTEM
--- ============================================================
+function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 56)
+    Frame.BackgroundColor3 = UI_THEME.Element
+    Frame.BorderSizePixel = 0
+    Frame.Parent = page
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = Frame
 
-local function Cleanup()
-    print("[Sp3arParvus v2] Shutting down...")
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -24, 0, 24)
+    Label.Position = UDim2.new(0, 12, 0, 4)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+    
+    local ValueLabel = Instance.new("TextLabel")
+    ValueLabel.Size = UDim2.new(0, 60, 0, 24)
+    ValueLabel.AnchorPoint = Vector2.new(1, 0)
+    ValueLabel.Position = UDim2.new(1, -12, 0, 4)
+    ValueLabel.BackgroundTransparency = 1
+    ValueLabel.Text = tostring(default) .. (unit or "")
+    ValueLabel.Font = Enum.Font.Gotham
+    ValueLabel.TextSize = 12
+    ValueLabel.TextColor3 = UI_THEME.TextDark
+    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    ValueLabel.Parent = Frame
+    
+    local Track = Instance.new("TextButton") -- Using TextButton for easier input handling area
+    Track.Text = ""
+    Track.Size = UDim2.new(1, -24, 0, 4)
+    Track.Position = UDim2.new(0, 12, 0, 36)
+    Track.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    Track.BorderSizePixel = 0
+    Track.AutoButtonColor = false
+    Track.Parent = Frame
+    
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(1, 0)
+    tCorner.Parent = Track
+    
+    local Fill = Instance.new("Frame")
+    Fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
+    Fill.BackgroundColor3 = UI_THEME.Accent
+    Fill.BorderSizePixel = 0
+    Fill.Parent = Track
+    
+    local fCorner = Instance.new("UICorner")
+    fCorner.CornerRadius = UDim.new(1, 0)
+    fCorner.Parent = Fill
+    
+    local Circle = Instance.new("Frame")
+    Circle.Size = UDim2.new(0, 12, 0, 12)
+    Circle.AnchorPoint = Vector2.new(0.5, 0.5)
+    Circle.Position = UDim2.new(1, 0, 0.5, 0)
+    Circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Circle.BorderSizePixel = 0
+    Circle.Parent = Fill
+    
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(1, 0)
+    cCorner.Parent = Circle
+    
+    Flags[flag] = default
 
-    Sp3arParvus.Active = false
-
-    -- Disconnect all connections
-    for _, connection in ipairs(Sp3arParvus.Connections) do
-        pcall(function() connection:Disconnect() end)
+    local function Update(input)
+        local sizeX = Track.AbsoluteSize.X
+        local posX = Track.AbsolutePosition.X
+        local percent = math.clamp((input.Position.X - posX) / sizeX, 0, 1)
+        local value = math.floor(min + (max - min) * percent)
+        
+        Flags[flag] = value
+        ValueLabel.Text = tostring(value) .. (unit or "")
+        Fill.Size = UDim2.new(percent, 0, 1, 0)
+        
+        if callback then callback(value) end
     end
-    Sp3arParvus.Connections = {}
+    
+    local dragging = false
+    Track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            TweenService:Create(Circle, TweenInfo.new(0.1), {Size = UDim2.fromOffset(16, 16)}):Play()
+            Update(input)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            TweenService:Create(Circle, TweenInfo.new(0.1), {Size = UDim2.fromOffset(12, 12)}):Play()
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            Update(input)
+        end
+    end)
+end
 
-    -- Stop all threads
-    for _, thread in ipairs(Sp3arParvus.Threads) do
-        pcall(function() task.cancel(thread) end)
-    end
-    Sp3arParvus.Threads = {}
-
-    -- Remove all ESP
-    for player, _ in pairs(ESPObjects) do
-        RemoveESP(player)
-    end
-    ESPObjects = {}
-
-    -- Destroy closest player tracker
-    if ClosestPlayerTrackerLabel then
-        ClosestPlayerTrackerLabel:Destroy()
-        ClosestPlayerTrackerLabel = nil
-    end
-
-    -- Destroy UI
-    if ScreenGui then
-        ScreenGui:Destroy()
-    end
-
-    -- Clear global
-    globalEnv.Sp3arParvusV2 = nil
-
-    print("[Sp3arParvus v2] Shutdown complete")
+function UI.CreateButton(page, text, callback)
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(1, 0, 0, 36)
+    Button.BackgroundColor3 = UI_THEME.Accent
+    Button.BackgroundTransparency = 0.2
+    Button.BorderSizePixel = 0
+    Button.Text = text
+    Button.Font = Enum.Font.GothamBold
+    Button.TextSize = 13
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.Parent = page
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = Button
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = UI_THEME.Accent
+    stroke.Thickness = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = Button
+    
+    Button.MouseButton1Click:Connect(function()
+        -- Click animation
+        TweenService:Create(Button, TweenInfo.new(0.05), {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        task.wait(0.05)
+        TweenService:Create(Button, TweenInfo.new(0.05), {Size = UDim2.new(1, 0, 0, 36)}):Play()
+        if callback then callback() end
+    end)
 end
 
 -- ============================================================
 -- MAIN INITIALIZATION
 -- ============================================================
 
--- Create UI
-CreateUI()
+-- Create Main Window
+local Window = UI.CreateWindow("Grub Cheat Suite")
 
--- BALLISTICS SECTION
-CreateSection("Ballistics Configuration")
-CreateSlider("Projectile Velocity", "Prediction/Velocity", 1, 10000, 3155, " studs/s", function(value)
-    ProjectileSpeed = value
-end)
-CreateSlider("Gravity Force", "Prediction/GravityForce", 0, 1000, 196.2, "", function(value)
-    ProjectileGravity = value
-end)
-CreateSlider("Gravity Multiplier", "Prediction/GravityMultiplier", 1, 5, 2, "x", function(value)
-    GravityCorrection = value
-end)
---Change these for defaults 
--- AIMBOT SECTION
-CreateSection("Aim Assist")
-CreateToggle("Enabled", "Aimbot/Enabled", true)
-CreateToggle("Always Enabled", "Aimbot/AlwaysEnabled", true)
-CreateToggle("Ballistic Prediction", "Aimbot/Prediction", true)
-CreateToggle("Ignore Teammates", "Aimbot/TeamCheck", false)
-CreateToggle("Line of Sight Check", "Aimbot/VisibilityCheck", true)
-CreateSlider("Smoothing", "Aimbot/Sensitivity", 0, 100, 10, "%")
-CreateSlider("FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
-CreateSlider("Maximum Range", "Aimbot/DistanceLimit", 25, 1000, 1000, " studs")
+-- Create Tabs
+local AimTab = UI.CreateTab("Aimbot")
+local VisualsTab = UI.CreateTab("Visuals")
+local MiscTab = UI.CreateTab("Misc")
+local SettingsTab = UI.CreateTab("Settings")
 
--- SILENT AIM SECTION
-CreateSection("Precision Targeting (Silent Aim)")
-CreateToggle("Enabled", "SilentAim/Enabled", true)
-CreateToggle("Ballistic Prediction", "SilentAim/Prediction", true)
-CreateToggle("Ignore Teammates", "SilentAim/TeamCheck", false)
-CreateToggle("Line of Sight Check", "SilentAim/VisibilityCheck", true)
-CreateSlider("Accuracy", "SilentAim/HitChance", 0, 100, 100, "%")
-CreateSlider("FOV Radius", "SilentAim/FOV/Radius", 0, 500, 100, "px")
-CreateSlider("Maximum Range", "SilentAim/DistanceLimit", 25, 1000, 1000, " studs")
+-- AIMBOT TAB
+UI.CreateSection(AimTab, "General Aim")
+UI.CreateToggle(AimTab, "Enable Aimbot", "Aimbot/Enabled", true)
+UI.CreateToggle(AimTab, "Always Active (No Keybind)", "Aimbot/AlwaysEnabled", true)
+UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", false)
+UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", true)
+UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, 10, "%")
+UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
+UI.CreateSlider(AimTab, "Distance Limit", "Aimbot/DistanceLimit", 25, 3000, 1000, " st")
 
--- TRIGGER BOT SECTION
-CreateSection("Auto Fire (Trigger Bot)")
-CreateToggle("Enabled", "Trigger/Enabled", true)
-CreateToggle("Always Enabled", "Trigger/AlwaysEnabled", true)
-CreateToggle("Continuous Fire", "Trigger/HoldMouseButton", true)
-CreateToggle("Ballistic Prediction", "Trigger/Prediction", true)
-CreateToggle("Ignore Teammates", "Trigger/TeamCheck", false)
-CreateToggle("Line of Sight Check", "Trigger/VisibilityCheck", true)
-CreateSlider("Activation Delay", "Trigger/Delay", 0, 1, 0, "s")
-CreateSlider("FOV Radius", "Trigger/FOV/Radius", 0, 500, 25, "px")
-CreateSlider("Maximum Range", "Trigger/DistanceLimit", 25, 1000, 1000, " studs")
+UI.CreateSection(AimTab, "Ballistics")
+UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", true)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, 3155, " st/s", function(v) ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, 2, "x", function(v) GravityCorrection = v end)
 
--- ESP SECTION
-CreateSection("ESP")
-CreateToggle("ESP Enabled", "ESP/Enabled", true)
-CreateToggle("Nametags", "ESP/Nametags", true)
-CreateToggle("Tracers", "ESP/Tracers", false)
-CreateSlider("Max Distance", "ESP/MaxDistance", 100, 5000, 5000, " studs")
+UI.CreateSection(AimTab, "Silent Aim")
+UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", true)
+UI.CreateSlider(AimTab, "Hit Chance", "SilentAim/HitChance", 0, 100, 100, "%")
+UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, 100, "px")
 
--- PERFORMANCE SECTION
-CreateSection("Performance")
-CreateToggle("Show Performance", "Performance/Enabled", true, function(state)
-    if PerformanceLabel then
-        PerformanceLabel.Visible = state
-    end
+UI.CreateSection(AimTab, "Trigger Bot")
+UI.CreateToggle(AimTab, "Enable Trigger", "Trigger/Enabled", true)
+UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", true)
+UI.CreateSlider(AimTab, "Trigger Delay", "Trigger/Delay", 0, 100, 0, "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
+
+-- VISUALS TAB
+UI.CreateSection(VisualsTab, "Player ESP")
+UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", true)
+UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", true)
+UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", false)
+UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, 5000, " st")
+
+-- MISC TAB
+UI.CreateSection(MiscTab, "Utilities")
+UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
+UI.CreateButton(MiscTab, "Unload Script", Cleanup)
+
+-- SETTINGS TAB
+UI.CreateSection(SettingsTab, "Configuration")
+UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", true, function(state)
+    if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 
--- UTILITIES SECTION
-CreateSection("Utilities")
-CreateButton("Rejoin Server", Rejoin)
-CreateButton("Shutdown Script", Cleanup)
-
--- Update canvas size
-ContentFrame.CanvasSize = UDim2.fromOffset(0, CurrentYOffset)
-
--- Setup ESP for existing players
+-- Initialize ESP for existing players
 for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
-        CreateESP(player)
-    end
+    if player ~= LocalPlayer then CreateESP(player) end
 end
 
--- Player added/removed events
-TrackConnection(Players.PlayerAdded:Connect(function(player)
-    CreateESP(player)
-end))
-
-TrackConnection(Players.PlayerRemoving:Connect(function(player)
-    RemoveESP(player)
-end))
+-- Event Listeners
+TrackConnection(Players.PlayerAdded:Connect(function(player) CreateESP(player) end))
+TrackConnection(Players.PlayerRemoving:Connect(function(player) RemoveESP(player) end))
 
 -- ============================================================
 -- MAIN UPDATE LOOPS
 -- ============================================================
 
--- Aimbot keybind handler
+-- Aimbot Keybind (Hold RMB)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = Flags["Aimbot/Enabled"]
     end
 end))
-
 TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = false
     end
 end))
 
--- Trigger keybind handler
+-- Trigger Keybind (Hold RMB)
+TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        Trigger = Flags["Trigger/Enabled"]
+    end
+end))
+TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        Trigger = false
+    end
+end))
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -1558,32 +1682,15 @@ TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcesse
     end
 end))
 
--- Aimbot update loop (EXACT CODE FROM WORKING PARVUS)
-local aimbotThread = task.spawn(function()
-    while Sp3arParvus.Active do
-        if Aimbot or Flags["Aimbot/AlwaysEnabled"] then
-            AimAt(GetClosest(
-                Flags["Aimbot/Enabled"],
-                Flags["Aimbot/TeamCheck"],
-                Flags["Aimbot/VisibilityCheck"],
-                Flags["Aimbot/DistanceCheck"],
-                Flags["Aimbot/DistanceLimit"],
-                Flags["Aimbot/FOV/Radius"],
-                Flags["Aimbot/Priority"],
-                Flags["Aimbot/BodyParts"],
-                Flags["Aimbot/Prediction"]
-            ), Flags["Aimbot/Sensitivity"] / 100)
-        end
-        task.wait()
-    end
-end)
-TrackThread(aimbotThread)
+-- Aimbot & Silent Aim update loop (Optimized - RenderStepped)
+-- Replaced separate while loops with a single synced RenderStepped connection for smoothness and performance
+local function UpdateAimAndSilent()
+    if not Sp3arParvus.Active then return end
 
--- Silent aim update loop (EXACT CODE FROM WORKING PARVUS)
-local silentAimThread = task.spawn(function()
-    while Sp3arParvus.Active do
+    -- Silent Aim
+    if Flags["SilentAim/Enabled"] then
         SilentAim = GetClosest(
-            Flags["SilentAim/Enabled"],
+            true,
             Flags["SilentAim/TeamCheck"],
             Flags["SilentAim/VisibilityCheck"],
             Flags["SilentAim/DistanceCheck"],
@@ -1593,10 +1700,28 @@ local silentAimThread = task.spawn(function()
             Flags["SilentAim/BodyParts"],
             Flags["SilentAim/Prediction"]
         )
-        task.wait()
+    else
+        SilentAim = nil
     end
-end)
-TrackThread(silentAimThread)
+
+    -- Aimbot
+    if Aimbot or Flags["Aimbot/AlwaysEnabled"] then
+        local target = GetClosest(
+            Flags["Aimbot/Enabled"],
+            Flags["Aimbot/TeamCheck"],
+            Flags["Aimbot/VisibilityCheck"],
+            Flags["Aimbot/DistanceCheck"],
+            Flags["Aimbot/DistanceLimit"],
+            Flags["Aimbot/FOV/Radius"],
+            Flags["Aimbot/Priority"],
+            Flags["Aimbot/BodyParts"],
+            Flags["Aimbot/Prediction"]
+        )
+        AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+    end
+end
+
+TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
 
 -- Trigger bot loop (EXACT CODE FROM WORKING PARVUS)
 local triggerThread = task.spawn(function()
@@ -1656,30 +1781,38 @@ end)
 TrackThread(triggerThread)
 
 -- ESP update loop (optimized - single pass for closest player)
-local espThread = task.spawn(function()
-    while Sp3arParvus.Active do
-        if Flags["ESP/Enabled"] then
-            -- Update nearest player reference (single calculation)
-            UpdateNearestPlayer()
+-- ESP update loop (Optimized - RenderStepped)
+local lastEspUpdate = 0
+local espUpdateRate = 0.1 -- 100 stud radius check every 100ms
 
-            -- Update all ESP with cached closest player
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer then
-                    UpdateESP(player, player == NearestPlayerRef)
-                end
+local function UpdateESPStep()
+    if not Sp3arParvus.Active then return end
+    
+    -- Frequent updates (Visuals - every frame)
+    if Flags["ESP/Enabled"] then
+        -- Update all visuals immediately aligned with frame
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                UpdateESP(player, player == NearestPlayerRef)
             end
+        end
+    end
 
+    -- Throttled updates (Calculations)
+    local now = os.clock()
+    if now - lastEspUpdate > espUpdateRate then
+        lastEspUpdate = now
+        
+        if Flags["ESP/Enabled"] then
+            -- Update nearest player reference
+            UpdateNearestPlayer()
             -- Update closest player tracker display
             UpdateClosestPlayerTracker()
         end
-
-        -- Dynamic update rate based on player count for better performance
-        local playerCount = #Players:GetPlayers()
-        local waitTime = playerCount > 10 and 0.15 or 0.1
-        task.wait(waitTime)
     end
-end)
-TrackThread(espThread)
+end
+
+TrackConnection(RunService.RenderStepped:Connect(UpdateESPStep))
 
 -- Performance display update loop
 local perfThread = task.spawn(function()
