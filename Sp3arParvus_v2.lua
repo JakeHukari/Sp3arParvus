@@ -1,19 +1,3 @@
---[[
-================================================================================
-- This script provides the primary function of our Roblox game; Grub
-
-- This game is a multiplayer zombie survival 'looter-shooter' experience with a unique twist: every single player is given an over-powered 'cheat' menu which grants all players a customizable aimbot, esp, and other 'overpowered' tools.
-
-- Some may think that this type of game mechanic would not work however based on real player testing and information gathered from other Roblox experiences, the average player loves this type of game mechanic
-
-- In addition to providing a fun experience for our players, the 'cheat' mechanics also provide a huge balancing factor to our game. Most regular Roblox users have no chance to compete against cheaters or hackers but when every player in our game is granted a 'cheat' menu by default, any malicious 'hacker' who is using 3rd party injectors or cheating services has no real advantage over the legitimate players in our game. This completely eliminates any opportunity for malicious players to take advantage of players who just want to enjoy the game without 'hacking'
-
-- In an effort to abide by all developer & game publisher rules we have contacted roblox staff to ensure this type of mechanic is permitted, Roblox informed us that there is absolutely no concern with adding this type of mechanic, the publisher of a game has permission to add any and all scripts, items, or functions to their own game, as long as they are the developer and publisher of said game. IE; since we are the ones creating the entire game we are allowed to add anything that we want.
-
-- For any future or current developers of 'Grub'; Please be cautious while modifying this script, some functions have taken hours to get functional in our game and we do NOT want to do that again, if you would like to modify this script please test it thoroughly before publishing to the live experience. Thank you for taking the time to read this!
-================================================================================
-]]--
-
 -- Version identifier
 local VERSION = "2.3.5"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -1251,7 +1235,10 @@ local function UpdateClosestPlayerTracker()
                 if myRoot and targetRoot then
                     local distance = (targetRoot.Position - myRoot.Position).Magnitude
                     local distRounded = floor(distance + 0.5)
-                    local name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
+                    local name = "Unknown"
+                    if NearestPlayerRef then
+                        name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
+                    end
 
                     -- Update colors based on distance (closest = always pink)
                     local color = GetDistanceColor(distance, true) -- true = is closest
@@ -1518,6 +1505,34 @@ end
 -- ============================================================
 -- MAIN INITIALIZATION
 -- ============================================================
+
+-- Cleanup Function
+local function Cleanup()
+    Sp3arParvus.Active = false
+
+    -- Disconnect connections
+    for _, conn in pairs(Sp3arParvus.Connections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(Sp3arParvus.Connections)
+
+    -- Cancel threads
+    for _, thread in pairs(Sp3arParvus.Threads) do
+        if thread then task.cancel(thread) end
+    end
+    table.clear(Sp3arParvus.Threads)
+
+    -- Cleanup Visuals
+    if ScreenGui then ScreenGui:Destroy() end
+    
+    for _, espData in pairs(ESPObjects) do
+        if espData.Nametag then espData.Nametag:Destroy() end
+        if espData.Tracer then espData.Tracer:Remove() end
+    end
+    table.clear(ESPObjects)
+
+    warn("[Sp3arParvus] Script Unloaded!")
+end
 
 -- Create Main Window
 local Window = UI.CreateWindow("Grub Cheat Suite")
