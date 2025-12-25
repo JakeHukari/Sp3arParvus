@@ -1,150 +1,3 @@
---[[
-================================================================================
-SP3ARPARVUS v2 - HYBRID EDITION
-================================================================================
-
-CURRENT VERSION: 2.3.5
-RELEASE DATE: 2025-11-15
-BUILD STATUS: Hybrid Build - Stable
-
-================================================================================
-VERSIONING SYSTEM (Semantic Versioning)
-================================================================================
-Format: MAJOR.MINOR.PATCH (e.g., 2.1.3)
-
-MAJOR (X.0.0) - Breaking changes, complete rewrites, fundamental architecture changes
-MINOR (2.X.0) - New features, functionality additions, significant improvements
-PATCH (2.1.X) - Bug fixes, small tweaks, optimization improvements
-
-RULES:
-- EVERY code change MUST bump the version
-- Update the changelog below
-- Update "CURRENT VERSION" above
-- Test thoroughly before committing
-
-================================================================================
-CHANGELOG
-================================================================================
-v2.3.5 (2025-11-15) - RaycastFilterType Compatibility Fix
-  - Moved FilterType enum resolution to happen during script initialization with caching
-  - Added typeof() validation to prevent invalid enum values
-  - Only sets FilterType if a valid EnumItem is cached
-  - Added debug output to help diagnose enum compatibility issues
-
-v2.3.4 (2025-11-15) - Enhanced Enum Validation
-  - Added typeof() validation to ensure ResolveEnumItem returns valid EnumItems
-  - Improved RaycastFilterType enum resolution reliability
-
-v2.3.3 (2025-11-12) - Roblox Enum Compatibility
-  - Updated raycast filter configuration to support Roblox's new Exclude/Include enums
-  - Prevented "Invalid value for enum RaycastFilterType" errors when launching the script
-
-v2.3.2 (2025-11-11) - Critical Bug Fixes
-  - FIXED: ESP nametags now show distance-based colors (were stuck on white)
-  - FIXED: Performance display now shows metrics correctly (was blank/showing "label")
-  - FIXED: UIVisible check preventing performance display from updating
-  - Performance display now has "Loading..." initial text
-
-v2.3.1 (2025-11-11) - Distance Threshold Adjustment
-  - Updated distance color ranges for AR2 combat: Red (0-2000), Yellow (2001-4000), Green (4000+)
-  - Closest player ALWAYS pink regardless of distance (priority override)
-
-v2.3.0 (2025-11-11) - Polish & Quality of Life
-  - Distance-based color coding: Red (<2000), Yellow (2000-4000), Green (>4000)
-  - Closest player ALWAYS pink regardless of distance (priority override)
-  - Enhanced performance display: Memory usage, active targets, aimbot status
-  - FPS color coding: Green (>60), Yellow (30-60), Red (<30)
-  - UI toggle keybind: Right Shift to hide/show entire UI
-  - Visual aimbot lock indicator in performance display
-  - Optimized string formatting (reduced allocations)
-
-v2.2.0 (2025-11-11) - Performance & Features
-  - Added Closest Player Tracker (standalone display with name/distance)
-  - Performance: Cached distance calculations (single pass)
-  - Performance: Optimized ESP updates (reduced redundant loops)
-  - Performance: Smart update frequency based on player count
-  - Performance: Eliminated duplicate closest player calculations
-  - UI: Minimizable closest player tracker with pink theme
-
-v2.1.1 (2025-11-11) - Optimized Defaults
-  - Updated default configuration based on user testing
-  - All aimbot features enabled by default (Always Enabled, Ballistic Prediction, Line of Sight)
-  - Silent aim enabled with optimized settings
-  - Trigger bot enabled with continuous fire mode
-  - Increased projectile velocity to 3155 studs/s
-  - Increased maximum ranges to ~1000 studs for all systems
-  - ESP max distance increased to 5000 studs
-  - Removed team check (Ignore Teammates = OFF) for aggressive targeting
-  - Trigger activation delay reduced to 0s for instant response
-
-v2.1.0 (2025-11-11) - Hybrid Build
-  - Integrated WORKING aimbot code from original Parvus
-  - Added complete silent aim with all metamethod hooks
-  - Added trigger bot (auto-fire) functionality
-  - Proper UI with all aimbot/silent aim/trigger toggles
-  - Ballistics configuration (velocity, gravity, etc.)
-  - FOV circles for visual feedback
-  - Kept lightweight ESP and performance display
-  - Proper cleanup system
-
-v2.0.0 (2025-11-11) - Initial Release
-  - Complete rewrite from ground up for stability
-  - Lightweight ESP with nametags and tracers
-  - Performance display (FPS, Ping, Players)
-  - Minimal UI foundation
-
-================================================================================
-FEATURES
-================================================================================
-[Aimbot]
-  - Physics-based targeting with ballistic prediction
-  - Hold right-click to lock onto targets
-  - Customizable FOV, smoothing, and sensitivity
-  - Team check and visibility check
-  - Target priority (closest, head, torso, etc.)
-  - Works with AR2-style games
-
-[Silent Aim]
-  - Metamethod hooks for Mouse.Target, Mouse.Hit
-  - Raycast redirection (Workspace:Raycast, FindPartOnRay, etc.)
-  - Camera method hooks (WorldToViewportPoint, etc.)
-  - Accuracy/hit chance control
-  - Independent FOV and settings
-
-[Trigger Bot]
-  - Auto-fire when enemy in crosshair
-  - Continuous fire mode
-  - Activation delay
-  - Independent FOV and settings
-
-[ESP]
-  - Player nametags with distance
-  - Tracers from bottom of screen
-  - Color-coded by distance
-  - Closest player highlighted in pink
-
-[Closest Player Tracker]
-  - Standalone display at top center
-  - Shows nearest player name and distance
-  - Minimizable with button
-  - Pink theme matching ESP
-
-[Performance]
-  - Real-time FPS counter
-  - Ping display
-  - Player count
-  - Optimized distance calculations
-  - Smart ESP update frequency
-
-[UI]
-  - Draggable window
-  - Minimize/maximize buttons
-  - Organized sections with toggles and sliders
-  - Clean, minimal styling
-
-================================================================================
-]]--
-
 -- Version identifier
 local VERSION = "2.3.5"
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -780,6 +633,10 @@ local function CreateClosestPlayerTracker()
             minimizeBtn.Text = "−"
         end
     end)
+    
+    if UI.MakeDraggable then
+        UI.MakeDraggable(ClosestPlayerTrackerLabel)
+    end
 end
 
 -- Update Nearest Player (finds closest player once)
@@ -991,11 +848,13 @@ end
 -- ============================================================
 
 local PerformanceLabel
+local PerfMinimized = false
+local PerfOriginalSize = UDim2.fromOffset(180, 95)
 
 local function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("TextLabel")
     PerformanceLabel.Name = "PerformanceDisplay"
-    PerformanceLabel.Size = UDim2.fromOffset(180, 95)
+    PerformanceLabel.Size = PerfOriginalSize
     PerformanceLabel.Position = UDim2.new(1, -190, 0, 10)
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     PerformanceLabel.BackgroundTransparency = 0.3
@@ -1015,6 +874,42 @@ local function CreatePerformanceDisplay(parent)
     padding.PaddingLeft = UDim.new(0, 8)
     padding.PaddingTop = UDim.new(0, 4)
     padding.Parent = PerformanceLabel
+
+    -- Minimize Button
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Name = "Minimize"
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    minimizeBtn.BackgroundTransparency = 0.5
+    minimizeBtn.Size = UDim2.fromOffset(16, 16)
+    minimizeBtn.Position = UDim2.new(1, -20, 0, 4)
+    minimizeBtn.Text = "-"
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.TextSize = 12
+    minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.Parent = PerformanceLabel
+
+    local mCorner = Instance.new("UICorner")
+    mCorner.CornerRadius = UDim.new(0, 4)
+    mCorner.Parent = minimizeBtn
+
+    minimizeBtn.MouseButton1Click:Connect(function()
+        PerfMinimized = not PerfMinimized
+        if PerfMinimized then
+            PerformanceLabel.Size = UDim2.fromOffset(180, 24)
+            PerformanceLabel.TextYAlignment = Enum.TextYAlignment.Center
+            PerformanceLabel.Text = "Performance Stats"
+            minimizeBtn.Text = "+"
+        else
+            PerformanceLabel.Size = PerfOriginalSize
+            PerformanceLabel.TextYAlignment = Enum.TextYAlignment.Top
+            minimizeBtn.Text = "-"
+        end
+    end)
+
+    if UI.MakeDraggable then
+        UI.MakeDraggable(PerformanceLabel)
+    end
 end
 
 local function UpdatePerformanceDisplay()
@@ -1208,39 +1103,76 @@ function UI.CreateWindow(title)
     ContentArea.Size = UDim2.new(1, -170, 1, -20)
     ContentArea.Position = UDim2.new(0, 170, 0, 10)
     ContentArea.BackgroundTransparency = 1
-    ContentArea.Info.Parent = MainFrame
+    ContentArea.ClipsDescendants = true
+    ContentArea.Parent = MainFrame
     
     UIState.MainFrame = MainFrame
     UIState.ContentArea = ContentArea
     UIState.TabContainer = TabContainer
 
-    -- Dragging Logic
-    local dragging, dragInput, dragStart, startPos
-    MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    MainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            -- Use Tween for smooth dragging
-            TweenService:Create(MainFrame, TweenInfo.new(0.05), {
-                Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            }):Play()
+    -- Dragging Logic Helper
+    local function MakeDraggable(Frame)
+        local dragging, dragInput, dragStart, startPos
+        Frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = Frame.Position
+                
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+        Frame.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                dragInput = input
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                TweenService:Create(Frame, TweenInfo.new(0.05), {
+                    Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                }):Play()
+            end
+        end)
+    end
+    UI.MakeDraggable = MakeDraggable
+
+    MakeDraggable(MainFrame)
+
+    -- Minimize Button (Main Window)
+    local MinButton = Instance.new("TextButton")
+    MinButton.Name = "Minimize"
+    MinButton.Size = UDim2.new(0, 30, 0, 30)
+    MinButton.Position = UDim2.new(1, -30, 0, 0)
+    MinButton.BackgroundTransparency = 1
+    MinButton.Text = "-"
+    MinButton.Font = Enum.Font.GothamBold
+    MinButton.TextSize = 20
+    MinButton.TextColor3 = UI_THEME.TextDark
+    MinButton.Parent = MainFrame
+
+    local Minimized = false
+    local OldSize = UDim2.fromOffset(600, 400)
+    
+    MinButton.MouseButton1Click:Connect(function()
+        Minimized = not Minimized
+        if Minimized then
+            OldSize = MainFrame.Size
+            TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(600, 30)}):Play()
+            ContentArea.Visible = false
+            Sidebar.Visible = false
+            MinButton.Text = "+"
+        else
+            TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = OldSize}):Play()
+            task.wait(0.1)
+            ContentArea.Visible = true
+            Sidebar.Visible = true
+            MinButton.Text = "-"
         end
     end)
 
@@ -1249,11 +1181,10 @@ function UI.CreateWindow(title)
         if input.KeyCode == Enum.KeyCode.RightShift then
             UIState.Visible = not UIState.Visible
             MainFrame.Visible = UIState.Visible
-            -- Optional: Add tweening for open/close
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
                 MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = UDim2.fromOffset(600, 400)}):Play()
+                TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
             end
         end
     end)
@@ -1311,7 +1242,7 @@ function UI.CreateTab(name, icon)
     padding.Parent = Page
 
     -- Tab Selection Logic
-    TabButton.MouseButton1Click:Connect(function()
+    local function SelectTab()
         -- Deselect all
         for _, t in pairs(UIState.Tabs) do
             TweenService:Create(t.Label, TweenInfo.new(0.2), {TextColor3 = UI_THEME.TextDark}):Play()
@@ -1323,14 +1254,16 @@ function UI.CreateTab(name, icon)
         TweenService:Create(Indicator, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
         Page.Visible = true
         UIState.CurrentTab = name
-    end)
+    end
+
+    TabButton.MouseButton1Click:Connect(SelectTab)
     
     -- Register
     table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page})
     
     -- Auto-select first tab
     if #UIState.Tabs == 1 then
-        TabButton.MouseButton1Click:Fire()
+        SelectTab()
     end
 
     return Page
@@ -1567,6 +1500,10 @@ end
 
 -- Create Main Window
 local Window = UI.CreateWindow("Grub Cheat Suite")
+
+-- Initialize HUD Elements
+CreatePerformanceDisplay(ScreenGui)
+CreateClosestPlayerTracker()
 
 -- Create Tabs
 local AimTab = UI.CreateTab("Aimbot")
