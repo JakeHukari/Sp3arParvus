@@ -1656,7 +1656,7 @@ local function Cleanup()
 end
 
 -- Create Main Window
-local Window = UI.CreateWindow("Grub Cheat Suite")
+local Window = UI.CreateWindow("Sp3arParvusV2")
 
 -- Initialize HUD Elements
 CreatePerformanceDisplay(ScreenGui)
