@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.3.5"
+local VERSION = "2.4.3" -- FIXED: LockCenter mode + viewport center
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -708,23 +708,28 @@ do
     end
 end
 
--- FPS counter setup
-local function SetupFPS()
-    local StartTime, TimeTable, LastTime = os.clock(), {}, nil
-
-    return function()
-        LastTime = os.clock()
-
-        for Index = #TimeTable, 1, -1 do
-            TimeTable[Index + 1] = TimeTable[Index] >= LastTime - 1 and TimeTable[Index] or nil
+-- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
+local GetFPS
+do
+    local frameCount = 0
+    local lastTime = os.clock()
+    local cachedFPS = 60
+    local updateInterval = 0.25 -- Update every 250ms instead of every frame
+    
+    GetFPS = function()
+        frameCount = frameCount + 1
+        local now = os.clock()
+        local elapsed = now - lastTime
+        
+        if elapsed >= updateInterval then
+            cachedFPS = frameCount / elapsed
+            frameCount = 0
+            lastTime = now
         end
-
-        TimeTable[1] = LastTime
-        return os.clock() - StartTime >= 1 and #TimeTable or #TimeTable / (os.clock() - StartTime)
+        
+        return cachedFPS
     end
 end
-
-local GetFPS = SetupFPS()
 
 -- Rejoin current server
 local function Rejoin()
@@ -808,10 +813,38 @@ end
 -- PHYSICS & BALLISTICS
 -- ============================================================
 
--- Solve projectile trajectory with gravity
+-- Maximum reasonable velocity magnitude (studs/second) - prevents aim snapping to sky
+local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
+
+-- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
 local function SolveTrajectory(origin, velocity, time, gravity)
+    -- Safety check for NaN or zero velocity
+    local velocityMagnitude = velocity.Magnitude
+    if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 then
+        -- NaN check (NaN ~= NaN is true) or zero velocity - just return origin
+        return origin
+    end
+    
+    -- Clamp time to reasonable values (prevents extreme predictions at long range)
+    time = min(time, 1.0) -- Max 1 second of prediction
+    
+    -- Clamp velocity magnitude to prevent extreme predictions
+    if velocityMagnitude > MAX_TARGET_VELOCITY then
+        -- Scale down to max velocity while keeping direction
+        velocity = velocity.Unit * MAX_TARGET_VELOCITY
+    end
+    
+    -- Calculate predicted position
     local gravityVector = Vector3.new(0, -gravity * time * time / GravityCorrection, 0)
-    return origin + velocity * time + gravityVector
+    local predictedPosition = origin + velocity * time + gravityVector
+    
+    -- Sanity check: if predicted position is too far from origin, return original
+    local predictionOffset = (predictedPosition - origin).Magnitude
+    if predictionOffset > 200 then -- Max 200 studs offset from actual position
+        return origin -- Fall back to actual position
+    end
+    
+    return predictedPosition
 end
 
 -- ============================================================
@@ -875,36 +908,37 @@ local function ObjectOccluded(Enabled, Origin, Position, Object)
     return Raycast(Origin, Position - Origin, {Object, LocalPlayer.Character})
 end
 
--- EXACT GetClosest function from working Parvus (Optimized)
+-- OPTIMIZED: Reusable result table to avoid allocations per frame
+local ClosestResult = {nil, nil, nil, nil}
+local TempScreenPos = Vector2.new(0, 0)
+
+-- GetClosest function (OPTIMIZED - reduced allocations, early-out checks)
 local function GetClosest(Enabled,
     TeamCheck, VisibilityCheck, DistanceCheck,
     DistanceLimit, FieldOfView, Priority, BodyParts,
     PredictionEnabled
 )
-    if not Enabled then return end
-    local CameraPosition, Closest = Camera.CFrame.Position, nil
+    if not Enabled then return nil end
     
-    -- Optimization: Pre-calculate mouse location once
+    local CameraPosition = Camera.CFrame.Position
     local MouseLocation = UserInputService:GetMouseLocation()
+    local ClosestMagnitude = FieldOfView
+    local hasResult = false
 
-    for Index, Player in ipairs(Players:GetPlayers()) do
+    for _, Player in ipairs(Players:GetPlayers()) do
         if Player == LocalPlayer then continue end
-
-        -- Optimization: Quick team check before character search (if possible)
-        -- Note: We need character for Squad check, so we do standard checks first
-        if LocalPlayer.Team and Player.Team and LocalPlayer.Team == Player.Team and TeamCheck then
-             -- Simple team check failed, might still be squad, but usually good enough to skip if strictly simple teams
-             -- But we'll stick to full check to be safe
-        end
 
         local Character, RootPart = GetCharacter(Player)
         if not Character or not RootPart then continue end
         if not InEnemyTeam(TeamCheck, Player) then continue end
 
-        -- Optimization: Quick Distance Check using RootPart
-        -- Avoids iterating bodyparts if player is wildly out of range
+        -- Quick distance pre-check using RootPart (avoids body part iteration)
         local rootDist = (RootPart.Position - CameraPosition).Magnitude
         if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
+
+        -- Quick screen check - skip if root is not even on screen
+        local rootScreenPos, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        if not rootOnScreen then continue end
 
         if Priority == "Random" then
             local BodyPart = Character:FindFirstChild(BodyParts[math.random(#BodyParts)])
@@ -913,21 +947,27 @@ local function GetClosest(Enabled,
             local BodyPartPosition = BodyPart.Position
             local Distance = (BodyPartPosition - CameraPosition).Magnitude
             
-            -- Strict distance check on actual body part
             if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
 
-            BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
-            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
+            if PredictionEnabled then
+                BodyPartPosition = SolveTrajectory(BodyPartPosition,
+                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+            end
+            
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
+            
+            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
+            if Magnitude >= ClosestMagnitude then continue end
 
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
-            if Magnitude >= FieldOfView then continue end
-
-            return {Player, Character, BodyPart, ScreenPosition}
+            -- Update reusable result
+            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
+            ClosestResult[4] = Vector2.new(screenX, screenY)
+            return ClosestResult
+            
         elseif Priority ~= "Closest" then
             local BodyPart = Character:FindFirstChild(Priority)
             if not BodyPart then continue end
@@ -935,24 +975,29 @@ local function GetClosest(Enabled,
             local BodyPartPosition = BodyPart.Position
             local Distance = (BodyPartPosition - CameraPosition).Magnitude
             
-             -- Strict distance check
             if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
 
-            BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
-            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
+            if PredictionEnabled then
+                BodyPartPosition = SolveTrajectory(BodyPartPosition,
+                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+            end
+            
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
+
+            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
+            if Magnitude >= ClosestMagnitude then continue end
 
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
-            if Magnitude >= FieldOfView then continue end
-
-            return {Player, Character, BodyPart, ScreenPosition}
+            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
+            ClosestResult[4] = Vector2.new(screenX, screenY)
+            return ClosestResult
         end
 
-        for Index, BodyPartName in ipairs(BodyParts) do
+        -- Priority == "Closest" path
+        for _, BodyPartName in ipairs(BodyParts) do
             local BodyPart = Character:FindFirstChild(BodyPartName)
             if not BodyPart then continue end
 
@@ -961,34 +1006,82 @@ local function GetClosest(Enabled,
             
             if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
             
-            BodyPartPosition = PredictionEnabled and SolveTrajectory(BodyPartPosition,
-            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity) or BodyPartPosition
+            if PredictionEnabled then
+                BodyPartPosition = SolveTrajectory(BodyPartPosition,
+                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+            end
+            
             local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            ScreenPosition = Vector2.new(ScreenPosition.X, ScreenPosition.Y)
             if not OnScreen then continue end
+
+            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
+            if Magnitude >= ClosestMagnitude then continue end
 
             if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
 
-            local Magnitude = (ScreenPosition - MouseLocation).Magnitude
-            if Magnitude >= FieldOfView then continue end
-
-            FieldOfView, Closest = Magnitude, {Player, Character, BodyPart, ScreenPosition}
+            ClosestMagnitude = Magnitude
+            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
+            ClosestResult[4] = Vector2.new(screenX, screenY)
+            hasResult = true
         end
     end
 
-    return Closest
+    return hasResult and ClosestResult or nil
 end
 
--- EXACT AimAt function from working Parvus
+-- AimAt function (FIXED - handles mouse-locked mode properly)
 local function AimAt(Hitbox, Sensitivity)
     if not Hitbox then return end
     if not mousemoverel then return end
-    local MouseLocation = UserInputService:GetMouseLocation()
-
-    mousemoverel(
-        (Hitbox[4].X - MouseLocation.X) * Sensitivity,
-        (Hitbox[4].Y - MouseLocation.Y) * Sensitivity
-    )
+    
+    -- Get the body part from hitbox
+    local BodyPart = Hitbox[3]
+    if not BodyPart or not BodyPart.Parent then return end
+    
+    -- Get FRESH world position (not cached screen position)
+    local BodyPartPosition = BodyPart.Position
+    
+    -- Apply prediction if enabled (same logic as GetClosest)
+    if Flags["Aimbot/Prediction"] then
+        local CameraPosition = Camera.CFrame.Position
+        local Distance = (BodyPartPosition - CameraPosition).Magnitude
+        BodyPartPosition = SolveTrajectory(BodyPartPosition,
+            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+    end
+    
+    -- Calculate FRESH screen position from current camera
+    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+    
+    -- Safety check - don't aim at targets behind camera
+    -- WorldToViewportPoint returns Z < 0 for points behind camera
+    if not OnScreen or ScreenPosition.Z < 0 then return end
+    
+    -- Determine mouse/crosshair location based on mouse behavior
+    local MouseLocation
+    local mouseBehavior = UserInputService.MouseBehavior
+    
+    -- In LockCenter mode (shift-lock/first-person), use viewport center directly
+    -- This avoids stale GetMouseLocation() during mode transitions
+    if mouseBehavior == Enum.MouseBehavior.LockCenter then
+        local viewportSize = Camera.ViewportSize
+        MouseLocation = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+    else
+        MouseLocation = UserInputService:GetMouseLocation()
+    end
+    
+    -- Calculate delta movement
+    local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
+    local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
+    
+    -- Sanity check - prevent extreme movements (likely error or edge case)
+    -- 180-degree spin would require moving roughly half the screen width
+    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.3 -- 30% of screen
+    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
+        return -- Skip this frame, let aim catch up naturally
+    end
+    
+    mousemoverel(deltaX, deltaY)
 end
 
 -- ============================================================
@@ -1499,39 +1592,58 @@ local function UpdatePerformanceDisplay()
 end
 
 -- ============================================================
--- MAIN INITIALIZATION
+-- MAIN INITIALIZATION & CLEANUP
 -- ============================================================
 
--- ============================================================
--- MAIN INITIALIZATION
--- ============================================================
-
--- Cleanup Function
+-- Cleanup Function (FIXED - properly clears global state for reload)
 local function Cleanup()
     Sp3arParvus.Active = false
 
-    -- Disconnect connections
+    -- Disconnect all tracked connections
     for _, conn in pairs(Sp3arParvus.Connections) do
-        if conn then conn:Disconnect() end
+        pcall(function()
+            if conn then conn:Disconnect() end
+        end)
     end
     table.clear(Sp3arParvus.Connections)
 
-    -- Cancel threads
+    -- Cancel all tracked threads
     for _, thread in pairs(Sp3arParvus.Threads) do
-        if thread then task.cancel(thread) end
+        pcall(function()
+            if thread then task.cancel(thread) end
+        end)
     end
     table.clear(Sp3arParvus.Threads)
 
-    -- Cleanup Visuals
-    if ScreenGui then ScreenGui:Destroy() end
+    -- Cleanup UI
+    if ScreenGui then 
+        pcall(function() ScreenGui:Destroy() end)
+        ScreenGui = nil
+    end
     
-    for _, espData in pairs(ESPObjects) do
-        if espData.Nametag then espData.Nametag:Destroy() end
-        if espData.Tracer then espData.Tracer:Remove() end
+    -- Cleanup ESP objects
+    for player, espData in pairs(ESPObjects) do
+        pcall(function()
+            if espData.Nametag then espData.Nametag:Destroy() end
+            if espData.Tracer then espData.Tracer:Remove() end
+        end)
     end
     table.clear(ESPObjects)
 
-    warn("[Sp3arParvus] Script Unloaded!")
+    -- Reset module-level state
+    SilentAim = nil
+    Aimbot = false
+    Trigger = false
+    CachedTarget = nil
+    NearestPlayerRef = nil
+    PerformanceLabel = nil
+    ClosestPlayerTrackerLabel = nil
+
+    -- CRITICAL: Clear the global environment flag so script can be reloaded
+    local globalEnv = getgenv and getgenv() or _G
+    rawset(globalEnv, "Sp3arParvusV2", nil)
+
+    warn("[Sp3arParvus] Script Unloaded! You can now reload the script.")
 end
 
 -- Create Main Window
@@ -1603,118 +1715,87 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player) RemoveESP(player
 -- MAIN UPDATE LOOPS
 -- ============================================================
 
--- Aimbot Keybind (Hold RMB)
+-- CONSOLIDATED Input Handler (was 4 separate connections causing duplicate processing)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+    -- Handle RMB for Aimbot/Trigger (only when not processed by game)
+    if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = Flags["Aimbot/Enabled"]
+        Trigger = Flags["Trigger/Enabled"]
     end
 end))
-TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
+
+-- CONSOLIDATED InputEnded Handler (was 3 separate connections)
+TrackConnection(UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = false
-    end
-end))
-
--- Trigger Keybind (Hold RMB)
-TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Trigger = Flags["Trigger/Enabled"]
-    end
-end))
-TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Trigger = false
-    end
-end))
-TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Trigger = Flags["Trigger/Enabled"]
-    end
-
-    -- UI Toggle keybind (Right Shift)
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        UIVisible = not UIVisible
-        if MainFrame then
-            MainFrame.Visible = UIVisible
-        end
-        if PerformanceLabel then
-            PerformanceLabel.Visible = UIVisible and Flags["Performance/Enabled"]
-        end
-        if ClosestPlayerTrackerLabel then
-            ClosestPlayerTrackerLabel.Visible = UIVisible and Flags["ESP/Enabled"]
-        end
-    end
-end))
-
-TrackConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Trigger = false
     end
 end))
 
--- Aimbot & Silent Aim update loop (Optimized - RenderStepped)
--- Replaced separate while loops with a single synced RenderStepped connection for smoothness and performance
+-- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
+-- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
+local CachedTarget = nil
+local CachedTargetTime = 0
+local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
+
+local function GetCachedTarget()
+    local now = os.clock()
+    if CachedTarget and (now - CachedTargetTime) < TARGET_CACHE_DURATION then
+        return CachedTarget
+    end
+    
+    -- Use broadest settings to find targets (Aimbot settings as primary)
+    CachedTarget = GetClosest(
+        Flags["Aimbot/Enabled"] or Flags["SilentAim/Enabled"] or Flags["Trigger/Enabled"],
+        Flags["Aimbot/TeamCheck"],
+        Flags["Aimbot/VisibilityCheck"],
+        Flags["Aimbot/DistanceCheck"],
+        Flags["Aimbot/DistanceLimit"],
+        max(Flags["Aimbot/FOV/Radius"], Flags["SilentAim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
+        Flags["Aimbot/Priority"],
+        Flags["Aimbot/BodyParts"],
+        Flags["Aimbot/Prediction"]
+    )
+    CachedTargetTime = now
+    return CachedTarget
+end
+
+-- Aimbot & Silent Aim update loop (OPTIMIZED - uses cached target)
 local function UpdateAimAndSilent()
     if not Sp3arParvus.Active then return end
 
-    -- Silent Aim
+    -- Get cached target (single GetClosest call per frame)
+    local target = GetCachedTarget()
+    
+    -- Silent Aim uses cached target
     if Flags["SilentAim/Enabled"] then
-        SilentAim = GetClosest(
-            true,
-            Flags["SilentAim/TeamCheck"],
-            Flags["SilentAim/VisibilityCheck"],
-            Flags["SilentAim/DistanceCheck"],
-            Flags["SilentAim/DistanceLimit"],
-            Flags["SilentAim/FOV/Radius"],
-            Flags["SilentAim/Priority"],
-            Flags["SilentAim/BodyParts"],
-            Flags["SilentAim/Prediction"]
-        )
+        SilentAim = target
     else
         SilentAim = nil
     end
 
-    -- Aimbot
-    if Aimbot or Flags["Aimbot/AlwaysEnabled"] then
-        local target = GetClosest(
-            Flags["Aimbot/Enabled"],
-            Flags["Aimbot/TeamCheck"],
-            Flags["Aimbot/VisibilityCheck"],
-            Flags["Aimbot/DistanceCheck"],
-            Flags["Aimbot/DistanceLimit"],
-            Flags["Aimbot/FOV/Radius"],
-            Flags["Aimbot/Priority"],
-            Flags["Aimbot/BodyParts"],
-            Flags["Aimbot/Prediction"]
-        )
+    -- Aimbot uses cached target
+    if (Aimbot or Flags["Aimbot/AlwaysEnabled"]) and target then
         AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
     end
 end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
 
--- Trigger bot loop (EXACT CODE FROM WORKING PARVUS)
+-- Trigger bot loop (FIXED - maintains fire while target is alive)
 local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
         if Trigger or Flags["Trigger/AlwaysEnabled"] then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
-                local TriggerClosest = GetClosest(
-                    Flags["Trigger/Enabled"],
-                    Flags["Trigger/TeamCheck"],
-                    Flags["Trigger/VisibilityCheck"],
-                    Flags["Trigger/DistanceCheck"],
-                    Flags["Trigger/DistanceLimit"],
-                    Flags["Trigger/FOV/Radius"],
-                    Flags["Trigger/Priority"],
-                    Flags["Trigger/BodyParts"],
-                    Flags["Trigger/Prediction"]
-                )
+                -- Get initial target
+                local TriggerClosest = GetCachedTarget()
 
                 if TriggerClosest then
+                    -- Store the target player reference for tracking
+                    local lockedPlayer = TriggerClosest[1]
+                    local lockedCharacter = TriggerClosest[2]
+                    
                     task.wait(Flags["Trigger/Delay"])
                     mouse1press()
 
@@ -1723,19 +1804,20 @@ local triggerThread = task.spawn(function()
                         while Sp3arParvus.Active and iterations < MAX_TRIGGER_ITERATIONS do
                             iterations = iterations + 1
                             task.wait()
-                            TriggerClosest = GetClosest(
-                                Flags["Trigger/Enabled"],
-                                Flags["Trigger/TeamCheck"],
-                                Flags["Trigger/VisibilityCheck"],
-                                Flags["Trigger/DistanceCheck"],
-                                Flags["Trigger/DistanceLimit"],
-                                Flags["Trigger/FOV/Radius"],
-                                Flags["Trigger/Priority"],
-                                Flags["Trigger/BodyParts"],
-                                Flags["Trigger/Prediction"]
-                            )
+                            
+                            -- Check if locked target is still valid and alive (cheaper than GetClosest)
+                            local targetStillValid = false
+                            if lockedPlayer and lockedPlayer.Parent then
+                                local character, rootPart = GetCharacter(lockedPlayer)
+                                if character and rootPart then
+                                    targetStillValid = true
+                                    -- Update character reference in case it changed
+                                    lockedCharacter = character
+                                end
+                            end
 
-                            if not TriggerClosest or not Trigger then break end
+                            -- Break if target died, player left, or trigger released
+                            if not targetStillValid or not Trigger then break end
                         end
 
                         if iterations >= MAX_TRIGGER_ITERATIONS then
@@ -1753,17 +1835,23 @@ local triggerThread = task.spawn(function()
 end)
 TrackThread(triggerThread)
 
--- ESP update loop (optimized - single pass for closest player)
--- ESP update loop (Optimized - RenderStepped)
+-- ESP update loop (OPTIMIZED - throttled updates, no per-frame player iteration)
 local lastEspUpdate = 0
-local espUpdateRate = 0.1 -- 100 stud radius check every 100ms
+local espUpdateRate = 0.033 -- ~30 FPS for ESP (half rate = major performance gain)
+local lastTrackerUpdate = 0
+local trackerUpdateRate = 0.1 -- Tracker updates at 10 FPS
 
 local function UpdateESPStep()
     if not Sp3arParvus.Active then return end
+    if not Flags["ESP/Enabled"] then return end
     
-    -- Frequent updates (Visuals - every frame)
-    if Flags["ESP/Enabled"] then
-        -- Update all visuals immediately aligned with frame
+    local now = os.clock()
+    
+    -- ESP visual updates at 30 FPS (still smooth, but half the work)
+    if now - lastEspUpdate > espUpdateRate then
+        lastEspUpdate = now
+        
+        -- Update ESP for all players
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 UpdateESP(player, player == NearestPlayerRef)
@@ -1771,17 +1859,11 @@ local function UpdateESPStep()
         end
     end
 
-    -- Throttled updates (Calculations)
-    local now = os.clock()
-    if now - lastEspUpdate > espUpdateRate then
-        lastEspUpdate = now
-        
-        if Flags["ESP/Enabled"] then
-            -- Update nearest player reference
-            UpdateNearestPlayer()
-            -- Update closest player tracker display
-            UpdateClosestPlayerTracker()
-        end
+    -- Tracker updates at 10 FPS (doesn't need to be fast)
+    if now - lastTrackerUpdate > trackerUpdateRate then
+        lastTrackerUpdate = now
+        UpdateNearestPlayer()
+        UpdateClosestPlayerTracker()
     end
 end
 
