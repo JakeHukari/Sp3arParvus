@@ -818,6 +818,9 @@ local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legi
 
 -- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
 local function SolveTrajectory(origin, velocity, time, gravity)
+    -- Safety check for NaN in time
+    if time ~= time then return origin end
+
     -- Safety check for NaN or zero velocity
     local velocityMagnitude = velocity.Magnitude
     if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 then
@@ -840,7 +843,8 @@ local function SolveTrajectory(origin, velocity, time, gravity)
     
     -- Sanity check: if predicted position is too far from origin, return original
     local predictionOffset = (predictedPosition - origin).Magnitude
-    if predictionOffset > 200 then -- Max 200 studs offset from actual position
+    -- Fix: NaN check (NaN > 200 is false in Lua, so we must explicitly check for NaN)
+    if predictionOffset ~= predictionOffset or predictionOffset > 200 then 
         return origin -- Fall back to actual position
     end
     
@@ -1073,6 +1077,11 @@ local function AimAt(Hitbox, Sensitivity)
     -- Calculate delta movement
     local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
     local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
+    
+    -- NaN Safety Check: If delta is invalid, abort immediately
+    if deltaX ~= deltaX or deltaY ~= deltaY then
+        return
+    end
     
     -- Sanity check - prevent extreme movements (likely error or edge case)
     -- 180-degree spin would require moving roughly half the screen width
