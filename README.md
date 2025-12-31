@@ -9,6 +9,6 @@ Sp3arParvus provides the user a powerful ingame menu that provides esp, tracing,
 
 This script works universally on any roblox game that uses regular player models.
 
-**For educational and development purposes only**
+**For educational and development purposes only 😉**
 
 Special thanks to @AlexR32, original author of Parvus
