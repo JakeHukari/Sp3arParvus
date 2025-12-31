@@ -5,9 +5,9 @@
 > This version combines everything into a single file with comprehensive error handling, making it the most reliable way to run Parvus.
 
 ---
-Sp3arParvus gives the user a powerful ingame menu that provides esp, tracing, and aimbot.
+Sp3arParvus provides the user a powerful ingame menu that provides esp, tracing, and aimbot once executed.
 
-This works universally on any roblox game that uses regular player models.
+This script works universally on any roblox game that uses regular player models.
 
 **For educational and development purposes only**
 
