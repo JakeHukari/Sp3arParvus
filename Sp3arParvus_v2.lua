@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.5.2" -- Fixed inconsistencies, ready for new features
+local VERSION = "2.6.0" -- SIMPLIFIED: Removed broken snap prevention, basic aimbot should work
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -28,6 +28,7 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
+local GuiService = game:GetService("GuiService")
 
 -- Utility to resolve enums that may have been renamed by Roblox updates
 local function ResolveEnumItem(enumContainer, possibleNames)
@@ -101,7 +102,7 @@ local Flags = {
     -- Aimbot
     ["Aimbot/Enabled"] = true,
     ["Aimbot/AlwaysEnabled"] = true,
-    ["Aimbot/Prediction"] = true,
+    ["Aimbot/Prediction"] = false,
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/DistanceCheck"] = true,
     ["Aimbot/VisibilityCheck"] = true,
@@ -841,7 +842,8 @@ local function SolveTrajectory(origin, velocity, time, gravity)
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / GravityCorrection, 0)
+    -- FIX: Gravity vector must be POSITIVE to aim UP (compensating for bullet drop)
+    local gravityVector = Vector3.new(0, gravity * time * time / GravityCorrection, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
     -- Sanity check: if predicted position is too far from origin, return original
@@ -928,7 +930,7 @@ local function GetClosest(Enabled,
     if not Enabled then return nil end
     
     local CameraPosition = Camera.CFrame.Position
-    local MouseLocation = UserInputService:GetMouseLocation()
+    local MouseLocation = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
     local ClosestMagnitude = FieldOfView
     local hasResult = false
 
@@ -1038,82 +1040,20 @@ local function GetClosest(Enabled,
 end
 
 -- ============================================================
--- AIMBOT SNAP-FIX STATE TRACKING
+-- AimAt function (SIMPLIFIED - removed broken snap prevention)
 -- ============================================================
--- These variables track state to prevent the 180-degree snap issue
-local AimState = {
-    lastMouseBehavior = nil,         -- Detect mode transitions
-    modeChangeTime = 0,              -- When mode last changed
-    lastTargetPlayer = nil,          -- Track target changes
-    targetChangeTime = 0,            -- When target last changed
-    lastDeltaX = 0,                  -- Previous frame delta (for velocity limiting)
-    lastDeltaY = 0,
-    framesSinceTargetChange = 0,     -- Count frames since target switch
-    isFirstAimFrame = true,          -- Skip very first aim frame after load
-}
-
--- Constants for snap prevention
-local MODE_TRANSITION_COOLDOWN = 0.05   -- 50ms cooldown after mouse mode change (reduced from 100ms)
-local TARGET_TRANSITION_RAMP_FRAMES = 2 -- Ramp up sensitivity over 2 frames when switching targets
-local MAX_DELTA_VELOCITY = 200          -- Max change in delta per frame (increased for better tracking)
-
--- AimAt function (FIXED v2.5 - comprehensive snap prevention)
 local function AimAt(Hitbox, Sensitivity)
     if not Hitbox then return end
     if not mousemoverel then return end
-    
-    -- Skip the very first aim frame after script load (often has stale data)
-    if AimState.isFirstAimFrame then
-        AimState.isFirstAimFrame = false
-        return
-    end
     
     -- Get the body part from hitbox
     local BodyPart = Hitbox[3]
     if not BodyPart or not BodyPart.Parent then return end
     
-    local TargetPlayer = Hitbox[1]
-    local now = os.clock()
-    
-    -- ================================================================
-    -- FIX #1: Mode Transition Detection
-    -- Skip aiming during mouse behavior transitions (prevents stale data)
-    -- ================================================================
-    local currentBehavior = UserInputService.MouseBehavior
-    if currentBehavior ~= AimState.lastMouseBehavior then
-        AimState.lastMouseBehavior = currentBehavior
-        AimState.modeChangeTime = now
-        -- Reset delta tracking on mode change
-        AimState.lastDeltaX = 0
-        AimState.lastDeltaY = 0
-        return -- Skip this frame, mouse location may be stale
-    end
-    
-    -- Cooldown after mode change
-    if (now - AimState.modeChangeTime) < MODE_TRANSITION_COOLDOWN then
-        return
-    end
-    
-    -- ================================================================
-    -- FIX #2: Target Transition Detection
-    -- Reset delta tracking when switching targets (prevents stale delta comparison)
-    -- ================================================================
-    if TargetPlayer ~= AimState.lastTargetPlayer then
-        AimState.lastTargetPlayer = TargetPlayer
-        AimState.targetChangeTime = now
-        AimState.framesSinceTargetChange = 0
-        -- Reset delta tracking on target change to prevent velocity limiting from using stale data
-        AimState.lastDeltaX = 0
-        AimState.lastDeltaY = 0
-        -- DON'T skip frame - just continue with fresh delta tracking
-    end
-    
-    AimState.framesSinceTargetChange = AimState.framesSinceTargetChange + 1
-    
-    -- Get FRESH world position (not cached screen position)
+    -- Get world position of target
     local BodyPartPosition = BodyPart.Position
     
-    -- Apply prediction if enabled (same logic as GetClosest)
+    -- Apply prediction if enabled
     if Flags["Aimbot/Prediction"] then
         local CameraPosition = Camera.CFrame.Position
         local Distance = (BodyPartPosition - CameraPosition).Magnitude
@@ -1121,75 +1061,39 @@ local function AimAt(Hitbox, Sensitivity)
             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
     end
     
-    -- Calculate FRESH screen position from current camera
+    -- Convert world position to screen position
     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
     
-    -- Safety check - don't aim at targets behind camera
-    -- WorldToViewportPoint returns Z < 0 for points behind camera
+    -- Don't aim at targets behind camera or off-screen
     if not OnScreen or ScreenPosition.Z < 0 then return end
     
-    -- Determine mouse/crosshair location based on mouse behavior
+    -- Get crosshair position based on mouse mode
+    local viewportSize = Camera.ViewportSize
     local MouseLocation
-    local mouseBehavior = UserInputService.MouseBehavior
     
-    -- In LockCenter mode (shift-lock/first-person), use viewport center directly
-    -- This avoids stale GetMouseLocation() during mode transitions
-    if mouseBehavior == Enum.MouseBehavior.LockCenter then
-        local viewportSize = Camera.ViewportSize
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
         MouseLocation = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
     else
-        MouseLocation = UserInputService:GetMouseLocation()
+        MouseLocation = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
     end
     
-    -- Calculate raw delta movement
-    local rawDeltaX = (ScreenPosition.X - MouseLocation.X)
-    local rawDeltaY = (ScreenPosition.Y - MouseLocation.Y)
+    -- Calculate delta to move cursor from crosshair to target
+    -- RESTORED: Sensitivity is a multiplier (0.3 = 30% movement per frame)
+    -- This provides smooth interpolation toward the target
+    local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
+    local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
     
-    -- NaN Safety Check: If delta is invalid, abort immediately
-    if rawDeltaX ~= rawDeltaX or rawDeltaY ~= rawDeltaY then
-        return
-    end
+    -- NaN Safety Check
+    if deltaX ~= deltaX or deltaY ~= deltaY then return end
     
-    -- ================================================================
-    -- FIX #3: Delta Velocity Limiting (Option B from bug report)
-    -- Prevent sudden large changes in delta between frames
-    -- ================================================================
-    local deltaChangeX = abs(rawDeltaX - AimState.lastDeltaX)
-    local deltaChangeY = abs(rawDeltaY - AimState.lastDeltaY)
+    -- SAFETY CLAMP: Prevent extreme snaps (e.g. 180 flips)
+    -- If the aimbot tries to move more than 100 pixels in one frame, clamp it.
+    -- This prevents glitches when teleports or respawns happen.
+    local MAX_DELTA = 100
+    deltaX = math.clamp(deltaX, -MAX_DELTA, MAX_DELTA)
+    deltaY = math.clamp(deltaY, -MAX_DELTA, MAX_DELTA)
     
-    if deltaChangeX > MAX_DELTA_VELOCITY or deltaChangeY > MAX_DELTA_VELOCITY then
-        -- Large sudden change detected - interpolate towards new delta gradually
-        -- Using 0.5 factor for faster convergence while still preventing snap
-        rawDeltaX = AimState.lastDeltaX + (rawDeltaX - AimState.lastDeltaX) * 0.5
-        rawDeltaY = AimState.lastDeltaY + (rawDeltaY - AimState.lastDeltaY) * 0.5
-    end
-    
-    -- Store for next frame comparison
-    AimState.lastDeltaX = rawDeltaX
-    AimState.lastDeltaY = rawDeltaY
-    
-    -- ================================================================
-    -- FIX #4: Gradual Ramp-Up on Target Switch
-    -- Use reduced sensitivity for first few frames of new target
-    -- ================================================================
-    local effectiveSensitivity = Sensitivity
-    if AimState.framesSinceTargetChange < TARGET_TRANSITION_RAMP_FRAMES then
-        -- Ramp: 50% -> 100% sensitivity over 2 frames (faster than before)
-        local rampFactor = (AimState.framesSinceTargetChange + 1) / TARGET_TRANSITION_RAMP_FRAMES
-        rampFactor = 0.5 + (rampFactor * 0.5) -- Start at 50%, ramp to 100%
-        effectiveSensitivity = Sensitivity * rampFactor
-    end
-    
-    -- Apply sensitivity
-    local deltaX = rawDeltaX * effectiveSensitivity
-    local deltaY = rawDeltaY * effectiveSensitivity
-    
-    -- Final sanity check - prevent extreme movements
-    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.25 -- 25% of screen
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return -- Skip this frame
-    end
-    
+    -- Move the mouse
     mousemoverel(deltaX, deltaY)
 end
 
