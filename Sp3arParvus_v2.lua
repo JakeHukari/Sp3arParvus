@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.6.0" -- SIMPLIFIED: Removed broken snap prevention, basic aimbot should work
+local VERSION = "2.6.3" -- FIX: Rewrote debug panel (direct ScreenGui parent + console logging)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -81,6 +81,9 @@ end
 -- Aimbot state variables
 local Aimbot, SilentAim, Trigger = false, nil, false
 local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
+local CachedTarget = nil  -- Forward declaration for debug display access
+local CachedTargetTime = 0
+local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
 
 -- Known body parts for targeting
 local KnownBodyParts = {
@@ -111,6 +114,14 @@ local Flags = {
     ["Aimbot/DistanceLimit"] = 1000,
     ["Aimbot/Priority"] = "Closest",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
+    
+    -- Offsets (New)
+    ["Aimbot/Offset/X"] = 0,
+    ["Aimbot/Offset/Y"] = 0,
+
+    -- Debug (New)
+    ["Debug/Enabled"] = false,
+
 
     -- Silent Aim
     ["SilentAim/Enabled"] = true,
@@ -1078,10 +1089,14 @@ local function AimAt(Hitbox, Sensitivity)
     end
     
     -- Calculate delta to move cursor from crosshair to target
+    -- Apply Manual Offsets here
+    local targetScreenX = ScreenPosition.X + Flags["Aimbot/Offset/X"]
+    local targetScreenY = ScreenPosition.Y + Flags["Aimbot/Offset/Y"]
+
     -- RESTORED: Sensitivity is a multiplier (0.3 = 30% movement per frame)
     -- This provides smooth interpolation toward the target
-    local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
-    local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
+    local deltaX = (targetScreenX - MouseLocation.X) * Sensitivity
+    local deltaY = (targetScreenY - MouseLocation.Y) * Sensitivity
     
     -- NaN Safety Check
     if deltaX ~= deltaX or deltaY ~= deltaY then return end
@@ -1559,6 +1574,151 @@ local function CreatePerformanceDisplay(parent)
     end
 end
 
+-- ============================================================
+-- DEBUG GRID (SIMPLIFIED for reliability)
+-- ============================================================
+local DebugGrid = {
+    InfoPanel = nil,
+    Active = false,
+    LastPrintTime = 0
+}
+
+local function CreateDebugGrid()
+    -- Create main info panel directly on ScreenGui (not in folder)
+    local infoPanel = Instance.new("TextLabel")
+    infoPanel.Name = "Sp3arDebugPanel"
+    infoPanel.Size = UDim2.new(0, 300, 0, 160)
+    infoPanel.Position = UDim2.new(0, 10, 1, -170)
+    infoPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    infoPanel.BackgroundTransparency = 0.2
+    infoPanel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    infoPanel.TextStrokeTransparency = 0
+    infoPanel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    infoPanel.Font = Enum.Font.Code
+    infoPanel.TextSize = 11
+    infoPanel.TextXAlignment = Enum.TextXAlignment.Left
+    infoPanel.TextYAlignment = Enum.TextYAlignment.Top
+    infoPanel.Text = "Debug: Initializing..."
+    infoPanel.Visible = false
+    infoPanel.ZIndex = 100
+    infoPanel.Parent = ScreenGui  -- Direct parent to ScreenGui
+    
+    local panelPadding = Instance.new("UIPadding")
+    panelPadding.PaddingLeft = UDim.new(0, 6)
+    panelPadding.PaddingTop = UDim.new(0, 4)
+    panelPadding.Parent = infoPanel
+    
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, 4)
+    panelCorner.Parent = infoPanel
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(0, 255, 0)
+    stroke.Thickness = 1
+    stroke.Parent = infoPanel
+    
+    DebugGrid.InfoPanel = infoPanel
+    print("[Sp3arParvus] Debug panel created")
+end
+
+local function UpdateDebugGrid()
+    local panel = DebugGrid.InfoPanel
+    if not panel then return end
+    
+    -- Toggle visibility based on flag
+    local shouldShow = Flags["Debug/Enabled"]
+    if panel.Visible ~= shouldShow then
+        panel.Visible = shouldShow
+        if shouldShow then
+            print("[Sp3arParvus] Debug panel enabled")
+        end
+    end
+    
+    if not shouldShow then return end
+    
+    -- Safely get all debug info
+    local ok, debugText = pcall(function()
+        -- Get GUI Inset
+        local guiInset = GuiService:GetGuiInset()
+        
+        -- Get Mouse Behavior
+        local mouseBehavior = tostring(UserInputService.MouseBehavior.Name)
+        local isLockCenter = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+        
+        -- Get Raw Mouse Location
+        local rawMouseLoc = UserInputService:GetMouseLocation()
+        
+        -- Get calculated center (what script uses)
+        local centerX, centerY
+        if isLockCenter then
+            centerX = floor(Camera.ViewportSize.X / 2)
+            centerY = floor(Camera.ViewportSize.Y / 2)
+        else
+            centerX = floor(rawMouseLoc.X - guiInset.X)
+            centerY = floor(rawMouseLoc.Y - guiInset.Y)
+        end
+        
+        -- Get target info
+        local targetStr = "None"
+        local targetScreenX, targetScreenY = 0, 0
+        local deltaX, deltaY = 0, 0
+        
+        if CachedTarget and CachedTarget[3] then
+            local part = CachedTarget[3]
+            if part and part.Parent then
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen and pos.Z > 0 then
+                    targetScreenX = floor(pos.X + Flags["Aimbot/Offset/X"])
+                    targetScreenY = floor(pos.Y + Flags["Aimbot/Offset/Y"])
+                    
+                    local sens = Flags["Aimbot/Sensitivity"] / 100
+                    deltaX = floor((targetScreenX - centerX) * sens * 10) / 10
+                    deltaY = floor((targetScreenY - centerY) * sens * 10) / 10
+                    
+                    local playerName = CachedTarget[1] and CachedTarget[1].Name or "?"
+                    targetStr = string.format("%s (%s)", playerName, part.Name)
+                end
+            end
+        end
+        
+        return string.format(
+            "=== AIMBOT DEBUG v2.6.2 ===\n" ..
+            "MouseMode: %s\n" ..
+            "GuiInset: %d, %d\n" ..
+            "Center: %d, %d\n" ..
+            "---------------------\n" ..
+            "Target: %s\n" ..
+            "TargetPos: %d, %d\n" ..
+            "Delta: %.1f, %.1f\n" ..
+            "Offsets: X=%d, Y=%d\n" ..
+            "Sensitivity: %d%%",
+            mouseBehavior,
+            floor(guiInset.X), floor(guiInset.Y),
+            centerX, centerY,
+            targetStr,
+            targetScreenX, targetScreenY,
+            deltaX, deltaY,
+            Flags["Aimbot/Offset/X"], Flags["Aimbot/Offset/Y"],
+            Flags["Aimbot/Sensitivity"]
+        )
+    end)
+    
+    if ok then
+        panel.Text = debugText
+    else
+        panel.Text = "Debug Error: " .. tostring(debugText)
+    end
+    
+    -- Also print to console every 2 seconds for debugging
+    local now = os.clock()
+    if now - DebugGrid.LastPrintTime > 2 then
+        DebugGrid.LastPrintTime = now
+        print("[DEBUG] " .. (panel.Text:gsub("\n", " | ")))
+    end
+end
+
+
+
 local function UpdatePerformanceDisplay()
     if not Flags["Performance/Enabled"] or not PerformanceLabel then return end
 
@@ -1677,12 +1837,16 @@ local Window = UI.CreateWindow("Sp3arParvusV2")
 -- Initialize HUD Elements
 CreatePerformanceDisplay(ScreenGui)
 CreateClosestPlayerTracker()
+CreateDebugGrid() -- Initialize Debug Grid
 
 -- Create Tabs
 local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
 local MiscTab = UI.CreateTab("Misc")
+local DebugTab = UI.CreateTab("Debug") -- New Tab
 local SettingsTab = UI.CreateTab("Settings")
+
+
 
 -- AIMBOT TAB
 UI.CreateSection(AimTab, "General Aim")
@@ -1720,6 +1884,19 @@ UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, 50
 UI.CreateSection(MiscTab, "Utilities")
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
+
+-- DEBUG TAB (NEW)
+UI.CreateSection(DebugTab, "Visual Debugging")
+UI.CreateToggle(DebugTab, "Show Debug Grid", "Debug/Enabled", false)
+UI.CreateSection(DebugTab, "Aim Correction")
+UI.CreateSlider(DebugTab, "Offset X (Left/Right)", "Aimbot/Offset/X", -50, 50, 0, "px")
+UI.CreateSlider(DebugTab, "Offset Y (Up/Down)", "Aimbot/Offset/Y", -50, 50, 0, "px")
+UI.CreateButton(DebugTab, "Reset Offsets", function()
+    Flags["Aimbot/Offset/X"] = 0
+    Flags["Aimbot/Offset/Y"] = 0
+    -- Force update sliders if possible, or user just re-opens
+    print("Offsets Reset")
+end)
 
 -- SETTINGS TAB
 UI.CreateSection(SettingsTab, "Configuration")
@@ -1759,9 +1936,7 @@ end))
 
 -- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
 -- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
-local CachedTarget = nil
-local CachedTargetTime = 0
-local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
+-- (CachedTarget, CachedTargetTime, TARGET_CACHE_DURATION declared at top)
 
 local function GetCachedTarget()
     local now = os.clock()
@@ -1899,6 +2074,9 @@ local perfThread = task.spawn(function()
     end
 end)
 TrackThread(perfThread)
+
+-- Debug Grid Loop (Connect to RenderStepped for smooth updates)
+TrackConnection(RunService.RenderStepped:Connect(UpdateDebugGrid))
 
 -- ============================================================
 -- INITIALIZATION COMPLETE
