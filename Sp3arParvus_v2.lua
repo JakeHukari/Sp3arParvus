@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.5.1" -- REFINED: Better aim accuracy while preventing snaps
+local VERSION = "2.5.2" -- Fixed inconsistencies, ready for new features
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -103,7 +103,7 @@ local Flags = {
     ["Aimbot/AlwaysEnabled"] = true,
     ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
-    ["Aimbot/DistanceCheck"] = false,
+    ["Aimbot/DistanceCheck"] = true,
     ["Aimbot/VisibilityCheck"] = true,
     ["Aimbot/Sensitivity"] = 30,
     ["Aimbot/FOV/Radius"] = 100,
@@ -1915,7 +1915,6 @@ local triggerThread = task.spawn(function()
                 if TriggerClosest then
                     -- Store the target player reference for tracking
                     local lockedPlayer = TriggerClosest[1]
-                    local lockedCharacter = TriggerClosest[2]
                     
                     task.wait(Flags["Trigger/Delay"])
                     mouse1press()
@@ -1932,8 +1931,6 @@ local triggerThread = task.spawn(function()
                                 local character, rootPart = GetCharacter(lockedPlayer)
                                 if character and rootPart then
                                     targetStillValid = true
-                                    -- Update character reference in case it changed
-                                    lockedCharacter = character
                                 end
                             end
 
@@ -2012,4 +2009,4 @@ print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
 print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
-print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤2000 | Yellow≤4000 | Green>4000", VERSION))
+print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤1000 | Yellow≤2000 | Green>2000", VERSION))
