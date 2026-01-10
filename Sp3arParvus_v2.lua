@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.4.3" -- FIXED: LockCenter mode + viewport center
+local VERSION = "2.5.1" -- REFINED: Better aim accuracy while preventing snaps
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -538,7 +538,10 @@ function UI.CreateToggle(page, text, flag, default, callback)
     Button.Text = ""
     Button.Parent = Frame
     
-    Flags[flag] = default
+    -- FIXED: Only set default if flag doesn't already exist (preserves user settings)
+    if Flags[flag] == nil then
+        Flags[flag] = default
+    end
     
     Button.MouseButton1Click:Connect(function()
         Flags[flag] = not Flags[flag]
@@ -1034,14 +1037,78 @@ local function GetClosest(Enabled,
     return hasResult and ClosestResult or nil
 end
 
--- AimAt function (FIXED - handles mouse-locked mode properly)
+-- ============================================================
+-- AIMBOT SNAP-FIX STATE TRACKING
+-- ============================================================
+-- These variables track state to prevent the 180-degree snap issue
+local AimState = {
+    lastMouseBehavior = nil,         -- Detect mode transitions
+    modeChangeTime = 0,              -- When mode last changed
+    lastTargetPlayer = nil,          -- Track target changes
+    targetChangeTime = 0,            -- When target last changed
+    lastDeltaX = 0,                  -- Previous frame delta (for velocity limiting)
+    lastDeltaY = 0,
+    framesSinceTargetChange = 0,     -- Count frames since target switch
+    isFirstAimFrame = true,          -- Skip very first aim frame after load
+}
+
+-- Constants for snap prevention
+local MODE_TRANSITION_COOLDOWN = 0.05   -- 50ms cooldown after mouse mode change (reduced from 100ms)
+local TARGET_TRANSITION_RAMP_FRAMES = 2 -- Ramp up sensitivity over 2 frames when switching targets
+local MAX_DELTA_VELOCITY = 200          -- Max change in delta per frame (increased for better tracking)
+
+-- AimAt function (FIXED v2.5 - comprehensive snap prevention)
 local function AimAt(Hitbox, Sensitivity)
     if not Hitbox then return end
     if not mousemoverel then return end
     
+    -- Skip the very first aim frame after script load (often has stale data)
+    if AimState.isFirstAimFrame then
+        AimState.isFirstAimFrame = false
+        return
+    end
+    
     -- Get the body part from hitbox
     local BodyPart = Hitbox[3]
     if not BodyPart or not BodyPart.Parent then return end
+    
+    local TargetPlayer = Hitbox[1]
+    local now = os.clock()
+    
+    -- ================================================================
+    -- FIX #1: Mode Transition Detection
+    -- Skip aiming during mouse behavior transitions (prevents stale data)
+    -- ================================================================
+    local currentBehavior = UserInputService.MouseBehavior
+    if currentBehavior ~= AimState.lastMouseBehavior then
+        AimState.lastMouseBehavior = currentBehavior
+        AimState.modeChangeTime = now
+        -- Reset delta tracking on mode change
+        AimState.lastDeltaX = 0
+        AimState.lastDeltaY = 0
+        return -- Skip this frame, mouse location may be stale
+    end
+    
+    -- Cooldown after mode change
+    if (now - AimState.modeChangeTime) < MODE_TRANSITION_COOLDOWN then
+        return
+    end
+    
+    -- ================================================================
+    -- FIX #2: Target Transition Detection
+    -- Reset delta tracking when switching targets (prevents stale delta comparison)
+    -- ================================================================
+    if TargetPlayer ~= AimState.lastTargetPlayer then
+        AimState.lastTargetPlayer = TargetPlayer
+        AimState.targetChangeTime = now
+        AimState.framesSinceTargetChange = 0
+        -- Reset delta tracking on target change to prevent velocity limiting from using stale data
+        AimState.lastDeltaX = 0
+        AimState.lastDeltaY = 0
+        -- DON'T skip frame - just continue with fresh delta tracking
+    end
+    
+    AimState.framesSinceTargetChange = AimState.framesSinceTargetChange + 1
     
     -- Get FRESH world position (not cached screen position)
     local BodyPartPosition = BodyPart.Position
@@ -1074,20 +1141,53 @@ local function AimAt(Hitbox, Sensitivity)
         MouseLocation = UserInputService:GetMouseLocation()
     end
     
-    -- Calculate delta movement
-    local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
-    local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
+    -- Calculate raw delta movement
+    local rawDeltaX = (ScreenPosition.X - MouseLocation.X)
+    local rawDeltaY = (ScreenPosition.Y - MouseLocation.Y)
     
     -- NaN Safety Check: If delta is invalid, abort immediately
-    if deltaX ~= deltaX or deltaY ~= deltaY then
+    if rawDeltaX ~= rawDeltaX or rawDeltaY ~= rawDeltaY then
         return
     end
     
-    -- Sanity check - prevent extreme movements (likely error or edge case)
-    -- 180-degree spin would require moving roughly half the screen width
-    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.3 -- 30% of screen
+    -- ================================================================
+    -- FIX #3: Delta Velocity Limiting (Option B from bug report)
+    -- Prevent sudden large changes in delta between frames
+    -- ================================================================
+    local deltaChangeX = abs(rawDeltaX - AimState.lastDeltaX)
+    local deltaChangeY = abs(rawDeltaY - AimState.lastDeltaY)
+    
+    if deltaChangeX > MAX_DELTA_VELOCITY or deltaChangeY > MAX_DELTA_VELOCITY then
+        -- Large sudden change detected - interpolate towards new delta gradually
+        -- Using 0.5 factor for faster convergence while still preventing snap
+        rawDeltaX = AimState.lastDeltaX + (rawDeltaX - AimState.lastDeltaX) * 0.5
+        rawDeltaY = AimState.lastDeltaY + (rawDeltaY - AimState.lastDeltaY) * 0.5
+    end
+    
+    -- Store for next frame comparison
+    AimState.lastDeltaX = rawDeltaX
+    AimState.lastDeltaY = rawDeltaY
+    
+    -- ================================================================
+    -- FIX #4: Gradual Ramp-Up on Target Switch
+    -- Use reduced sensitivity for first few frames of new target
+    -- ================================================================
+    local effectiveSensitivity = Sensitivity
+    if AimState.framesSinceTargetChange < TARGET_TRANSITION_RAMP_FRAMES then
+        -- Ramp: 50% -> 100% sensitivity over 2 frames (faster than before)
+        local rampFactor = (AimState.framesSinceTargetChange + 1) / TARGET_TRANSITION_RAMP_FRAMES
+        rampFactor = 0.5 + (rampFactor * 0.5) -- Start at 50%, ramp to 100%
+        effectiveSensitivity = Sensitivity * rampFactor
+    end
+    
+    -- Apply sensitivity
+    local deltaX = rawDeltaX * effectiveSensitivity
+    local deltaY = rawDeltaY * effectiveSensitivity
+    
+    -- Final sanity check - prevent extreme movements
+    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.25 -- 25% of screen
     if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return -- Skip this frame, let aim catch up naturally
+        return -- Skip this frame
     end
     
     mousemoverel(deltaX, deltaY)
@@ -1647,6 +1747,18 @@ local function Cleanup()
     NearestPlayerRef = nil
     PerformanceLabel = nil
     ClosestPlayerTrackerLabel = nil
+    
+    -- Reset AimState tracking (prevents snap issues on reload)
+    if AimState then
+        AimState.lastMouseBehavior = nil
+        AimState.modeChangeTime = 0
+        AimState.lastTargetPlayer = nil
+        AimState.targetChangeTime = 0
+        AimState.lastDeltaX = 0
+        AimState.lastDeltaY = 0
+        AimState.framesSinceTargetChange = 0
+        AimState.isFirstAimFrame = true
+    end
 
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     local globalEnv = getgenv and getgenv() or _G
