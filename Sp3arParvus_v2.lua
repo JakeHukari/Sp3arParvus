@@ -2549,6 +2549,10 @@ local function UpdatePlayerOutlines(player, character)
         if highlight.Adornee ~= character then
             highlight.Adornee = character
         end
+        -- FIX: Ensure parent is updated to new character (fixes issue on respawn)
+        if highlight.Parent ~= character then
+            highlight.Parent = character
+        end
         if highlight.OutlineColor ~= OUTLINE_COLOR then
             highlight.OutlineColor = OUTLINE_COLOR
         end
@@ -3212,6 +3216,9 @@ local function SetupPlayerESP(player)
         -- Track CharacterAdded connection LOCALLY in espData, not globally
         -- this ensures it gets cleaned up when the player leaves
         local conn = player.CharacterAdded:Connect(function(character)
+            -- FIX: Invalidate character cache immediately on spawn
+            CharCache[player] = nil
+            
             task.delay(0.1, function()
                 if player.Parent and Sp3arParvus.Active then
                     -- Force ESP update for this player when their character spawns
