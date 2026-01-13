@@ -147,13 +147,14 @@ local Flags = {
     ["Prediction/GravityMultiplier"] = 2,
 
     -- Aimbot
-    ["Aimbot/Enabled"] = true,
+    ["Aimbot/AimLock"] = true,
+    ["Aimbot/AutoFire"] = true,
     ["Aimbot/AlwaysEnabled"] = true,
     ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/DistanceCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 30,
+    ["Aimbot/Sensitivity"] = 15,
     ["Aimbot/FOV/Radius"] = 100,
     ["Aimbot/DistanceLimit"] = 1000,
     ["Aimbot/Priority"] = "Closest",
@@ -176,7 +177,8 @@ local Flags = {
     },
 
     -- Trigger Bot
-    ["Trigger/Enabled"] = true,
+    -- ["Trigger/Enabled"] replaced by ["Aimbot/AutoFire"]
+    -- ["Trigger/Enabled"] = true,
     ["Trigger/AlwaysEnabled"] = true,
     ["Trigger/HoldMouseButton"] = true,
     ["Trigger/Prediction"] = true,
@@ -192,10 +194,10 @@ local Flags = {
     -- ESP
     ["ESP/Enabled"] = true,
     ["ESP/Nametags"] = true,
-    ["ESP/Tracers"] = true,
+    ["ESP/Tracers"] = false,
     ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
     ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
-    ["ESP/PlayerOutlines"] = false, -- Player body part outlines (off by default for performance)
+    ["ESP/PlayerOutlines"] = true, -- Player body part outlines (off by default for performance)
     ["ESP/MaxDistance"] = 5000,
 
     -- Performance
@@ -1506,31 +1508,28 @@ end
 local OldIndex = nil
 if hookmetamethod and checkcaller then
     OldIndex = hookmetamethod(game, "__index", function(Self, Index)
-        local success, result = pcall(function()
-            if checkcaller() then
-                return OldIndex(Self, Index)
-            end
-
-            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-                local Mode = Flags["SilentAim/Mode"]
-                if Self == Mouse then
-                    if Index == "Target" and table.find(Mode, Index) then
-                        return SilentAim[3]
-                    elseif Index == "Hit" and table.find(Mode, Index) then
-                        return SilentAim[3].CFrame
-                    end
-                end
-            end
-
-            return OldIndex(Self, Index)
-        end)
-
-        if not success then
-            warn("__index hook error:", result)
+        -- PERFORMANCE: Removed pcall overhead
+        if checkcaller() then
             return OldIndex(Self, Index)
         end
 
-        return result
+        if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+            local Mode = Flags["SilentAim/Mode"]
+            if Self == Mouse then
+                if Index == "Target" and table.find(Mode, Index) then
+                    -- Verify target validity
+                    if SilentAim[3] and SilentAim[3].Parent then
+                        return SilentAim[3]
+                    end
+                elseif Index == "Hit" and table.find(Mode, Index) then
+                     if SilentAim[3] and SilentAim[3].Parent then
+                        return SilentAim[3].CFrame
+                     end
+                end
+            end
+        end
+
+        return OldIndex(Self, Index)
     end)
 end
 
@@ -1538,46 +1537,51 @@ end
 local OldNamecall = nil
 if hookmetamethod and checkcaller and getnamecallmethod then
     OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-        local args = {...}
-        local results = Pack(pcall(function()
-            if checkcaller() then
-                return OldNamecall(Self, unpack(args))
-            end
-
-            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-                local Method, Mode = getnamecallmethod(), Flags["SilentAim/Mode"]
-
-                if Self == Workspace then
-                    if Method == "Raycast" and table.find(Mode, Method) then
-                        args[2] = SilentAim[3].Position - args[1]
-                        return OldNamecall(Self, unpack(args))
-                    elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
-                    or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
-                    or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
-                        args[1] = Ray.new(args[1].Origin, SilentAim[3].Position - args[1].Origin)
-                        return OldNamecall(Self, unpack(args))
-                    end
-                elseif Self == Camera then
-                    if (Method == "ScreenPointToRay" and table.find(Mode, Method))
-                    or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
-                        return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
-                    elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
-                    or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
-                        args[1] = SilentAim[3].Position
-                        return OldNamecall(Self, unpack(args))
-                    end
-                end
-            end
-
-            return OldNamecall(Self, unpack(args))
-        end))
-
-        if not results[1] then
-            warn("__namecall hook error:", results[2])
-            return OldNamecall(Self, unpack(args))
+        -- PERFORMANCE: Removed pcall overhead
+        if checkcaller() then
+            return OldNamecall(Self, ...)
         end
 
-        return unpack(results, 2, results.n)
+        if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+            local Method = getnamecallmethod()
+            local Mode = Flags["SilentAim/Mode"]
+            
+            -- Validation check
+            if not SilentAim[3] or not SilentAim[3].Parent then
+                 return OldNamecall(Self, ...)
+            end
+
+            if Self == Workspace then
+                if Method == "Raycast" and table.find(Mode, Method) then
+                    local args = {...}
+                    if args[1] then
+                        args[2] = SilentAim[3].Position - args[1]
+                        return OldNamecall(Self, unpack(args))
+                    end
+                elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
+                or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
+                or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
+                    local args = {...}
+                    if args[1] then
+                         -- Reconstruct ray safely
+                         args[1] = Ray.new(args[1].Origin, SilentAim[3].Position - args[1].Origin)
+                         return OldNamecall(Self, unpack(args))
+                    end
+                end
+            elseif Self == Camera then
+                if (Method == "ScreenPointToRay" and table.find(Mode, Method))
+                or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
+                    return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
+                elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
+                or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
+                    local args = {...}
+                    args[1] = SilentAim[3].Position
+                    return OldNamecall(Self, unpack(args))
+                end
+            end
+        end
+
+        return OldNamecall(Self, ...)
     end)
 end
 
@@ -1948,38 +1952,32 @@ local function UpdateClosestPlayerTracker()
 
     if not TrackerMinimized then
         if NearestPlayerRef and NearestPlayerRef.Parent then
-            local success = pcall(function()
-                local myChar = LocalPlayer.Character
-                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local targetChar = NearestPlayerRef.Character
-                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+            -- PERFORMANCE: Removed pcall for speed, using strict checks instead
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local targetChar = NearestPlayerRef.Character
+            local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
 
-                if myRoot and targetRoot then
-                    local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                    local distRounded = floor(distance + 0.5)
-                    local name = "Unknown"
-                    if NearestPlayerRef then
-                        name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
-                    end
-
-                    -- Update colors based on distance (closest = always pink)
-                    local color = GetDistanceColor(distance, true) -- true = is closest
-                    ClosestPlayerTrackerLabel.TextColor3 = color
-
-                    -- Update stroke color to match (using cached reference)
-                    if TrackerStrokeRef then
-                        TrackerStrokeRef.Color = color
-                    end
-
-                    CurrentTargetDistance = distRounded
-                    ClosestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
-                else
-                    ClosestPlayerTrackerLabel.Text = "Closest Player\n---"
-                    ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+            if myRoot and targetRoot then
+                local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                local distRounded = floor(distance + 0.5)
+                local name = "Unknown"
+                if NearestPlayerRef then
+                    name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
                 end
-            end)
 
-            if not success then
+                -- Update colors based on distance (closest = always pink)
+                local color = GetDistanceColor(distance, true) -- true = is closest
+                ClosestPlayerTrackerLabel.TextColor3 = color
+
+                -- Update stroke color to match (using cached reference)
+                if TrackerStrokeRef then
+                    TrackerStrokeRef.Color = color
+                end
+
+                CurrentTargetDistance = distRounded
+                ClosestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
+            else
                 ClosestPlayerTrackerLabel.Text = "Closest Player\n---"
                 ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
             end
@@ -2518,7 +2516,7 @@ local function UpdatePlayerOutlines(player, character)
     -- If storage has individual part keys, it's from the old method
     for k, v in pairs(storage) do
         if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
-            pcall(function() v:Destroy() end)
+            if v and v.Parent then v:Destroy() end
             storage[k] = nil
         end
     end
@@ -2541,7 +2539,7 @@ local function UpdatePlayerOutlines(player, character)
         local highlight = storage.Highlight
         -- Validate existence
         if not highlight or not highlight.Parent then
-            if highlight then pcall(function() highlight:Destroy() end) end
+            if highlight then highlight:Destroy() end
             storage.Highlight = nil
             -- Recursive call to recreate
             return UpdatePlayerOutlines(player, character)
@@ -2564,7 +2562,7 @@ local function UpdatePlayerOutlines(player, character)
         local part = character:FindFirstChild(partName)
         if not part then
             if storage[dotType] then
-                pcall(function() storage[dotType]:Destroy() end)
+                if storage[dotType].Parent then storage[dotType]:Destroy() end
                 storage[dotType] = nil
             end
             return
@@ -2634,13 +2632,13 @@ local function RemovePlayerOutlines(player)
     
     -- Cleanup Highlight
     if storage.Highlight then
-        pcall(function() storage.Highlight:Destroy() end)
+        if storage.Highlight.Parent then storage.Highlight:Destroy() end
     end
     
     -- Cleanup any legacy parts if they exist
     for k, v in pairs(storage) do
         if k ~= "Highlight" then
-            pcall(function() v:Destroy() end)
+            if v and v.Parent then v:Destroy() end
         end
     end
     
@@ -2659,10 +2657,8 @@ local function UpdateESP(player, isClosest)
         local nametag = espData.Nametag
         if not nametag or not nametag.Parent then
             -- Recreate if missing
-             pcall(function() 
-                 if nametag then nametag:Destroy() end
-                 if espData.Tracer then espData.Tracer:Remove() end
-             end)
+             if nametag then nametag:Destroy() end
+             if espData.Tracer then espData.Tracer:Remove() end
              ESPObjects[player] = nil
              espData = nil
         end
@@ -2883,8 +2879,8 @@ local function RemoveESP(player)
     -- Clean up player-specific connections
     if espData.Connections then
         for _, conn in pairs(espData.Connections) do
-            if conn and typeof(conn) == "RBXScriptConnection" then
-                pcall(function() conn:Disconnect() end)
+            if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                conn:Disconnect()
             end
         end
         table.clear(espData.Connections)
@@ -3113,32 +3109,34 @@ local SettingsTab = UI.CreateTab("Settings")
 
 -- AIMBOT TAB
 UI.CreateSection(AimTab, "General Aim")
-UI.CreateToggle(AimTab, "Enable Aimbot", "Aimbot/Enabled", true)
-UI.CreateToggle(AimTab, "Always Active (No Keybind)", "Aimbot/AlwaysEnabled", true)
-UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", false)
-UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", true)
-UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, 10, "%")
-UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, 100, "px")
-UI.CreateSlider(AimTab, "Distance Limit", "Aimbot/DistanceLimit", 25, 3000, 1000, " st")
+UI.CreateToggle(AimTab, "Enable Aim Lock", "Aimbot/AimLock", Flags["Aimbot/AimLock"])
+UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
+UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
+UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
+UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
+UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
+UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
+UI.CreateSlider(AimTab, "Distance Limit", "Aimbot/DistanceLimit", 25, 3000, Flags["Aimbot/DistanceLimit"], " st")
 
 UI.CreateSection(AimTab, "Ballistics")
-UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", true)
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, 3155, " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, 2, "x", function(v) GravityCorrection = v end)
+UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Silent Aim")
-UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", true)
-UI.CreateSlider(AimTab, "Hit Chance", "SilentAim/HitChance", 0, 100, 100, "%")
-UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, 100, "px")
+UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", Flags["SilentAim/Enabled"])
+UI.CreateSlider(AimTab, "Hit Chance", "SilentAim/HitChance", 0, 100, Flags["SilentAim/HitChance"], "%")
+UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, Flags["SilentAim/FOV/Radius"], "px")
 
 UI.CreateSection(AimTab, "Trigger Bot")
-UI.CreateToggle(AimTab, "Enable Trigger", "Trigger/Enabled", true)
-UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", true)
-UI.CreateSlider(AimTab, "Trigger Delay", "Trigger/Delay", 0, 100, 0, "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
+-- Linked to Auto Fire
+UI.CreateToggle(AimTab, "Enable Trigger", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
+UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", Flags["Trigger/HoldMouseButton"])
+UI.CreateSlider(AimTab, "Trigger Delay", "Trigger/Delay", 0, 100, Flags["Trigger/Delay"], "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
 
 -- VISUALS TAB
 UI.CreateSection(VisualsTab, "Player ESP")
-UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", true, function(state)
+UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], function(state)
     if not state then
         -- Feature disabled - cleanup outlines to prevent ghosts since update loop stops
         for _, player in ipairs(Players:GetPlayers()) do
@@ -3146,9 +3144,9 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", true, function(state)
         end
     end
 end)
-UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", true)
-UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", false)
-UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", false, function(state)
+UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
+UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", Flags["ESP/Tracers"])
+UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", Flags["ESP/OffscreenIndicators"], function(state)
     -- When disabled, hide all existing off-screen indicators
     if not state then
         for _, espData in pairs(ESPObjects) do
@@ -3159,7 +3157,7 @@ UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", 
         end
     end
 end)
-UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", false, function(state)
+UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", Flags["ESP/PlayerPanel"], function(state)
     -- Create panel if it doesn't exist yet
     if state and not PlayerPanelFrame then
         CreatePlayerPanel()
@@ -3169,7 +3167,7 @@ UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", false, f
         PlayerPanelFrame.Visible = state
     end
 end)
-UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", false, function(state)
+UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
     -- When disabled, remove all existing outlines immediately
     if not state then
         for player, outlines in pairs(PlayerOutlineObjects) do
@@ -3180,11 +3178,11 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", fa
         table.clear(PlayerOutlineObjects)
     end
 end)
-UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, 5000, " st")
+UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, Flags["ESP/MaxDistance"], " st")
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
-UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", true, function(state)
+UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Enabled"], function(state)
     CLICKBREAK_ENABLED = state
     if not state and hoverHL then
         hoverHL.Enabled = false
@@ -3198,7 +3196,7 @@ UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
 -- SETTINGS TAB
 UI.CreateSection(SettingsTab, "Configuration")
-UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", true, function(state)
+UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 
@@ -3261,8 +3259,8 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
     
     -- Handle RMB for Aimbot/Trigger (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Aimbot = Flags["Aimbot/Enabled"]
-        Trigger = Flags["Trigger/Enabled"]
+        Aimbot = Flags["Aimbot/AimLock"]
+        Trigger = Flags["Aimbot/AutoFire"]
     end
     
     -- Br3ak3r: Ctrl+Click to break object
@@ -3336,7 +3334,8 @@ local function UpdateAimAndSilent()
     if not Sp3arParvus.Active then return end
     
     -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
-    local aimbotActive = Aimbot or Flags["Aimbot/AlwaysEnabled"]
+    -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
+    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot) -- Aimbot global var acts as keybind state
     local silentActive = Flags["SilentAim/Enabled"]
     
     if not aimbotActive and not silentActive then
@@ -3362,7 +3361,7 @@ TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
 local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
-        if Trigger or Flags["Trigger/AlwaysEnabled"] then
+        if Trigger or Flags["Aimbot/AutoFire"] or Flags["Trigger/AlwaysEnabled"] then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -3503,9 +3502,9 @@ TrackThread(perfThread)
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
 print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
     VERSION,
-    Flags["Aimbot/Enabled"] and "ON" or "OFF",
+    Flags["Aimbot/AimLock"] and "ON" or "OFF",
     Flags["SilentAim/Enabled"] and "ON" or "OFF",
-    Flags["Trigger/Enabled"] and "ON" or "OFF",
+    Flags["Aimbot/AutoFire"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
 print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
