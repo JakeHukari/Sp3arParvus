@@ -2731,7 +2731,7 @@ local function UpdateESP(player, isClosest)
         
         if espData.lastTeamColor ~= teamColor then
             espData.NicknameLabel.TextColor3 = teamColor
-            espData.UsernameLabel.TextColor3 = teamColor
+            -- Username color is now handled by distance logic
             espData.lastTeamColor = teamColor
         end
 
@@ -2744,6 +2744,7 @@ local function UpdateESP(player, isClosest)
         local distanceColor = GetDistanceColor(distance, isClosest)
         if espData.lastDistanceColor ~= distanceColor then
             espData.DistanceLabel.TextColor3 = distanceColor
+            espData.UsernameLabel.TextColor3 = distanceColor
             espData.lastDistanceColor = distanceColor
         end
     elseif espData.Nametag then
