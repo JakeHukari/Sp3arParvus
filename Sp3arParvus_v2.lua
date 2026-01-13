@@ -952,27 +952,37 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     end
     
     local dragging = false
+    local dragging = false
+    
+    -- OPTIMIZED: Only connect move/end events while dragging to avoid overhead
     Track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
             Update(input)
+            
+            local moveConn, endConn
+            
+            -- Handle dragging
+            moveConn = UserInputService.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    Update(input)
+                end
+            end)
+            
+            -- Handle release
+            endConn = UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                    TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
+                    
+                    -- Cleanup connections immediately
+                    if moveConn then moveConn:Disconnect() end
+                    if endConn then endConn:Disconnect() end
+                end
+            end)
         end
     end)
-    
-    -- MEMORY LEAK FIX: Track these connections
-    TrackConnection(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-            TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
-        end
-    end))
-    
-    TrackConnection(UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            Update(input)
-        end
-    end))
 end
 
 function UI.CreateButton(page, text, callback)
@@ -1396,6 +1406,12 @@ local function GetClosest(Enabled,
                  end
             end
         end
+    end
+    
+    -- Clear stale entries from the list to ensure table.sort works correctly
+    -- The list size might remain large from previous frames otherwise
+    for i = CandidateCount + 1, #CandidateList do
+        CandidateList[i] = nil
     end
     
     if CandidateCount == 0 then return nil end
@@ -2502,6 +2518,36 @@ local function CreateESP(player)
 end
 
 -- Create/Update player body part outlines (Highlight based for Wireframe + AlwaysOnTop)
+-- OPTIMIZED: Object Pooling to prevent churning
+local ObjectPool = {
+    Highlights = {},
+    Billboards = {}
+}
+
+local function GetPooledObject(poolName, className)
+    local pool = ObjectPool[poolName]
+    if #pool > 0 then
+        local obj = table.remove(pool)
+        if obj.Parent then obj.Parent = nil end -- Safety
+        return obj
+    end
+    return Instance.new(className)
+end
+
+local function ReturnPooledObject(obj)
+    if not obj then return end
+    
+    obj.Adornee = nil
+    obj.Parent = nil
+    
+    if obj:IsA("Highlight") then
+        table.insert(ObjectPool.Highlights, obj)
+    elseif obj:IsA("BillboardGui") then
+        table.insert(ObjectPool.Billboards, obj)
+    else
+        obj:Destroy()
+    end
+end
 local function UpdatePlayerOutlines(player, character)
     if not character then return end
     
@@ -2513,17 +2559,16 @@ local function UpdatePlayerOutlines(player, character)
     local storage = PlayerOutlineObjects[player]
     
     -- Cleanup legacy/previous outlines (SelectionBoxes/BoxHandleAdornments)
-    -- If storage has individual part keys, it's from the old method
     for k, v in pairs(storage) do
         if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
-            if v and v.Parent then v:Destroy() end
+            if v then v:Destroy() end
             storage[k] = nil
         end
     end
     
     -- Create single Highlight for the character
     if not storage.Highlight then
-        local highlight = Instance.new("Highlight")
+        local highlight = GetPooledObject("Highlights", "Highlight")
         highlight.Name = "PlayerOutlineHighlight"
         highlight.Adornee = character
         highlight.FillColor = OUTLINE_COLOR
@@ -2538,18 +2583,15 @@ local function UpdatePlayerOutlines(player, character)
     else
         local highlight = storage.Highlight
         -- Validate existence
-        if not highlight or not highlight.Parent then
-            if highlight then highlight:Destroy() end
-            storage.Highlight = nil
-            -- Recursive call to recreate
-            return UpdatePlayerOutlines(player, character)
+        if not highlight then -- Parent check removed, we can re-parent
+             storage.Highlight = nil
+             return UpdatePlayerOutlines(player, character)
         end
         
         -- Update properties
         if highlight.Adornee ~= character then
             highlight.Adornee = character
         end
-        -- FIX: Ensure parent is updated to new character (fixes issue on respawn)
         if highlight.Parent ~= character then
             highlight.Parent = character
         end
@@ -2566,7 +2608,7 @@ local function UpdatePlayerOutlines(player, character)
         local part = character:FindFirstChild(partName)
         if not part then
             if storage[dotType] then
-                if storage[dotType].Parent then storage[dotType]:Destroy() end
+                ReturnPooledObject(storage[dotType])
                 storage[dotType] = nil
             end
             return
@@ -2575,31 +2617,33 @@ local function UpdatePlayerOutlines(player, character)
         local dot = storage[dotType]
         if not dot then
             -- Create BillboardGui
-            dot = Instance.new("BillboardGui")
+            dot = GetPooledObject("Billboards", "BillboardGui")
             dot.Name = dotType
             dot.AlwaysOnTop = true
             dot.Size = UDim2.fromOffset(6, 6)
             dot.StudsOffset = Vector3.new(0, 0, 0)
             dot.Adornee = part
             dot.Parent = character
-
-            local dotFrame = Instance.new("Frame")
-            dotFrame.Name = "Dot"
-            dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
-            dotFrame.BorderSizePixel = 0
-            dotFrame.Parent = dot
             
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(1, 0)
-            corner.Parent = dotFrame
+            -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
+            -- But since we pool logic correctly, children should stay.
+            -- However, let's verify children exist
+            local dotFrame = dot:FindFirstChild("Dot")
+            if not dotFrame then
+                dotFrame = Instance.new("Frame")
+                dotFrame.Name = "Dot"
+                dotFrame.Size = UDim2.new(1, 0, 1, 0)
+                dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+                dotFrame.BorderSizePixel = 0
+                dotFrame.Parent = dot
+                
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(1, 0)
+                corner.Parent = dotFrame
+            end
 
             storage[dotType] = dot
         else
-            if not dot or not dot.Parent then
-                storage[dotType] = nil
-                return UpdateDot(dotType, partName)
-            end
             if dot.Adornee ~= part then
                 dot.Adornee = part
                 dot.Parent = character
@@ -2607,20 +2651,21 @@ local function UpdatePlayerOutlines(player, character)
         end
 
         -- Update Color based on Locked Status
-        local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
-        
-        -- Check if this specific part is being locked onto
-        -- verify cache is fresh (aimbot is actually active) with slightly looser tolerance (100ms)
-        if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
-            -- CachedTarget structure: {Player, Character, HitPart, Position, ...}
-            local lockedPart = CachedTarget[3]
-            if lockedPart and lockedPart.Name == partName then
-                dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
-            end
-        end
-
-        if dot.Dot.BackgroundColor3 ~= dotColor then
-            dot.Dot.BackgroundColor3 = dotColor
+        local dotFrame = dot:FindFirstChild("Dot")
+        if dotFrame then
+             local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
+             
+             -- Check if this specific part is being locked onto
+             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
+                 local lockedPart = CachedTarget[3]
+                 if lockedPart and lockedPart.Name == partName then
+                     dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
+                 end
+             end
+    
+             if dotFrame.BackgroundColor3 ~= dotColor then
+                 dotFrame.BackgroundColor3 = dotColor
+             end
         end
     end
 
@@ -2629,19 +2674,23 @@ local function UpdatePlayerOutlines(player, character)
     UpdateDot("RootDot", "HumanoidRootPart")
 end
 
--- Remove all outlines for a player
+-- Remove all outlines for a player (Optimized: Return to pool)
 local function RemovePlayerOutlines(player)
     local storage = PlayerOutlineObjects[player]
     if not storage then return end
     
     -- Cleanup Highlight
     if storage.Highlight then
-        if storage.Highlight.Parent then storage.Highlight:Destroy() end
+        ReturnPooledObject(storage.Highlight)
     end
     
-    -- Cleanup any legacy parts if they exist
+    -- Cleanup Billboard dots
+    if storage.HeadDot then ReturnPooledObject(storage.HeadDot) end
+    if storage.RootDot then ReturnPooledObject(storage.RootDot) end
+    
+    -- Cleanup any legacy parts
     for k, v in pairs(storage) do
-        if k ~= "Highlight" then
+        if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
             if v and v.Parent then v:Destroy() end
         end
     end
@@ -3048,11 +3097,19 @@ local function Cleanup()
     
     -- Cleanup Player Outline objects
     for player, outlines in pairs(PlayerOutlineObjects) do
-        for partName, highlight in pairs(outlines) do
-            pcall(function() highlight:Destroy() end)
+        for partName, obj in pairs(outlines) do
+            pcall(function() obj:Destroy() end)
         end
     end
     table.clear(PlayerOutlineObjects)
+    
+    -- Cleanup Object Pool
+    for _, pool in pairs(ObjectPool) do
+        for _, obj in ipairs(pool) do
+            pcall(function() obj:Destroy() end)
+        end
+        table.clear(pool)
+    end
 
     -- Cleanup Br3ak3r (restore all broken parts)
     for part, _ in pairs(brokenSet) do
