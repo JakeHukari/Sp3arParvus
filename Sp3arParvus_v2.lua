@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.4.3" -- FIXED: LockCenter mode + viewport center
+local VERSION = "2.8.4" -- Wireframe Outlines (Highlight AlwaysOnTop)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -57,6 +57,55 @@ local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, mat
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- ============================================================
+-- PERFORMANCE CACHING INFRASTRUCTURE
+-- ============================================================
+
+-- Cached TweenInfo objects (prevents creating new objects on every tween)
+local TWEEN_INSTANT = TweenInfo.new(0.05)
+local TWEEN_FAST = TweenInfo.new(0.1)
+local TWEEN_MEDIUM = TweenInfo.new(0.2)
+local TWEEN_SMOOTH = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+local TWEEN_BACK = TweenInfo.new(0.3, Enum.EasingStyle.Back)
+local TWEEN_DRAG = TweenInfo.new(0.05)
+
+-- Cached players list (Event-based caching prevents allocation per frame)
+local cachedPlayersList = {}
+
+-- Initialize cache immediately
+local function InitPlayerCache()
+    cachedPlayersList = Players:GetPlayers()
+end
+InitPlayerCache()
+
+local function GetPlayersCache()
+    return cachedPlayersList
+end
+
+local function UpdatePlayerCache()
+    cachedPlayersList = Players:GetPlayers()
+end
+
+local function AddPlayerToCache(player)
+    if not table.find(cachedPlayersList, player) then
+        table.insert(cachedPlayersList, player)
+    end
+end
+
+local function RemovePlayerFromCache(player)
+    local idx = table.find(cachedPlayersList, player)
+    if idx then
+        table.remove(cachedPlayersList, idx)
+    end
+end
+
+-- Cached sorted players for Player Panel (expensive sort operation)
+local cachedSortedPlayers = {}
+local cachedPlayerListForSort = {}
+local lastPlayerCountForSort = 0
+local lastSortTime = 0
+local SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
+
+-- ============================================================
 -- CONNECTION TRACKING (for proper cleanup)
 -- ============================================================
 local function TrackConnection(connection)
@@ -81,14 +130,13 @@ end
 local Aimbot, SilentAim, Trigger = false, nil, false
 local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
 
+-- Shared Target Cache (Defined here for scope visibility)
+local CachedTarget = nil
+local CachedTargetTime = 0
+
 -- Known body parts for targeting
 local KnownBodyParts = {
-    "Head", "HumanoidRootPart",
-    "Torso", "UpperTorso", "LowerTorso",
-    "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand",
-    "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand",
-    "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot",
-    "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot"
+    "Head", "HumanoidRootPart"
 }
 
 -- Settings/Flags storage
@@ -145,15 +193,271 @@ local Flags = {
     ["ESP/Enabled"] = true,
     ["ESP/Nametags"] = true,
     ["ESP/Tracers"] = true,
+    ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
+    ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
+    ["ESP/PlayerOutlines"] = false, -- Player body part outlines (off by default for performance)
     ["ESP/MaxDistance"] = 5000,
 
     -- Performance
-    ["Performance/Enabled"] = true
+    ["Performance/Enabled"] = true,
+    
+    -- Br3ak3r (Object Breaking Tool)
+    ["Br3ak3r/Enabled"] = true
 }
+
+-- ============================================================
+-- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
+-- ============================================================
+local CLICKBREAK_ENABLED = true
+local UNDO_LIMIT = 25
+local RAYCAST_MAX_DISTANCE = 3000
+
+-- Br3ak3r state
+local brokenSet = {}        -- [BasePart] = true (parts that are currently hidden)
+local brokenIgnoreCache = {} -- Cached array of broken parts for raycast filtering
+local scratchIgnore = {}    -- Reusable scratch table for raycast ignore list
+local brokenCacheDirty = true
+local undoStack = {}        -- LIFO of {part, cc, ltm, t} for undo functionality
+local hoverHL = nil         -- Highlight for hover preview
+local CTRL_HELD = false     -- Track if Ctrl key is held
+
+-- Br3ak3r reusable RaycastParams (performance optimization)
+local br3akerRaycastParams = RaycastParams.new()
+br3akerRaycastParams.IgnoreWater = true
+
+-- PERFORMANCE FIX: Cache filter type ONCE at startup, not on every raycast
+local Br3ak3rFilterType = (function()
+    local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
+    if ok and val and typeof(val) == "EnumItem" then return val end
+    ok, val = pcall(function() return Enum.RaycastFilterType.Blacklist end)
+    if ok and val and typeof(val) == "EnumItem" then return val end
+    return nil
+end)()
+
+if Br3ak3rFilterType then
+    br3akerRaycastParams.FilterType = Br3ak3rFilterType
+end
+
+-- Rebuild the broken parts ignore cache for raycasts
+local function rebuildBrokenIgnore()
+    if not next(brokenSet) then
+        table.clear(brokenIgnoreCache)
+        brokenCacheDirty = false
+        return
+    end
+    table.clear(brokenIgnoreCache)
+    local cacheIndex = 1
+    for part, _ in pairs(brokenSet) do
+        if part and part:IsDescendantOf(Workspace) then
+            brokenIgnoreCache[cacheIndex] = part
+            cacheIndex = cacheIndex + 1
+        end
+    end
+    brokenCacheDirty = false
+end
+
+-- Get ray from mouse cursor position
+local function getMouseRay()
+    local mouseLocation = UserInputService:GetMouseLocation()
+    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then return nil end
+    
+    local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
+    if not ray then return nil end
+    
+    return ray.Origin, ray.Direction * RAYCAST_MAX_DISTANCE, mouseLocation.X, mouseLocation.Y
+end
+
+-- Raycast with broken parts filtering
+-- PERFORMANCE FIX: Removed nested closure function, use inline logic instead
+local MAX_IGNORE_COUNT = 200
+
+local function worldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
+    if brokenCacheDirty then
+        rebuildBrokenIgnore()
+    end
+    
+    local ignore = scratchIgnore
+    table.clear(ignore)
+    
+    local ignoreCount = 0
+    
+    -- Always prioritize ignoring the local character
+    if ignoreLocalChar then
+        local ch = LocalPlayer.Character
+        if ch and ignoreCount < MAX_IGNORE_COUNT then
+            ignoreCount = ignoreCount + 1
+            ignore[ignoreCount] = ch
+        end
+    end
+    
+    -- Add extra ignore items
+    if extraIgnore then
+        for i = 1, #extraIgnore do
+            if ignoreCount >= MAX_IGNORE_COUNT then break end
+            local item = extraIgnore[i]
+            if item then
+                ignoreCount = ignoreCount + 1
+                ignore[ignoreCount] = item
+            end
+        end
+    end
+    
+    -- Add broken parts to ignore list
+    local brokenCacheLen = #brokenIgnoreCache
+    for i = 1, brokenCacheLen do
+        if ignoreCount >= MAX_IGNORE_COUNT then break end
+        local item = brokenIgnoreCache[i]
+        if item then
+            ignoreCount = ignoreCount + 1
+            ignore[ignoreCount] = item
+        end
+    end
+    
+    -- FilterType already set at initialization
+    br3akerRaycastParams.FilterDescendantsInstances = ignore
+    
+    return Workspace:Raycast(origin, direction, br3akerRaycastParams)
+end
+
+-- Mark a part as broken (hide it)
+local function markBroken(part)
+    if not part or not part:IsA("BasePart") then return end
+    if brokenSet[part] then return end
+    
+    brokenSet[part] = true
+    brokenCacheDirty = true
+    
+    -- Save original state for undo
+    table.insert(undoStack, {
+        part = part,
+        cc = part.CanCollide,
+        ltm = part.LocalTransparencyModifier,
+        t = part.Transparency
+    })
+    
+    -- Limit undo stack size
+    if #undoStack > UNDO_LIMIT then
+        table.remove(undoStack, 1)
+    end
+    
+    -- Hide the part
+    part.CanCollide = false
+    part.LocalTransparencyModifier = 1
+    part.Transparency = 1
+end
+
+-- Undo the last broken part
+local function unbreakLast()
+    local entry = table.remove(undoStack)
+    if not entry or not entry.part or not entry.part:IsDescendantOf(game) then
+        if entry and entry.part then
+            brokenSet[entry.part] = nil
+            brokenCacheDirty = true
+        end
+        return
+    end
+    
+    brokenSet[entry.part] = nil
+    brokenCacheDirty = true
+    
+    -- Restore original state
+    entry.part.CanCollide = entry.cc
+    entry.part.LocalTransparencyModifier = entry.ltm
+    entry.part.Transparency = entry.t
+end
+
+-- Sweep undo stack (periodic cleanup of destroyed parts)
+local sweepAccum = 0
+local function sweepUndo(dt)
+    sweepAccum = sweepAccum + dt
+    if sweepAccum < 2 then return end
+    sweepAccum = 0
+    
+    local i = 1
+    while i <= #undoStack do
+        local entry = undoStack[i]
+        if not entry.part or not entry.part:IsDescendantOf(game) then
+            if entry and entry.part then
+                brokenSet[entry.part] = nil
+                brokenCacheDirty = true
+            end
+            table.remove(undoStack, i)
+        else
+            i = i + 1
+        end
+    end
+end
+
+-- Prune broken set (remove parts that no longer exist)
+local function pruneBrokenSet()
+    local removed = false
+    for part, _ in pairs(brokenSet) do
+        if not part or not part:IsDescendantOf(Workspace) then
+            brokenSet[part] = nil
+            removed = true
+        end
+    end
+    if removed then
+        brokenCacheDirty = true
+    end
+end
+
+-- Create hover highlight for Br3ak3r preview
+local function createHoverHighlight()
+    if hoverHL then return hoverHL end
+    
+    hoverHL = Instance.new("Highlight")
+    hoverHL.Name = "Br3ak3r_HoverHighlight"
+    hoverHL.FillColor = Color3.fromRGB(255, 105, 180)  -- Pink
+    hoverHL.OutlineColor = Color3.fromRGB(255, 255, 255)  -- White
+    hoverHL.FillTransparency = 0.6
+    hoverHL.OutlineTransparency = 0.2
+    hoverHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hoverHL.Enabled = false
+    hoverHL.Parent = Workspace
+    
+    return hoverHL
+end
+
+-- Update hover highlight for Br3ak3r (called each frame)
+-- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
+local function updateBr3ak3rHover()
+    -- Early exit - don't do ANY work if feature disabled or Ctrl not held
+    if not CLICKBREAK_ENABLED or not CTRL_HELD then
+        if hoverHL and hoverHL.Enabled then
+            hoverHL.Enabled = false
+        end
+        return
+    end
+    
+    if not hoverHL then
+        createHoverHighlight()
+    end
+    
+    local origin, direction = getMouseRay()
+    if origin and direction then
+        local result = worldRaycastBr3ak3r(origin, direction, true)
+        local part = result and result.Instance
+        if part and part:IsA("BasePart") and not brokenSet[part] then
+            hoverHL.Adornee = part
+            hoverHL.Enabled = true
+        else
+            if hoverHL.Enabled then
+                hoverHL.Enabled = false
+            end
+        end
+    else
+        if hoverHL.Enabled then
+            hoverHL.Enabled = false
+        end
+    end
+end
 
 -- ============================================================
 -- UTILITY FUNCTIONS
 -- ============================================================
+
 
 -- ============================================================
 -- MODERN UI LIBRARY
@@ -310,34 +614,39 @@ function UI.CreateWindow(title)
     UIState.TabContainer = TabContainer
 
     -- Dragging Logic Helper
+    -- MEMORY LEAK FIX: Track connections and avoid creating new connections on each click
     local function MakeDraggable(Frame)
         local dragging, dragInput, dragStart, startPos
+        
         Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
                 dragStart = input.Position
                 startPos = Frame.Position
-                
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        dragging = false
-                    end
-                end)
             end
         end)
+        
+        Frame.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        
         Frame.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement then
                 dragInput = input
             end
         end)
-        UserInputService.InputChanged:Connect(function(input)
+        
+        -- MEMORY LEAK FIX: Track this connection
+        TrackConnection(UserInputService.InputChanged:Connect(function(input)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
-                TweenService:Create(Frame, TweenInfo.new(0.05), {
+                TweenService:Create(Frame, TWEEN_DRAG, {
                     Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
                 }):Play()
             end
-        end)
+        end))
     end
     UI.MakeDraggable = MakeDraggable
 
@@ -362,12 +671,12 @@ function UI.CreateWindow(title)
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
-            TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(600, 30)}):Play()
+            TweenService:Create(MainFrame, TWEEN_SMOOTH, {Size = UDim2.fromOffset(600, 30)}):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
             MinButton.Text = "+"
         else
-            TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = OldSize}):Play()
+            TweenService:Create(MainFrame, TWEEN_SMOOTH, {Size = OldSize}):Play()
             task.wait(0.1)
             ContentArea.Visible = true
             Sidebar.Visible = true
@@ -376,17 +685,18 @@ function UI.CreateWindow(title)
     end)
 
     -- Toggle Logic (Right Shift)
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- MEMORY LEAK FIX: Track this connection
+    TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.RightShift then
             UIState.Visible = not UIState.Visible
             MainFrame.Visible = UIState.Visible
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
                 MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
+                TweenService:Create(MainFrame, TWEEN_BACK, {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
             end
         end
-    end)
+    end))
 
     return UI
 end
@@ -444,13 +754,13 @@ function UI.CreateTab(name, icon)
     local function SelectTab()
         -- Deselect all
         for _, t in pairs(UIState.Tabs) do
-            TweenService:Create(t.Label, TweenInfo.new(0.2), {TextColor3 = UI_THEME.TextDark}):Play()
-            TweenService:Create(t.Indicator, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(t.Label, TWEEN_MEDIUM, {TextColor3 = UI_THEME.TextDark}):Play()
+            TweenService:Create(t.Indicator, TWEEN_MEDIUM, {BackgroundTransparency = 1}):Play()
             t.Page.Visible = false
         end
         -- Select current
-        TweenService:Create(TabLabel, TweenInfo.new(0.2), {TextColor3 = UI_THEME.Text}):Play()
-        TweenService:Create(Indicator, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(TabLabel, TWEEN_MEDIUM, {TextColor3 = UI_THEME.Text}):Play()
+        TweenService:Create(Indicator, TWEEN_MEDIUM, {BackgroundTransparency = 0}):Play()
         Page.Visible = true
         UIState.CurrentTab = name
     end
@@ -548,8 +858,8 @@ function UI.CreateToggle(page, text, flag, default, callback)
         local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
         local targetPos = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
         
-        TweenService:Create(Switch, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
-        TweenService:Create(Knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+        TweenService:Create(Switch, TWEEN_MEDIUM, {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(Knob, TWEEN_SMOOTH, {Position = targetPos}):Play()
         
         if callback then callback(state) end
     end)
@@ -643,23 +953,24 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     Track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            TweenService:Create(Circle, TweenInfo.new(0.1), {Size = UDim2.fromOffset(16, 16)}):Play()
+            TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
             Update(input)
         end
     end)
     
-    UserInputService.InputEnded:Connect(function(input)
+    -- MEMORY LEAK FIX: Track these connections
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
-            TweenService:Create(Circle, TweenInfo.new(0.1), {Size = UDim2.fromOffset(12, 12)}):Play()
+            TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
         end
-    end)
+    end))
     
-    UserInputService.InputChanged:Connect(function(input)
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             Update(input)
         end
-    end)
+    end))
 end
 
 function UI.CreateButton(page, text, callback)
@@ -686,9 +997,9 @@ function UI.CreateButton(page, text, callback)
     
     Button.MouseButton1Click:Connect(function()
         -- Click animation
-        TweenService:Create(Button, TweenInfo.new(0.05), {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
         task.wait(0.05)
-        TweenService:Create(Button, TweenInfo.new(0.05), {Size = UDim2.new(1, 0, 0, 36)}):Play()
+        TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
         if callback then callback() end
     end)
 end
@@ -778,35 +1089,72 @@ local function InEnemyTeam(Enabled, Player)
     return true
 end
 
--- Get character and check health (Optimized)
+-- Get character and check health (Heavily Optimized with Cache)
+local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst}
+
 local function GetCharacter(player)
     if not player then return nil end
+    
+    -- Fast path: Check cache
+    local cache = CharCache[player]
+    if cache then
+        local char = cache.Char
+        local root = cache.Root
+        
+        -- Verify validity (parented)
+        if char and char.Parent and root and root.Parent then
+            -- Standard Humanoid Check
+            if cache.Humanoid then
+                if cache.Humanoid.Health > 0 then
+                    return char, root
+                end
+                return nil
+            -- Fallback Custom Health Check (AR2)
+            elseif cache.HealthInst then
+                 if cache.HealthInst.Value > 0 then
+                     return char, root
+                 end
+                 return nil
+            else
+                -- No health object found, assume alive
+                return char, root
+            end
+        else
+             -- Invalid cache
+             CharCache[player] = nil
+        end
+    end
+
+    -- Slow path: Find and cache
     local character = player.Character
     if not character or not character.Parent then return nil end
 
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
     if not rootPart then return nil end
-
-    -- Optimization: Check standard Humanoid first (faster/more common)
+    
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        if humanoid.Health > 0 then
-            return character, rootPart
+    local healthInst = nil
+    
+    -- If no humanoid, check for AR2 style stats
+    if not humanoid then
+        local stats = player:FindFirstChild("Stats")
+        if stats then
+            healthInst = stats:FindFirstChild("Health")
         end
-        -- If humanoid exists but dead, return nil immediately
-        return nil
     end
+    
+    -- Populate cache
+    CharCache[player] = {
+        Char = character,
+        Root = rootPart,
+        Humanoid = humanoid,
+        HealthInst = healthInst
+    }
 
-    -- Fallback to AR2 Stats.Health check (only if no humanoid found)
-    local success, health = pcall(function()
-        return player.Stats.Health.Value
-    end)
+    if humanoid and humanoid.Health <= 0 then return nil end
+    if healthInst and healthInst.Value <= 0 then return nil end
 
-    if success and health and health > 0 then
-        return character, rootPart
-    end
-
-    return nil
+    return character, rootPart
 end
 
 -- ============================================================
@@ -907,16 +1255,27 @@ local function WithinReach(Enabled, Distance, Limit)
     return Distance < Limit
 end
 
+-- PERFORMANCE FIX: Reusable filter table for visibility raycasts
+local OcclusionFilter = {nil, nil}
+
 local function ObjectOccluded(Enabled, Origin, Position, Object)
     if not Enabled then return false end
-    return Raycast(Origin, Position - Origin, {Object, LocalPlayer.Character})
+    -- Reuse filter table instead of creating new one every call
+    OcclusionFilter[1] = Object
+    OcclusionFilter[2] = LocalPlayer.Character
+    return Raycast(Origin, Position - Origin, OcclusionFilter)
 end
 
 -- OPTIMIZED: Reusable result table to avoid allocations per frame
-local ClosestResult = {nil, nil, nil, nil}
-local TempScreenPos = Vector2.new(0, 0)
+-- Changed to store x,y directly instead of Vector2 to avoid allocations
+local ClosestResult = {nil, nil, nil, 0, 0} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY
 
--- GetClosest function (OPTIMIZED - reduced allocations, early-out checks)
+-- OPTIMIZED: Reusable tables for candidate sorting to avoid per-frame allocations
+local CandidateList = {} -- Array of {dist, data...}
+local CandidateCount = 0
+local MAX_CANDIDATES = 15 -- Cap max candidates to process for performance
+
+-- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 local function GetClosest(Enabled,
     TeamCheck, VisibilityCheck, DistanceCheck,
     DistanceLimit, FieldOfView, Priority, BodyParts,
@@ -926,112 +1285,154 @@ local function GetClosest(Enabled,
     
     local CameraPosition = Camera.CFrame.Position
     local MouseLocation = UserInputService:GetMouseLocation()
-    local ClosestMagnitude = FieldOfView
-    local hasResult = false
-
-    for _, Player in ipairs(Players:GetPlayers()) do
+    local mouseX, mouseY = MouseLocation.X, MouseLocation.Y
+    
+    -- Reset candidate list
+    CandidateCount = 0
+    
+    local players = GetPlayersCache()
+    for _, Player in ipairs(players) do
         if Player == LocalPlayer then continue end
 
         local Character, RootPart = GetCharacter(Player)
+        -- Fast existence checks
         if not Character or not RootPart then continue end
         if not InEnemyTeam(TeamCheck, Player) then continue end
 
-        -- Quick distance pre-check using RootPart (avoids body part iteration)
+        -- Quick distance pre-check using RootPart
         local rootDist = (RootPart.Position - CameraPosition).Magnitude
         if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
-
-        -- Quick screen check - skip if root is not even on screen
-        local rootScreenPos, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        
+        -- Optimization: Start with just RootPart for screen check before iterating all body parts
+        local _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
         if not rootOnScreen then continue end
 
+        -- Gather valid body parts
         if Priority == "Random" then
+            -- For Random, just pick one valid part and check it
             local BodyPart = Character:FindFirstChild(BodyParts[math.random(#BodyParts)])
-            if not BodyPart then continue end
+            if BodyPart then
+                 local BodyPartPosition = BodyPart.Position
+                 local Distance = (BodyPartPosition - CameraPosition).Magnitude
+                 
+                 if not DistanceCheck or Distance < DistanceLimit then
+                     -- Prediction
+                     if PredictionEnabled then
+                         BodyPartPosition = SolveTrajectory(BodyPartPosition, 
+                            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                     end
 
-            local BodyPartPosition = BodyPart.Position
-            local Distance = (BodyPartPosition - CameraPosition).Magnitude
-            
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
-
-            if PredictionEnabled then
-                BodyPartPosition = SolveTrajectory(BodyPartPosition,
-                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                     if OnScreen then
+                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+                         local dx, dy = screenX - mouseX, screenY - mouseY
+                         local Magnitude = sqrt(dx*dx + dy*dy)
+                         
+                         if Magnitude < FieldOfView then
+                             CandidateCount = CandidateCount + 1
+                             local entry = CandidateList[CandidateCount]
+                             if not entry then 
+                                 entry = {}
+                                 CandidateList[CandidateCount] = entry
+                             end
+                             entry.mag = Magnitude
+                             entry.ply = Player
+                             entry.char = Character
+                             entry.part = BodyPart
+                             entry.sx = screenX
+                             entry.sy = screenY
+                             entry.pos = BodyPartPosition -- Predicted position
+                         end
+                     end
+                 end
+            end
+        else
+            -- Check specified body parts
+            -- Optimization: If Priority is specific part (e.g. Head), only check that. 
+            -- If Priority is "Closest", check all parts in list
+            local checkParts = BodyParts
+            if Priority ~= "Closest" and Priority ~= "Random" then
+                checkParts = {Priority}
             end
             
-            local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            if not OnScreen then continue end
-            
-            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
-            if Magnitude >= ClosestMagnitude then continue end
+            for _, PartName in ipairs(checkParts) do
+                local BodyPart = Character:FindFirstChild(PartName)
+                if not BodyPart then continue end
+                
+                local BodyPartPosition = BodyPart.Position
+                local Distance = (BodyPartPosition - CameraPosition).Magnitude
+                 
+                if DistanceCheck and Distance >= DistanceLimit then continue end
 
-            if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
+                -- Prediction
+                if PredictionEnabled then
+                    BodyPartPosition = SolveTrajectory(BodyPartPosition, 
+                       BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                end
 
-            -- Update reusable result
-            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
-            ClosestResult[4] = Vector2.new(screenX, screenY)
-            return ClosestResult
-            
-        elseif Priority ~= "Closest" then
-            local BodyPart = Character:FindFirstChild(Priority)
-            if not BodyPart then continue end
-
-            local BodyPartPosition = BodyPart.Position
-            local Distance = (BodyPartPosition - CameraPosition).Magnitude
-            
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
-
-            if PredictionEnabled then
-                BodyPartPosition = SolveTrajectory(BodyPartPosition,
-                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                 local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                 if OnScreen then
+                     local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+                     local dx, dy = screenX - mouseX, screenY - mouseY
+                     local Magnitude = sqrt(dx*dx + dy*dy)
+                     
+                     if Magnitude < FieldOfView then
+                         CandidateCount = CandidateCount + 1
+                         local entry = CandidateList[CandidateCount]
+                         if not entry then 
+                             entry = {}
+                             CandidateList[CandidateCount] = entry
+                         end
+                         entry.mag = Magnitude
+                         entry.ply = Player
+                         entry.char = Character
+                         entry.part = BodyPart
+                         entry.sx = screenX
+                         entry.sy = screenY
+                         entry.pos = BodyPartPosition
+                     end
+                 end
             end
-            
-            local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            if not OnScreen then continue end
-
-            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
-            if Magnitude >= ClosestMagnitude then continue end
-
-            if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
-
-            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
-            ClosestResult[4] = Vector2.new(screenX, screenY)
-            return ClosestResult
-        end
-
-        -- Priority == "Closest" path
-        for _, BodyPartName in ipairs(BodyParts) do
-            local BodyPart = Character:FindFirstChild(BodyPartName)
-            if not BodyPart then continue end
-
-            local BodyPartPosition = BodyPart.Position
-            local Distance = (BodyPartPosition - CameraPosition).Magnitude
-            
-            if not WithinReach(DistanceCheck, Distance, DistanceLimit) then continue end
-            
-            if PredictionEnabled then
-                BodyPartPosition = SolveTrajectory(BodyPartPosition,
-                    BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
-            end
-            
-            local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-            if not OnScreen then continue end
-
-            local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-            local Magnitude = sqrt((screenX - MouseLocation.X)^2 + (screenY - MouseLocation.Y)^2)
-            if Magnitude >= ClosestMagnitude then continue end
-
-            if ObjectOccluded(VisibilityCheck, CameraPosition, BodyPartPosition, Character) then continue end
-
-            ClosestMagnitude = Magnitude
-            ClosestResult[1], ClosestResult[2], ClosestResult[3] = Player, Character, BodyPart
-            ClosestResult[4] = Vector2.new(screenX, screenY)
-            hasResult = true
         end
     end
-
-    return hasResult and ClosestResult or nil
+    
+    if CandidateCount == 0 then return nil end
+    
+    -- Sort candidates by screen distance (Magnitude)
+    -- We only sort the used portion of the list
+    if CandidateCount > 1 then
+        table.sort(CandidateList, function(a, b)
+            -- Handle potential nil entries in sparse array if any (sanity check)
+            if not a then return false end
+            if not b then return true end
+            return a.mag < b.mag
+        end)
+    end
+    
+    -- Iterate sorted candidates and perform Raycast on the closest ones
+    -- Stop at the FIRST visible candidate
+    local limit = min(CandidateCount, MAX_CANDIDATES)
+    
+    for i = 1, limit do
+        local entry = CandidateList[i]
+        if not entry then continue end
+        
+        -- Lazy Visibility Check
+        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+            continue -- Blocked, try next closest
+        end
+        
+        -- Found best target!
+        ClosestResult[1] = entry.ply
+        ClosestResult[2] = entry.char
+        ClosestResult[3] = entry.part
+        ClosestResult[4] = entry.sx
+        ClosestResult[5] = entry.sy
+        
+        return ClosestResult
+    end
+    
+    return nil
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
@@ -1185,10 +1586,17 @@ end
 -- ============================================================
 
 local ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
+local PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
 
 local CLOSEST_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (always for closest)
 local NORMAL_COLOR = Color3.fromRGB(255, 255, 255)  -- White
 local TRACER_COLOR = Color3.fromRGB(0, 255, 255)    -- Cyan
+local OUTLINE_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (same as closest player indicator)
+
+-- Off-screen indicator settings
+local OFFSCREEN_EDGE_PADDING = 50  -- Pixels from screen edge
+local OFFSCREEN_ARROW_SIZE = 20    -- Size of the direction arrow
+local OFFSCREEN_INDICATOR_COLOR = Color3.fromRGB(255, 200, 50) -- Yellow/gold for visibility
 
 -- Distance-based color zones (for tracker, but closest overrides to pink)
 local COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-2000 studs)
@@ -1201,20 +1609,233 @@ local TrackerMinimized = false
 local TrackerOriginalSize = UDim2.fromOffset(220, 70)
 local NearestPlayerRef = nil
 local CurrentTargetDistance = 0 -- Track distance for color coding
+local TrackerStrokeRef = nil -- Cached stroke reference to avoid repeated lookups
 
--- Get color based on distance (Red=0-2000, Yellow=2001-4000, Green=4000+)
+-- Get color based on distance (Pink=Closest, Red≤2000, Yellow≤4000, Green>4000)
 local function GetDistanceColor(distance, isClosest)
     if isClosest then
         return CLOSEST_COLOR -- Pink always overrides for closest player
     end
 
-    if distance <= 1000 then
+    if distance <= 2000 then
         return COLOR_CLOSE -- Red
-    elseif distance <= 2000 then
+    elseif distance <= 4000 then
         return COLOR_MID -- Yellow
     else
         return COLOR_FAR -- Green
     end
+end
+
+-- Get a player's team color (returns white if no team)
+-- Wrapped in pcall to prevent errors if Team property access fails
+-- Get a player's team color (returns white if no team)
+local function GetTeamColor(player)
+    if not player then return NORMAL_COLOR end
+    
+    -- Optimized: No pcall needed for standard property access
+    if player.Team then
+        return player.TeamColor.Color
+    end
+    
+    return NORMAL_COLOR
+end
+
+-- PERFORMANCE: Cache camera data per-frame for off-screen calculations
+local cachedCameraData = {
+    cFrame = nil,
+    position = nil,
+    lookVector = nil,
+    rightVector = nil,
+    upVector = nil,
+    viewportSize = nil,
+    cacheTime = 0
+}
+local CAMERA_CACHE_DURATION = 0.016 -- Cache for 1 frame (~60fps)
+
+local function UpdateCameraCache()
+    local now = os.clock()
+    if (now - cachedCameraData.cacheTime) < CAMERA_CACHE_DURATION then
+        return true -- Cache is still valid
+    end
+    
+    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then return false end
+    
+    cachedCameraData.cFrame = Camera.CFrame
+    cachedCameraData.position = Camera.CFrame.Position
+    cachedCameraData.lookVector = Camera.CFrame.LookVector
+    cachedCameraData.rightVector = Camera.CFrame.RightVector
+    cachedCameraData.upVector = Camera.CFrame.UpVector
+    cachedCameraData.viewportSize = Camera.ViewportSize
+    cachedCameraData.cacheTime = now
+    return true
+end
+
+-- Calculate screen edge position for off-screen indicator
+-- Returns the position clamped to screen edges and the angle toward the target
+-- PERFORMANCE: Uses cached camera data to avoid redundant property access
+local function GetEdgePosition(worldPosition)
+    -- Update camera cache (shared across all players per frame)
+    if not UpdateCameraCache() then return nil, nil, false end
+    
+    local viewportSize = cachedCameraData.viewportSize
+    
+    -- Still need to call WorldToViewportPoint per-player (can't cache this)
+    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then return nil, nil, false end
+    local screenPos, onScreen = Camera:WorldToViewportPoint(worldPosition)
+    
+    -- If on screen, return nil (use normal nametag)
+    if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
+       and screenPos.Y > OFFSCREEN_EDGE_PADDING and screenPos.Y < viewportSize.Y - OFFSCREEN_EDGE_PADDING then
+        return nil, nil, true
+    end
+    
+    -- Calculate center of screen
+    local centerX = viewportSize.X / 2
+    local centerY = viewportSize.Y / 2
+    
+    -- Use cached camera vectors
+    local cameraPos = cachedCameraData.position
+    local cameraLook = cachedCameraData.lookVector
+    local rightVector = cachedCameraData.rightVector
+    local upVector = cachedCameraData.upVector
+    
+    -- Get direction from camera to world position
+    local directionToTarget = (worldPosition - cameraPos).Unit
+    
+    -- Project direction onto camera plane
+    local rightDot = rightVector:Dot(directionToTarget)
+    local upDot = upVector:Dot(directionToTarget)
+    local forwardDot = cameraLook:Dot(directionToTarget)
+    
+    -- If target is behind camera, we need to flip the direction
+    if forwardDot < 0 then
+        rightDot = -rightDot
+        upDot = -upDot
+    end
+    
+    -- Calculate angle for arrow rotation
+    local angle = atan2(rightDot, -upDot)
+    
+    -- Normalize to get direction on screen
+    local screenDirX = rightDot
+    local screenDirY = -upDot
+    local magnitude = sqrt(screenDirX * screenDirX + screenDirY * screenDirY)
+    if magnitude > 0 then
+        screenDirX = screenDirX / magnitude
+        screenDirY = screenDirY / magnitude
+    else
+        screenDirX = 0
+        screenDirY = 1
+    end
+    
+    -- Calculate edge intersection using constrained approach
+    local edgeX, edgeY
+    local maxX = viewportSize.X - OFFSCREEN_EDGE_PADDING - 100 -- Extra space for label
+    local maxY = viewportSize.Y - OFFSCREEN_EDGE_PADDING - 40
+    local minX = OFFSCREEN_EDGE_PADDING
+    local minY = OFFSCREEN_EDGE_PADDING
+    
+    -- Scale direction to reach screen edge
+    local scaleX = 1e10
+    local scaleY = 1e10
+    
+    if screenDirX > 0.001 then
+        scaleX = (maxX - centerX) / screenDirX
+    elseif screenDirX < -0.001 then
+        scaleX = (minX - centerX) / screenDirX
+    end
+    
+    if screenDirY > 0.001 then
+        scaleY = (maxY - centerY) / screenDirY
+    elseif screenDirY < -0.001 then
+        scaleY = (minY - centerY) / screenDirY
+    end
+    
+    local scale = min(abs(scaleX), abs(scaleY))
+    edgeX = centerX + screenDirX * scale
+    edgeY = centerY + screenDirY * scale
+    
+    -- Clamp to screen bounds
+    edgeX = max(minX, min(maxX, edgeX))
+    edgeY = max(minY, min(maxY, edgeY))
+    
+    return Vector2.new(edgeX, edgeY), angle, false
+end
+
+-- Create off-screen indicator UI element
+local function CreateOffscreenIndicator()
+    local indicator = Instance.new("Frame")
+    indicator.Name = "OffscreenIndicator"
+    indicator.Size = UDim2.fromOffset(120, 50)
+    indicator.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    indicator.BackgroundTransparency = 0.3
+    indicator.BorderSizePixel = 0
+    indicator.Visible = false
+    indicator.ZIndex = 100
+    indicator.Parent = ScreenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = indicator
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = OFFSCREEN_INDICATOR_COLOR
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = indicator
+    
+    -- Arrow indicator (pointing toward player)
+    local arrow = Instance.new("ImageLabel")
+    arrow.Name = "Arrow"
+    arrow.Size = UDim2.fromOffset(OFFSCREEN_ARROW_SIZE, OFFSCREEN_ARROW_SIZE)
+    arrow.Position = UDim2.new(0, 5, 0.5, -OFFSCREEN_ARROW_SIZE/2)
+    arrow.BackgroundTransparency = 1
+    arrow.Image = "rbxassetid://6034818372" -- Arrow/chevron icon
+    arrow.ImageColor3 = OFFSCREEN_INDICATOR_COLOR
+    arrow.ImageTransparency = 0
+    arrow.ZIndex = 101
+    arrow.Parent = indicator
+    
+    -- Name label
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Size = UDim2.new(1, -30, 0, 20)
+    nameLabel.Position = UDim2.fromOffset(28, 5)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 12
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.ZIndex = 101
+    nameLabel.Text = ""
+    nameLabel.Parent = indicator
+    
+    -- Distance label
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Name = "DistLabel"
+    distLabel.Size = UDim2.new(1, -30, 0, 18)
+    distLabel.Position = UDim2.fromOffset(28, 26)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = OFFSCREEN_INDICATOR_COLOR
+    distLabel.TextStrokeTransparency = 0
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextSize = 11
+    distLabel.TextXAlignment = Enum.TextXAlignment.Left
+    distLabel.ZIndex = 101
+    distLabel.Text = ""
+    distLabel.Parent = indicator
+    
+    return {
+        Frame = indicator,
+        Arrow = arrow,
+        NameLabel = nameLabel,
+        DistLabel = distLabel,
+        Stroke = stroke
+    }
 end
 
 -- Create Closest Player Tracker display
@@ -1243,6 +1864,7 @@ local function CreateClosestPlayerTracker()
     stroke.Thickness = 2
     stroke.Transparency = 0.5
     stroke.Parent = ClosestPlayerTrackerLabel
+    TrackerStrokeRef = stroke -- Cache the reference
 
     -- Minimize button
     local minimizeBtn = Instance.new("TextButton")
@@ -1296,19 +1918,17 @@ local function UpdateNearestPlayer()
     local myRootPos = myRoot.Position
     local best, bestDist = nil, nil
 
-    -- Find closest alive player
-    for _, player in ipairs(Players:GetPlayers()) do
+    -- Find closest alive player (OPTIMIZED: removed pcall overhead)
+    for _, player in ipairs(GetPlayersCache()) do
         if player ~= LocalPlayer and player.Parent then
-            local success = pcall(function()
-                local character, rootPart = GetCharacter(player)
-                if character and rootPart then
-                    local dist = (rootPart.Position - myRootPos).Magnitude
-                    if not bestDist or dist < bestDist then
-                        bestDist = dist
-                        best = player
-                    end
+            local character, rootPart = GetCharacter(player)
+            if character and rootPart then
+                local dist = (rootPart.Position - myRootPos).Magnitude
+                if not bestDist or dist < bestDist then
+                    bestDist = dist
+                    best = player
                 end
-            end)
+            end
         end
     end
 
@@ -1346,10 +1966,9 @@ local function UpdateClosestPlayerTracker()
                     local color = GetDistanceColor(distance, true) -- true = is closest
                     ClosestPlayerTrackerLabel.TextColor3 = color
 
-                    -- Update stroke color to match
-                    local stroke = ClosestPlayerTrackerLabel:FindFirstChildOfClass("UIStroke")
-                    if stroke then
-                        stroke.Color = color
+                    -- Update stroke color to match (using cached reference)
+                    if TrackerStrokeRef then
+                        TrackerStrokeRef.Color = color
                     end
 
                     CurrentTargetDistance = distRounded
@@ -1372,46 +1991,660 @@ local function UpdateClosestPlayerTracker()
     end
 end
 
+-- ============================================================
+-- PLAYER PANEL (Top 10 Closest Players)
+-- ============================================================
+
+local PlayerPanelFrame = nil
+local PlayerPanelRows = {}
+local PlayerPanelMinimized = false
+local PLAYER_PANEL_MAX_ROWS = 10
+
+-- Calculate direction angle for arrow (returns rotation in degrees)
+local function GetDirectionToPlayer(targetPosition)
+    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then return 0 end
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return 0 end
+    
+    local myPos = myRoot.Position
+    local direction = (targetPosition - myPos)
+    
+    -- Get camera's forward direction (ignoring Y)
+    local camLook = Camera.CFrame.LookVector
+    local camRight = Camera.CFrame.RightVector
+    
+    -- Calculate angle relative to camera
+    local forward2D = Vector2.new(camLook.X, camLook.Z).Unit
+    local right2D = Vector2.new(camRight.X, camRight.Z).Unit
+    local dir2D = Vector2.new(direction.X, direction.Z)
+    
+    if dir2D.Magnitude < 0.01 then return 0 end
+    dir2D = dir2D.Unit
+    
+    -- Dot product gives us the angle components
+    local forwardDot = forward2D.X * dir2D.X + forward2D.Y * dir2D.Y
+    local rightDot = right2D.X * dir2D.X + right2D.Y * dir2D.Y
+    
+    local angle = atan2(rightDot, forwardDot)
+    return deg(angle)
+end
+
+-- Create the Player Panel UI
+local function CreatePlayerPanel()
+    if PlayerPanelFrame then return end
+    
+    -- Main container
+    PlayerPanelFrame = Instance.new("Frame")
+    PlayerPanelFrame.Name = "PlayerPanel"
+    PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
+    PlayerPanelFrame.Position = UDim2.new(0, 10, 0.5, -170)
+    PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    PlayerPanelFrame.BackgroundTransparency = 0.1
+    PlayerPanelFrame.BorderSizePixel = 0
+    PlayerPanelFrame.Visible = false
+    PlayerPanelFrame.ZIndex = 50
+    PlayerPanelFrame.Parent = ScreenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = PlayerPanelFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(60, 60, 60)
+    stroke.Thickness = 1
+    stroke.Parent = PlayerPanelFrame
+    
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 30)
+    header.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    header.BorderSizePixel = 0
+    header.ZIndex = 51
+    header.Parent = PlayerPanelFrame
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+    
+    -- Fix bottom corners of header
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 10)
+    headerFix.Position = UDim2.new(0, 0, 1, -10)
+    headerFix.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    headerFix.BorderSizePixel = 0
+    headerFix.ZIndex = 51
+    headerFix.Parent = header
+    
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -60, 1, 0)
+    title.Position = UDim2.fromOffset(10, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🎯 Nearby Players"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextColor3 = Color3.fromRGB(0, 200, 255)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 52
+    title.Parent = header
+    
+    -- Minimize button
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Name = "MinimizeBtn"
+    minimizeBtn.Size = UDim2.fromOffset(24, 24)
+    minimizeBtn.Position = UDim2.new(1, -30, 0, 3)
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    minimizeBtn.BackgroundTransparency = 0.5
+    minimizeBtn.Text = "−"
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.TextSize = 16
+    minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.ZIndex = 52
+    minimizeBtn.Parent = header
+    
+    local minBtnCorner = Instance.new("UICorner")
+    minBtnCorner.CornerRadius = UDim.new(0, 4)
+    minBtnCorner.Parent = minimizeBtn
+    
+    -- Content container (scrolling frame for rows)
+    local content = Instance.new("ScrollingFrame")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, -10, 1, -40)
+    content.Position = UDim2.fromOffset(5, 35)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.ScrollBarThickness = 4
+    content.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    content.CanvasSize = UDim2.fromOffset(0, PLAYER_PANEL_MAX_ROWS * 28)
+    content.ZIndex = 51
+    content.Parent = PlayerPanelFrame
+    
+    local contentLayout = Instance.new("UIListLayout")
+    contentLayout.Padding = UDim.new(0, 2)
+    contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    contentLayout.Parent = content
+    
+    -- Create rows for players
+    for i = 1, PLAYER_PANEL_MAX_ROWS do
+        local row = Instance.new("Frame")
+        row.Name = "Row" .. i
+        row.Size = UDim2.new(1, -5, 0, 26)
+        row.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        row.BackgroundTransparency = 0.5
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.ZIndex = 52
+        row.Visible = false
+        row.Parent = content
+        
+        local rowCorner = Instance.new("UICorner")
+        rowCorner.CornerRadius = UDim.new(0, 4)
+        rowCorner.Parent = row
+        
+        -- Rank number
+        local rankLabel = Instance.new("TextLabel")
+        rankLabel.Name = "Rank"
+        rankLabel.Size = UDim2.fromOffset(20, 26)
+        rankLabel.Position = UDim2.fromOffset(3, 0)
+        rankLabel.BackgroundTransparency = 1
+        rankLabel.Text = "#" .. i
+        rankLabel.Font = Enum.Font.GothamBold
+        rankLabel.TextSize = 10
+        rankLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        rankLabel.ZIndex = 53
+        rankLabel.Parent = row
+        
+        -- Direction arrow
+        local arrow = Instance.new("TextLabel")
+        arrow.Name = "Arrow"
+        arrow.Size = UDim2.fromOffset(20, 26)
+        arrow.Position = UDim2.fromOffset(22, 0)
+        arrow.BackgroundTransparency = 1
+        arrow.Text = "→"
+        arrow.Font = Enum.Font.GothamBold
+        arrow.TextSize = 14
+        arrow.TextColor3 = Color3.fromRGB(255, 200, 50)
+        arrow.ZIndex = 53
+        arrow.Parent = row
+        
+        -- Name (nickname) - with team color
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "Name"
+        nameLabel.Size = UDim2.new(0, 100, 1, 0)
+        nameLabel.Position = UDim2.fromOffset(44, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = ""
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 11
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.ZIndex = 53
+        nameLabel.Parent = row
+        
+        -- Username (@name)
+        local usernameLabel = Instance.new("TextLabel")
+        usernameLabel.Name = "Username"
+        usernameLabel.Size = UDim2.new(0, 80, 1, 0)
+        usernameLabel.Position = UDim2.fromOffset(148, 0)
+        usernameLabel.BackgroundTransparency = 1
+        usernameLabel.Text = ""
+        usernameLabel.Font = Enum.Font.Gotham
+        usernameLabel.TextSize = 10
+        usernameLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        usernameLabel.ZIndex = 53
+        usernameLabel.Parent = row
+        
+        -- Distance
+        local distLabel = Instance.new("TextLabel")
+        distLabel.Name = "Distance"
+        distLabel.Size = UDim2.new(0, 60, 1, 0)
+        distLabel.Position = UDim2.new(1, -65, 0, 0)
+        distLabel.BackgroundTransparency = 1
+        distLabel.Text = ""
+        distLabel.Font = Enum.Font.GothamBold
+        distLabel.TextSize = 10
+        distLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        distLabel.TextXAlignment = Enum.TextXAlignment.Right
+        distLabel.ZIndex = 53
+        distLabel.Parent = row
+        
+        PlayerPanelRows[i] = {
+            Frame = row,
+            Rank = rankLabel,
+            Arrow = arrow,
+            Name = nameLabel,
+            Username = usernameLabel,
+            Distance = distLabel,
+            lastPlayer = nil,
+            lastDist = -1,
+            lastAngle = 0
+        }
+    end
+    
+    -- Minimize toggle
+    minimizeBtn.MouseButton1Click:Connect(function()
+        PlayerPanelMinimized = not PlayerPanelMinimized
+        if PlayerPanelMinimized then
+            PlayerPanelFrame.Size = UDim2.fromOffset(320, 30)
+            content.Visible = false
+            minimizeBtn.Text = "+"
+        else
+            PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
+            content.Visible = true
+            minimizeBtn.Text = "−"
+        end
+    end)
+    
+    -- Make draggable
+    if UI.MakeDraggable then
+        UI.MakeDraggable(PlayerPanelFrame)
+    end
+end
+
+-- Get sorted list of closest players (OPTIMIZED - uses caching to avoid GC spikes)
+local function GetSortedPlayersByDistance()
+    local now = os.clock()
+    local currentPlayers = GetPlayersCache()
+    local currentCount = #currentPlayers
+    
+    -- Return cached result if still valid
+    if (now - lastSortTime) < SORT_CACHE_DURATION and currentCount == lastPlayerCountForSort then
+        return cachedSortedPlayers
+    end
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then 
+        table.clear(cachedSortedPlayers)
+        return cachedSortedPlayers 
+    end
+    
+    local myPos = myRoot.Position
+    
+    -- Reuse cached table instead of creating new one
+    table.clear(cachedPlayerListForSort)
+    local insertIdx = 0
+    
+    for _, player in ipairs(currentPlayers) do
+        if player ~= LocalPlayer and player.Parent then
+            local character, rootPart = GetCharacter(player)
+            if character and rootPart then
+                local dist = (rootPart.Position - myPos).Magnitude
+                if dist <= Flags["ESP/MaxDistance"] then
+                    insertIdx = insertIdx + 1
+                    -- Reuse or create entry
+                    local entry = cachedPlayerListForSort[insertIdx]
+                    if not entry then
+                        entry = {}
+                        cachedPlayerListForSort[insertIdx] = entry
+                    end
+                    entry.player = player
+                    entry.distance = dist
+                    entry.position = rootPart.Position
+                end
+            end
+        end
+    end
+    
+    -- Clear any extra entries from previous iterations
+    for i = insertIdx + 1, #cachedPlayerListForSort do
+        cachedPlayerListForSort[i] = nil
+    end
+    
+    -- Sort by distance (closest first)
+    table.sort(cachedPlayerListForSort, function(a, b)
+        return a.distance < b.distance
+    end)
+    
+    -- Build result (reusing cached result table)
+    table.clear(cachedSortedPlayers)
+    for i = 1, min(PLAYER_PANEL_MAX_ROWS, #cachedPlayerListForSort) do
+        cachedSortedPlayers[i] = cachedPlayerListForSort[i]
+    end
+    
+    lastSortTime = now
+    lastPlayerCountForSort = currentCount
+    
+    return cachedSortedPlayers
+end
+
+-- Arrow characters for 8 directions
+local DIRECTION_ARROWS = {
+    "↑", "↗", "→", "↘", "↓", "↙", "←", "↖"
+}
+
+local function GetArrowForAngle(angleDeg)
+    -- Normalize angle to 0-360
+    local normalized = (angleDeg + 180) % 360
+    -- Convert to 8 segments (0-7)
+    local segment = floor((normalized + 22.5) / 45) % 8
+    return DIRECTION_ARROWS[segment + 1] or "→"
+end
+
+-- Update Player Panel
+local function UpdatePlayerPanel()
+    if not Flags["ESP/PlayerPanel"] or not PlayerPanelFrame then
+        if PlayerPanelFrame then
+            PlayerPanelFrame.Visible = false
+        end
+        return
+    end
+    
+    PlayerPanelFrame.Visible = true
+    
+    -- Skip content update if minimized
+    if PlayerPanelMinimized then return end
+    
+    local sortedPlayers = GetSortedPlayersByDistance()
+    
+    for i = 1, PLAYER_PANEL_MAX_ROWS do
+        local rowData = PlayerPanelRows[i]
+        local playerData = sortedPlayers[i]
+        
+        if playerData then
+            local player = playerData.player
+            local dist = playerData.distance
+            local distRounded = floor(dist)
+            
+            rowData.Frame.Visible = true
+            
+            -- Only update if player changed or distance changed significantly
+            local playerChanged = rowData.lastPlayer ~= player
+            local distChanged = abs((rowData.lastDist or 0) - distRounded) > 3
+            
+            if playerChanged then
+                -- Update name and username
+                local nickname = player.DisplayName or player.Name
+                local username = "@" .. player.Name
+                
+                rowData.Name.Text = nickname
+                rowData.Username.Text = username
+                
+                -- Get team color
+                local teamColor = GetTeamColor(player)
+                rowData.Name.TextColor3 = teamColor
+                
+                rowData.lastPlayer = player
+            end
+            
+            if distChanged then
+                rowData.Distance.Text = distRounded .. "m"
+                
+                -- Color based on distance
+                local distColor = GetDistanceColor(dist, i == 1)
+                rowData.Distance.TextColor3 = distColor
+                
+                rowData.lastDist = distRounded
+            end
+            
+            -- Update direction arrow (always update since player/camera moves)
+            local angle = GetDirectionToPlayer(playerData.position)
+            local arrowChar = GetArrowForAngle(angle)
+            if rowData.Arrow.Text ~= arrowChar then
+                rowData.Arrow.Text = arrowChar
+            end
+        else
+            -- No player for this row
+            if rowData.Frame.Visible then
+                rowData.Frame.Visible = false
+                rowData.lastPlayer = nil
+                rowData.lastDist = -1
+            end
+        end
+    end
+end
+
 -- Create ESP for a player
 local function CreateESP(player)
     if ESPObjects[player] then return end
     if player == LocalPlayer then return end
 
-    local espData = {}
+    local espData = {
+        -- Cache previous values to avoid redundant updates
+        lastNickname = "",
+        lastUsername = "",
+        lastDistance = -1,
+        lastTeamColor = nil,
+        lastUsername = "",
+        lastDistance = -1,
+        lastTeamColor = nil,
+        lastDistanceColor = nil,
+        Connections = {} -- Store player-specific connections here
+    }
 
-    -- Create nametag (BillboardGui)
+    -- Create nametag (BillboardGui) with Username, Nickname, and Distance
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.Size = UDim2.new(0, 200, 0, 60) -- Increased height for 3 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.Parent = nil
 
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NameLabel"
-    nameLabel.Size = UDim2.new(1, 0, 1, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = NORMAL_COLOR
-    nameLabel.TextStrokeTransparency = 0
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 14
-    nameLabel.Parent = billboard
+    -- Container frame for vertical layout
+    local container = Instance.new("Frame")
+    container.Name = "Container"
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.BackgroundTransparency = 1
+    container.Parent = billboard
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0, 0)
+    layout.Parent = container
+
+    -- Display Name (Nickname) - Top line (colored by team)
+    local nicknameLabel = Instance.new("TextLabel")
+    nicknameLabel.Name = "NicknameLabel"
+    nicknameLabel.Size = UDim2.new(1, 0, 0, 18)
+    nicknameLabel.BackgroundTransparency = 1
+    nicknameLabel.TextColor3 = NORMAL_COLOR
+    nicknameLabel.TextStrokeTransparency = 0
+    nicknameLabel.Font = Enum.Font.GothamBold
+    nicknameLabel.TextSize = 14
+    nicknameLabel.LayoutOrder = 1
+    nicknameLabel.Parent = container
+
+    -- Username (@name) - Middle line (colored by team)
+    local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Name = "UsernameLabel"
+    usernameLabel.Size = UDim2.new(1, 0, 0, 18)
+    usernameLabel.BackgroundTransparency = 1
+    usernameLabel.TextColor3 = NORMAL_COLOR
+    usernameLabel.TextStrokeTransparency = 0
+    usernameLabel.Font = Enum.Font.GothamBold
+    usernameLabel.TextSize = 14
+    usernameLabel.LayoutOrder = 2
+    usernameLabel.Parent = container
+
+    -- Distance label - Bottom line (colored by distance heat-map)
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Name = "DistanceLabel"
+    distanceLabel.Size = UDim2.new(1, 0, 0, 18)
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.TextColor3 = NORMAL_COLOR
+    distanceLabel.TextStrokeTransparency = 0
+    distanceLabel.Font = Enum.Font.GothamBold
+    distanceLabel.TextSize = 14
+    distanceLabel.LayoutOrder = 3
+    distanceLabel.Parent = container
 
     espData.Nametag = billboard
-    espData.NameLabel = nameLabel
+    espData.NicknameLabel = nicknameLabel
+    espData.UsernameLabel = usernameLabel
+    espData.DistanceLabel = distanceLabel
 
-    -- Create tracer (Line)
-    if Drawing then
-        local tracer = Drawing.new("Line")
-        tracer.Visible = false
-        tracer.Color = TRACER_COLOR
-        tracer.Thickness = 1
-        tracer.Transparency = 0.8
+    -- Create tracer (Frame based for AlwaysOnTop)
+    -- Using a Frame instead of Drawing ensures it renders through walls
+    local tracer = Instance.new("Frame")
+    tracer.Name = "Tracer"
+    tracer.Visible = false
+    tracer.BackgroundColor3 = TRACER_COLOR
+    tracer.BorderSizePixel = 0
+    tracer.AnchorPoint = Vector2.new(0.5, 0.5) -- Center anchor for rotation
+    tracer.Parent = ScreenGui -- Render on top of everything
+    
+    espData.Tracer = tracer
 
-        espData.Tracer = tracer
-    end
+    -- Create off-screen indicator
+    espData.OffscreenIndicator = CreateOffscreenIndicator()
+    espData.lastOffscreenVisible = false
 
     ESPObjects[player] = espData
+end
+
+-- Create/Update player body part outlines (Highlight based for Wireframe + AlwaysOnTop)
+local function UpdatePlayerOutlines(player, character)
+    if not character then return end
+    
+    -- Initialize outline storage for this player if needed
+    if not PlayerOutlineObjects[player] then
+        PlayerOutlineObjects[player] = {}
+    end
+    
+    local storage = PlayerOutlineObjects[player]
+    
+    -- Cleanup legacy/previous outlines (SelectionBoxes/BoxHandleAdornments)
+    -- If storage has individual part keys, it's from the old method
+    for k, v in pairs(storage) do
+        if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
+            pcall(function() v:Destroy() end)
+            storage[k] = nil
+        end
+    end
+    
+    -- Create single Highlight for the character
+    if not storage.Highlight then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PlayerOutlineHighlight"
+        highlight.Adornee = character
+        highlight.FillColor = OUTLINE_COLOR
+        highlight.FillTransparency = 1 -- Invisible fill (Wireframe only)
+        highlight.OutlineColor = OUTLINE_COLOR
+        highlight.OutlineTransparency = 0 -- Fully visible outline
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Visible through walls
+        highlight.Enabled = true
+        highlight.Parent = character
+        
+        storage.Highlight = highlight
+    else
+        local highlight = storage.Highlight
+        -- Validate existence
+        if not highlight or not highlight.Parent then
+            if highlight then pcall(function() highlight:Destroy() end) end
+            storage.Highlight = nil
+            -- Recursive call to recreate
+            return UpdatePlayerOutlines(player, character)
+        end
+        
+        -- Update properties
+        if highlight.Adornee ~= character then
+            highlight.Adornee = character
+        end
+        if highlight.OutlineColor ~= OUTLINE_COLOR then
+            highlight.OutlineColor = OUTLINE_COLOR
+        end
+        if not highlight.Enabled then
+            highlight.Enabled = true
+        end
+    end
+
+    -- Helper to create/update Dot Indicator
+    local function UpdateDot(dotType, partName)
+        local part = character:FindFirstChild(partName)
+        if not part then
+            if storage[dotType] then
+                pcall(function() storage[dotType]:Destroy() end)
+                storage[dotType] = nil
+            end
+            return
+        end
+
+        local dot = storage[dotType]
+        if not dot then
+            -- Create BillboardGui
+            dot = Instance.new("BillboardGui")
+            dot.Name = dotType
+            dot.AlwaysOnTop = true
+            dot.Size = UDim2.fromOffset(6, 6)
+            dot.StudsOffset = Vector3.new(0, 0, 0)
+            dot.Adornee = part
+            dot.Parent = character
+
+            local dotFrame = Instance.new("Frame")
+            dotFrame.Name = "Dot"
+            dotFrame.Size = UDim2.new(1, 0, 1, 0)
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+            dotFrame.BorderSizePixel = 0
+            dotFrame.Parent = dot
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(1, 0)
+            corner.Parent = dotFrame
+
+            storage[dotType] = dot
+        else
+            if not dot or not dot.Parent then
+                storage[dotType] = nil
+                return UpdateDot(dotType, partName)
+            end
+            if dot.Adornee ~= part then
+                dot.Adornee = part
+                dot.Parent = character
+            end
+        end
+
+        -- Update Color based on Locked Status
+        local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
+        
+        -- Check if this specific part is being locked onto
+        -- verify cache is fresh (aimbot is actually active) with slightly looser tolerance (100ms)
+        if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
+            -- CachedTarget structure: {Player, Character, HitPart, Position, ...}
+            local lockedPart = CachedTarget[3]
+            if lockedPart and lockedPart.Name == partName then
+                dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
+            end
+        end
+
+        if dot.Dot.BackgroundColor3 ~= dotColor then
+            dot.Dot.BackgroundColor3 = dotColor
+        end
+    end
+
+    -- Update Head and Root dots
+    UpdateDot("HeadDot", "Head")
+    UpdateDot("RootDot", "HumanoidRootPart")
+end
+
+-- Remove all outlines for a player
+local function RemovePlayerOutlines(player)
+    local storage = PlayerOutlineObjects[player]
+    if not storage then return end
+    
+    -- Cleanup Highlight
+    if storage.Highlight then
+        pcall(function() storage.Highlight:Destroy() end)
+    end
+    
+    -- Cleanup any legacy parts if they exist
+    for k, v in pairs(storage) do
+        if k ~= "Highlight" then
+            pcall(function() v:Destroy() end)
+        end
+    end
+    
+    PlayerOutlineObjects[player] = nil
 end
 
 -- Update ESP for a player (optimized - uses cached closest player)
@@ -1419,6 +2652,23 @@ local function UpdateESP(player, isClosest)
     if not Flags["ESP/Enabled"] then return end
 
     local espData = ESPObjects[player]
+    
+    -- Check if ESP data exists and if the Nametag is still valid (not destroyed)
+    if espData then
+        -- Check if nametag is valid
+        local nametag = espData.Nametag
+        if not nametag or not nametag.Parent then
+            -- Recreate if missing
+             pcall(function() 
+                 if nametag then nametag:Destroy() end
+                 if espData.Tracer then espData.Tracer:Remove() end
+             end)
+             ESPObjects[player] = nil
+             espData = nil
+        end
+    end
+    
+    -- Create ESP if it doesn't exist
     if not espData then
         CreateESP(player)
         espData = ESPObjects[player]
@@ -1428,8 +2678,13 @@ local function UpdateESP(player, isClosest)
     -- Get character
     local character, rootPart = GetCharacter(player)
     if not character or not rootPart then
-        espData.Nametag.Parent = nil
+        RemovePlayerOutlines(player) 
+        -- Hide ESP elements
+        if espData.Nametag then espData.Nametag.Enabled = false end
         if espData.Tracer then espData.Tracer.Visible = false end
+        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+            espData.OffscreenIndicator.Frame.Visible = false
+        end
         return
     end
 
@@ -1438,41 +2693,179 @@ local function UpdateESP(player, isClosest)
 
     -- Distance culling
     if distance > Flags["ESP/MaxDistance"] then
-        espData.Nametag.Parent = nil
+        RemovePlayerOutlines(player)
+        if espData.Nametag then espData.Nametag.Enabled = false end
         if espData.Tracer then espData.Tracer.Visible = false end
+        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+            espData.OffscreenIndicator.Frame.Visible = false
+        end
         return
     end
 
     -- Update nametag
-    if Flags["ESP/Nametags"] then
-        espData.Nametag.Adornee = rootPart
-        espData.Nametag.Parent = rootPart
-        espData.NameLabel.Text = string.format("%s\n[%d]", player.Name, floor(distance))
+    if Flags["ESP/Nametags"] and espData.Nametag then
+        local nametag = espData.Nametag
+        -- Ensure nametag is attached and enabled
+        if nametag.Adornee ~= rootPart then
+            nametag.Adornee = rootPart
+            nametag.Parent = rootPart
+        end
+        if not nametag.Enabled then
+            nametag.Enabled = true
+        end
 
-        -- Use cached closest player check with distance-based colors
-        local nameColor = GetDistanceColor(distance, isClosest)
-        espData.NameLabel.TextColor3 = nameColor
-    else
-        espData.Nametag.Parent = nil
+        -- Get team color for name labels
+        local teamColor = GetTeamColor(player)
+        
+        -- Get display name and username
+        local nickname = player.DisplayName or player.Name
+        local username = "@" .. player.Name
+        local distRounded = floor(distance)
+        
+        -- PERFORMANCE: Only update text/color if values changed
+        if espData.lastNickname ~= nickname then
+            espData.NicknameLabel.Text = nickname
+            espData.lastNickname = nickname
+        end
+        
+        if espData.lastUsername ~= username then
+            espData.UsernameLabel.Text = username
+            espData.lastUsername = username
+        end
+        
+        if espData.lastTeamColor ~= teamColor then
+            espData.NicknameLabel.TextColor3 = teamColor
+            espData.UsernameLabel.TextColor3 = teamColor
+            espData.lastTeamColor = teamColor
+        end
+
+        -- Update Distance
+        if math.abs(espData.lastDistance - distRounded) > 5 then
+            espData.DistanceLabel.Text = string.format("%d studs", distRounded)
+            espData.lastDistance = distRounded
+        end
+        
+        local distanceColor = GetDistanceColor(distance, isClosest)
+        if espData.lastDistanceColor ~= distanceColor then
+            espData.DistanceLabel.TextColor3 = distanceColor
+            espData.lastDistanceColor = distanceColor
+        end
+    elseif espData.Nametag then
+        if espData.Nametag.Enabled then espData.Nametag.Enabled = false end
     end
 
-    -- Update tracer
-    if espData.Tracer and Flags["ESP/Tracers"] then
+    -- Update tracer (LOD: skip for distant players to save performance)
+    if espData.Tracer and Flags["ESP/Tracers"] and distance <= 2000 then
         local screenPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
         if onScreen then
-            espData.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-            espData.Tracer.To = Vector2.new(screenPos.X, screenPos.Y)
-            espData.Tracer.Visible = true
+            local tracerLine = espData.Tracer
+            local viewportSize = Camera.ViewportSize
+            
+            local originX = viewportSize.X / 2
+            local originY = viewportSize.Y
+            local targetX = screenPos.X
+            local targetY = screenPos.Y
+            
+            local diffX = targetX - originX
+            local diffY = targetY - originY
+            local length = math.sqrt(diffX*diffX + diffY*diffY)
+            local rotation = math.deg(math.atan2(diffY, diffX))
+            
+            tracerLine.Visible = true
+            tracerLine.Size = UDim2.fromOffset(length, 1)
+            tracerLine.Position = UDim2.fromOffset((originX + targetX)/2, (originY + targetY)/2)
+            tracerLine.Rotation = rotation
         else
             espData.Tracer.Visible = false
         end
     elseif espData.Tracer then
         espData.Tracer.Visible = false
     end
+
+    -- Update off-screen indicator
+    if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
+        local indicator = espData.OffscreenIndicator
+        local edgePos, angle, isOnScreen = GetEdgePosition(rootPart.Position)
+        
+        if isOnScreen then
+            if espData.lastOffscreenVisible then
+                indicator.Frame.Visible = false
+                espData.lastOffscreenVisible = false
+            end
+        elseif edgePos then
+            if not espData.lastOffscreenVisible then
+                indicator.Frame.Visible = true
+                espData.lastOffscreenVisible = true
+            end
+            
+            -- Only update pos if moved > 5px for perf
+            local newX = floor(edgePos.X - 60)
+            local newY = floor(edgePos.Y - 25)
+            local lastX = espData.lastOffscreenX or 0
+            local lastY = espData.lastOffscreenY or 0
+            
+            if abs(newX - lastX) > 5 or abs(newY - lastY) > 5 then
+                indicator.Frame.Position = UDim2.fromOffset(newX, newY)
+                espData.lastOffscreenX = newX
+                espData.lastOffscreenY = newY
+            end
+            
+            if angle then
+                local newRotation = floor(deg(angle) - 90)
+                if espData.lastOffscreenAngle ~= newRotation then
+                    indicator.Arrow.Rotation = newRotation
+                    espData.lastOffscreenAngle = newRotation
+                end
+            end
+            
+            local nickname = espData.lastNickname or (player.DisplayName or player.Name)
+            if espData.lastOffscreenName ~= nickname then
+                indicator.NameLabel.Text = nickname
+                espData.lastOffscreenName = nickname
+            end
+            
+            local distRounded = floor(distance)
+            if abs((espData.lastOffscreenDist or 0) - distRounded) > 5 then
+                indicator.DistLabel.Text = distRounded .. " studs"
+                espData.lastOffscreenDist = distRounded
+            end
+            
+            local distanceColor = espData.lastDistanceColor or GetDistanceColor(distance, isClosest)
+            if espData.lastOffscreenColor ~= distanceColor then
+                indicator.DistLabel.TextColor3 = distanceColor
+                indicator.Stroke.Color = distanceColor
+                indicator.Arrow.ImageColor3 = distanceColor
+                espData.lastOffscreenColor = distanceColor
+            end
+            
+            if espData.Nametag and espData.Nametag.Enabled then
+                espData.Nametag.Enabled = false
+            end
+        else
+            if espData.lastOffscreenVisible then
+                indicator.Frame.Visible = false
+                espData.lastOffscreenVisible = false
+            end
+        end
+    elseif espData.OffscreenIndicator and espData.lastOffscreenVisible then
+        espData.OffscreenIndicator.Frame.Visible = false
+        espData.lastOffscreenVisible = false
+    end
+    
+    if Flags["ESP/PlayerOutlines"] then
+        UpdatePlayerOutlines(player, character)
+    else
+        RemovePlayerOutlines(player)
+    end
 end
+
+
 
 -- Remove ESP for a player
 local function RemoveESP(player)
+    -- Also remove player outlines
+    RemovePlayerOutlines(player)
+    
     local espData = ESPObjects[player]
     if not espData then return end
 
@@ -1481,6 +2874,20 @@ local function RemoveESP(player)
     end
     if espData.Tracer then
         espData.Tracer:Remove()
+    end
+    -- Clean up off-screen indicator
+    if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+        espData.OffscreenIndicator.Frame:Destroy()
+    end
+
+    -- Clean up player-specific connections
+    if espData.Connections then
+        for _, conn in pairs(espData.Connections) do
+            if conn and typeof(conn) == "RBXScriptConnection" then
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        table.clear(espData.Connections)
     end
 
     ESPObjects[player] = nil
@@ -1563,18 +2970,14 @@ local function UpdatePerformanceDisplay()
 
     local fps = floor(GetFPS())
     local ping = floor(Ping:GetValue())
-    local playerCount = #Players:GetPlayers()
+    local playerCount = #GetPlayersCache()
 
     -- Get memory usage (MB)
     local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
 
-    -- Count active targets (players with ESP visible)
-    local activeTargets = 0
-    for player, espData in pairs(ESPObjects) do
-        if espData.Nametag and espData.Nametag.Parent then
-            activeTargets = activeTargets + 1
-        end
-    end
+    -- PERFORMANCE FIX: Use playerCount - 1 instead of iterating ESPObjects
+    -- This is a good approximation since ESP is created for all non-local players
+    local activeTargets = max(0, playerCount - 1)
 
     -- Aimbot lock status
     local aimbotStatus = "─"
@@ -1635,9 +3038,47 @@ local function Cleanup()
         pcall(function()
             if espData.Nametag then espData.Nametag:Destroy() end
             if espData.Tracer then espData.Tracer:Remove() end
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+                espData.OffscreenIndicator.Frame:Destroy()
+            end
         end)
     end
     table.clear(ESPObjects)
+    
+    -- Cleanup Player Outline objects
+    for player, outlines in pairs(PlayerOutlineObjects) do
+        for partName, highlight in pairs(outlines) do
+            pcall(function() highlight:Destroy() end)
+        end
+    end
+    table.clear(PlayerOutlineObjects)
+
+    -- Cleanup Br3ak3r (restore all broken parts)
+    for part, _ in pairs(brokenSet) do
+        pcall(function()
+            -- Find original state in undo stack
+            for i = #undoStack, 1, -1 do
+                local entry = undoStack[i]
+                if entry.part == part then
+                    part.CanCollide = entry.cc
+                    part.LocalTransparencyModifier = entry.ltm
+                    part.Transparency = entry.t
+                    break
+                end
+            end
+        end)
+    end
+    table.clear(brokenSet)
+    table.clear(undoStack)
+    table.clear(brokenIgnoreCache)
+    brokenCacheDirty = true
+    CTRL_HELD = false
+    
+    -- Cleanup hover highlight
+    if hoverHL then
+        pcall(function() hoverHL:Destroy() end)
+        hoverHL = nil
+    end
 
     -- Reset module-level state
     SilentAim = nil
@@ -1647,6 +3088,8 @@ local function Cleanup()
     NearestPlayerRef = nil
     PerformanceLabel = nil
     ClosestPlayerTrackerLabel = nil
+    PlayerPanelFrame = nil
+    table.clear(PlayerPanelRows)
 
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     local globalEnv = getgenv and getgenv() or _G
@@ -1695,12 +3138,60 @@ UI.CreateSlider(AimTab, "Trigger Delay", "Trigger/Delay", 0, 100, 0, "ms", funct
 
 -- VISUALS TAB
 UI.CreateSection(VisualsTab, "Player ESP")
-UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", true)
+UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", true, function(state)
+    if not state then
+        -- Feature disabled - cleanup outlines to prevent ghosts since update loop stops
+        for _, player in ipairs(Players:GetPlayers()) do
+             RemovePlayerOutlines(player)
+        end
+    end
+end)
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", true)
 UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", false)
+UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", false, function(state)
+    -- When disabled, hide all existing off-screen indicators
+    if not state then
+        for _, espData in pairs(ESPObjects) do
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+                espData.OffscreenIndicator.Frame.Visible = false
+                espData.lastOffscreenVisible = false
+            end
+        end
+    end
+end)
+UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", false, function(state)
+    -- Create panel if it doesn't exist yet
+    if state and not PlayerPanelFrame then
+        CreatePlayerPanel()
+    end
+    -- Toggle visibility
+    if PlayerPanelFrame then
+        PlayerPanelFrame.Visible = state
+    end
+end)
+UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", false, function(state)
+    -- When disabled, remove all existing outlines immediately
+    if not state then
+        for player, outlines in pairs(PlayerOutlineObjects) do
+            for partName, highlight in pairs(outlines) do
+                pcall(function() highlight:Destroy() end)
+            end
+        end
+        table.clear(PlayerOutlineObjects)
+    end
+end)
 UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, 5000, " st")
 
 -- MISC TAB
+UI.CreateSection(MiscTab, "Br3ak3r Tool")
+UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", true, function(state)
+    CLICKBREAK_ENABLED = state
+    if not state and hoverHL then
+        hoverHL.Enabled = false
+    end
+end)
+UI.CreateButton(MiscTab, "Undo Last Break (Ctrl+Z)", unbreakLast)
+
 UI.CreateSection(MiscTab, "Utilities")
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
@@ -1711,30 +3202,103 @@ UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", tr
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 
+-- Helper to setup player ESP and connections
+local function SetupPlayerESP(player)
+    if player == LocalPlayer then return end
+    
+    CreateESP(player)
+    local espData = ESPObjects[player]
+    
+    if espData then
+        -- Track CharacterAdded connection LOCALLY in espData, not globally
+        -- this ensures it gets cleaned up when the player leaves
+        local conn = player.CharacterAdded:Connect(function(character)
+            task.delay(0.1, function()
+                if player.Parent and Sp3arParvus.Active then
+                    -- Force ESP update for this player when their character spawns
+                    if ESPObjects[player] then -- Re-fetch in case it changed
+                        local data = ESPObjects[player]
+                        data.lastNickname = ""
+                        data.lastUsername = ""
+                        data.lastDistance = -1
+                        data.lastTeamColor = nil
+                        data.lastDistanceColor = nil
+                    end
+                end
+            end)
+        end)
+        table.insert(espData.Connections, conn)
+    end
+end
+
 -- Initialize ESP for existing players
 for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then CreateESP(player) end
+    SetupPlayerESP(player)
 end
 
 -- Event Listeners
-TrackConnection(Players.PlayerAdded:Connect(function(player) CreateESP(player) end))
-TrackConnection(Players.PlayerRemoving:Connect(function(player) RemoveESP(player) end))
+-- Handle new players joining
+TrackConnection(Players.PlayerAdded:Connect(function(player)
+    AddPlayerToCache(player)
+    SetupPlayerESP(player)
+end))
+TrackConnection(Players.PlayerRemoving:Connect(function(player) 
+    RemovePlayerFromCache(player)
+    CharCache[player] = nil -- Clear character cache
+    RemoveESP(player) 
+end))
 
 -- ============================================================
 -- MAIN UPDATE LOOPS
 -- ============================================================
 
--- CONSOLIDATED Input Handler (was 4 separate connections causing duplicate processing)
+-- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- Track Ctrl key state
+    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+        CTRL_HELD = true
+    end
+    
     -- Handle RMB for Aimbot/Trigger (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = Flags["Aimbot/Enabled"]
         Trigger = Flags["Trigger/Enabled"]
     end
+    
+    -- Br3ak3r: Ctrl+Click to break object
+    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 and CLICKBREAK_ENABLED then
+        local origin, direction = getMouseRay()
+        if origin and direction then
+            local hit = worldRaycastBr3ak3r(origin, direction, true)
+            if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+                markBroken(hit.Instance)
+            end
+        end
+    end
+    
+    -- Br3ak3r keyboard shortcuts (only when not processed by game)
+    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == Enum.KeyCode.Z then
+            -- Ctrl+Z: Undo last break
+            unbreakLast()
+        elseif input.KeyCode == Enum.KeyCode.B then
+            -- Ctrl+B: Toggle Br3ak3r
+            CLICKBREAK_ENABLED = not CLICKBREAK_ENABLED
+            Flags["Br3ak3r/Enabled"] = CLICKBREAK_ENABLED
+            if not CLICKBREAK_ENABLED and hoverHL then
+                hoverHL.Enabled = false
+            end
+        end
+    end
 end))
 
--- CONSOLIDATED InputEnded Handler (was 3 separate connections)
+-- CONSOLIDATED InputEnded Handler (includes Ctrl key tracking)
 TrackConnection(UserInputService.InputEnded:Connect(function(input)
+    -- Track Ctrl key release
+    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+        CTRL_HELD = false
+    end
+    
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         Aimbot = false
         Trigger = false
@@ -1743,8 +3307,6 @@ end))
 
 -- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
 -- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
-local CachedTarget = nil
-local CachedTargetTime = 0
 local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
 
 local function GetCachedTarget()
@@ -1772,19 +3334,24 @@ end
 -- Aimbot & Silent Aim update loop (OPTIMIZED - uses cached target)
 local function UpdateAimAndSilent()
     if not Sp3arParvus.Active then return end
+    
+    -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
+    local aimbotActive = Aimbot or Flags["Aimbot/AlwaysEnabled"]
+    local silentActive = Flags["SilentAim/Enabled"]
+    
+    if not aimbotActive and not silentActive then
+        SilentAim = nil
+        return
+    end
 
     -- Get cached target (single GetClosest call per frame)
     local target = GetCachedTarget()
     
     -- Silent Aim uses cached target
-    if Flags["SilentAim/Enabled"] then
-        SilentAim = target
-    else
-        SilentAim = nil
-    end
+    SilentAim = silentActive and target or nil
 
     -- Aimbot uses cached target
-    if (Aimbot or Flags["Aimbot/AlwaysEnabled"]) and target then
+    if aimbotActive and target then
         AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
     end
 end
@@ -1846,37 +3413,79 @@ TrackThread(triggerThread)
 
 -- ESP update loop (OPTIMIZED - throttled updates, no per-frame player iteration)
 local lastEspUpdate = 0
-local espUpdateRate = 0.033 -- ~30 FPS for ESP (half rate = major performance gain)
+local espUpdateRate = 0.2 -- ~5 FPS for ESP (reduced from 10fps - big perf gain on low-end devices)
 local lastTrackerUpdate = 0
-local trackerUpdateRate = 0.1 -- Tracker updates at 10 FPS
+local trackerUpdateRate = 0.5 -- Tracker updates at ~2 FPS (reduced from 3fps)
+local lastBr3ak3rCleanup = 0
+local br3ak3rCleanupRate = 2.0 
+local lastHoverUpdate = 0
+local hoverUpdateRate = 0.033 -- Hover at 30fps
 
-local function UpdateESPStep()
+-- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
+-- Combines ESP, Tracker, Br3ak3r logic into one scheduler
+local function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active then return end
-    if not Flags["ESP/Enabled"] then return end
     
     local now = os.clock()
     
-    -- ESP visual updates at 30 FPS (still smooth, but half the work)
-    if now - lastEspUpdate > espUpdateRate then
-        lastEspUpdate = now
+    -- 1. ESP & Tracker Updates
+    -- Check throttle FIRST before anything else to save perf
+    local shouldUpdateEsp = (now - lastEspUpdate) > espUpdateRate
+    local shouldUpdateTracker = (now - lastTrackerUpdate) > trackerUpdateRate
+    
+    -- Also force update the LOCKED target every frame for instant dot color feedback
+    local forceUpdateTarget = nil
+    if CachedTarget and (now - CachedTargetTime) < 0.1 then
+        forceUpdateTarget = CachedTarget[1]
+    end
+
+    if (shouldUpdateEsp or forceUpdateTarget) and Flags["ESP/Enabled"] then
+        if shouldUpdateEsp then
+            lastEspUpdate = now
+        end
         
         -- Update ESP for all players
-        for _, player in ipairs(Players:GetPlayers()) do
+        local players = GetPlayersCache()
+        for _, player in ipairs(players) do
             if player ~= LocalPlayer then
-                UpdateESP(player, player == NearestPlayerRef)
+                -- Standard update if throttled timer allows, OR force update if this is the locked target
+                if shouldUpdateEsp or (player == forceUpdateTarget) then
+                   UpdateESP(player, player == NearestPlayerRef)
+                end
             end
         end
     end
 
-    -- Tracker updates at 10 FPS (doesn't need to be fast)
-    if now - lastTrackerUpdate > trackerUpdateRate then
+    -- Tracker updates (low freq)
+    if shouldUpdateTracker then
         lastTrackerUpdate = now
         UpdateNearestPlayer()
         UpdateClosestPlayerTracker()
+        UpdatePlayerPanel()
     end
+    
+    -- 2. Br3ak3r Updates
+    -- Update hover highlight (throttled to 30fps)
+    if (now - lastHoverUpdate) > hoverUpdateRate then
+        lastHoverUpdate = now
+        updateBr3ak3rHover()
+    end
+    
+    -- Periodic cleanup (throttled)
+    if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
+        lastBr3ak3rCleanup = now
+        pruneBrokenSet()
+    end
+    
+    -- Sweep undo stack (very cheap)
+    sweepUndo(dt)
 end
 
-TrackConnection(RunService.RenderStepped:Connect(UpdateESPStep))
+-- Single Heartbeat connection
+TrackConnection(RunService.Heartbeat:Connect(UnifiedHeartbeat))
+
+-- Initialize Br3ak3r hover highlight
+createHoverHighlight()
 
 -- Performance display update loop
 local perfThread = task.spawn(function()
@@ -1899,5 +3508,7 @@ print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s
     Flags["Trigger/Enabled"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
+print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
 print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
+print(string.format("[Sp3arParvus v%s] Br3ak3r Controls: Ctrl+Click=Break | Ctrl+Z=Undo | Ctrl+B=Toggle", VERSION))
 print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤2000 | Yellow≤4000 | Green>4000", VERSION))
