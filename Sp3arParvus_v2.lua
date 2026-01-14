@@ -2710,10 +2710,26 @@ local function UpdateESP(player, isClosest)
         local nametag = espData.Nametag
         if not nametag or not nametag.Parent then
             -- Recreate if missing
+             -- Fix: Capture connections to preserve them (prevents untracked CharacterAdded listeners)
+             local savedConnections = espData.Connections
+             
              if nametag then nametag:Destroy() end
-             if espData.Tracer then espData.Tracer:Remove() end
+             if espData.Tracer then espData.Tracer:Destroy() end -- Fix: Use Destroy instead of Remove (deprecated)
+             
+             -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
+             if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+                 espData.OffscreenIndicator.Frame:Destroy()
+             end
+             
              ESPObjects[player] = nil
              espData = nil
+             
+             -- Recreate immediately to restore connections
+             CreateESP(player)
+             espData = ESPObjects[player]
+             if espData then
+                 espData.Connections = savedConnections
+             end
         end
     end
     
@@ -2923,7 +2939,7 @@ local function RemoveESP(player)
         espData.Nametag:Destroy()
     end
     if espData.Tracer then
-        espData.Tracer:Remove()
+        espData.Tracer:Destroy()
     end
     -- Clean up off-screen indicator
     if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
