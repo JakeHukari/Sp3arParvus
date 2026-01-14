@@ -617,6 +617,7 @@ function UI.CreateWindow(title)
 
     -- Dragging Logic Helper
     -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
+    -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
     local function MakeDraggable(Frame)
         local dragging, dragInput, dragStart, startPos
         
@@ -641,13 +642,13 @@ function UI.CreateWindow(title)
             end
         end))
         
-        -- MEMORY LEAK FIX: Track this connection
+        -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
+        -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
         TrackConnection(UserInputService.InputChanged:Connect(function(input)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
-                TweenService:Create(Frame, TWEEN_DRAG, {
-                    Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-                }):Play()
+                -- Direct position update - NO TWEEN CREATION
+                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             end
         end))
     end
@@ -670,7 +671,8 @@ function UI.CreateWindow(title)
     local Minimized = false
     local OldSize = UDim2.fromOffset(600, 400)
     
-    MinButton.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track minimize button connection
+    TrackConnection(MinButton.MouseButton1Click:Connect(function()
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
@@ -685,7 +687,7 @@ function UI.CreateWindow(title)
             Sidebar.Visible = true
             MinButton.Text = "-"
         end
-    end)
+    end))
 
     -- Toggle Logic (Right Shift)
     -- MEMORY LEAK FIX: Track this connection
@@ -768,7 +770,8 @@ function UI.CreateTab(name, icon)
         UIState.CurrentTab = name
     end
 
-    TabButton.MouseButton1Click:Connect(SelectTab)
+    -- MEMORY LEAK FIX: Track tab button connection
+    TrackConnection(TabButton.MouseButton1Click:Connect(SelectTab))
     
     -- Register
     table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page})
@@ -853,7 +856,8 @@ function UI.CreateToggle(page, text, flag, default, callback)
     
     Flags[flag] = default
     
-    Button.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track button connection
+    TrackConnection(Button.MouseButton1Click:Connect(function()
         Flags[flag] = not Flags[flag]
         local state = Flags[flag]
         
@@ -865,7 +869,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
         TweenService:Create(Knob, TWEEN_SMOOTH, {Position = targetPos}):Play()
         
         if callback then callback(state) end
-    end)
+    end))
 end
 
 function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
@@ -1024,13 +1028,14 @@ function UI.CreateButton(page, text, callback)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = Button
     
-    Button.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track button connection
+    TrackConnection(Button.MouseButton1Click:Connect(function()
         -- Click animation
         TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
         task.wait(0.05)
         TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
         if callback then callback() end
-    end)
+    end))
 end
 
 -- Get ping from server stats
@@ -1220,6 +1225,12 @@ local function ClearCandidateReferences()
             entry.pos = nil
         end
     end
+    -- Also clear ClosestResult to prevent stale references
+    ClosestResult[1] = nil
+    ClosestResult[2] = nil
+    ClosestResult[3] = nil
+    ClosestResult[4] = 0
+    ClosestResult[5] = 0
 end
 
 -- cachedPlayerListForSort cleanup (clears player references)
@@ -1571,21 +1582,25 @@ local function AimAt(Hitbox, Sensitivity)
     if not OnScreen or ScreenPosition.Z < 0 then return end
     
     -- Determine mouse/crosshair location based on mouse behavior
-    local MouseLocation
+    local mouseX, mouseY
     local mouseBehavior = UserInputService.MouseBehavior
     
     -- In LockCenter mode (shift-lock/first-person), use viewport center directly
     -- This avoids stale GetMouseLocation() during mode transitions
     if mouseBehavior == Enum.MouseBehavior.LockCenter then
         local viewportSize = Camera.ViewportSize
-        MouseLocation = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+        -- MEMORY FIX: Use raw numbers instead of Vector2.new
+        mouseX = viewportSize.X / 2
+        mouseY = viewportSize.Y / 2
     else
-        MouseLocation = UserInputService:GetMouseLocation()
+        local MouseLocation = UserInputService:GetMouseLocation()
+        mouseX = MouseLocation.X
+        mouseY = MouseLocation.Y
     end
     
     -- Calculate delta movement
-    local deltaX = (ScreenPosition.X - MouseLocation.X) * Sensitivity
-    local deltaY = (ScreenPosition.Y - MouseLocation.Y) * Sensitivity
+    local deltaX = (ScreenPosition.X - mouseX) * Sensitivity
+    local deltaY = (ScreenPosition.Y - mouseY) * Sensitivity
     
     -- NaN Safety Check: If delta is invalid, abort immediately
     if deltaX ~= deltaX or deltaY ~= deltaY then
@@ -1786,19 +1801,19 @@ end
 -- PERFORMANCE: Uses cached camera data to avoid redundant property access
 local function GetEdgePosition(worldPosition)
     -- Update camera cache (shared across all players per frame)
-    if not UpdateCameraCache() then return nil, nil, false end
+    if not UpdateCameraCache() then return nil, nil, nil, false end
     
     local viewportSize = cachedCameraData.viewportSize
     
     -- Still need to call WorldToViewportPoint per-player (can't cache this)
     if not Camera then Camera = Workspace.CurrentCamera end
-    if not Camera then return nil, nil, false end
+    if not Camera then return nil, nil, nil, false end
     local screenPos, onScreen = Camera:WorldToViewportPoint(worldPosition)
     
     -- If on screen, return nil (use normal nametag)
     if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
        and screenPos.Y > OFFSCREEN_EDGE_PADDING and screenPos.Y < viewportSize.Y - OFFSCREEN_EDGE_PADDING then
-        return nil, nil, true
+        return nil, nil, nil, true
     end
     
     -- Calculate center of screen
@@ -1871,7 +1886,8 @@ local function GetEdgePosition(worldPosition)
     edgeX = max(minX, min(maxX, edgeX))
     edgeY = max(minY, min(maxY, edgeY))
     
-    return Vector2.new(edgeX, edgeY), angle, false
+    -- MEMORY FIX: Return raw numbers instead of Vector2.new() to avoid allocations
+    return edgeX, edgeY, angle, false
 end
 
 -- Create off-screen indicator UI element
@@ -1994,7 +2010,8 @@ local function CreateClosestPlayerTracker()
     btnCorner.CornerRadius = UDim.new(0, 4)
     btnCorner.Parent = minimizeBtn
 
-    minimizeBtn.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track minimize button connection
+    TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         TrackerMinimized = not TrackerMinimized
         if TrackerMinimized then
             ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
@@ -2004,7 +2021,7 @@ local function CreateClosestPlayerTracker()
             ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
             minimizeBtn.Text = "−"
         end
-    end)
+    end))
     
     if UI.MakeDraggable then
         UI.MakeDraggable(ClosestPlayerTrackerLabel)
@@ -2335,7 +2352,8 @@ local function CreatePlayerPanel()
     end
     
     -- Minimize toggle
-    minimizeBtn.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track minimize button connection
+    TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         PlayerPanelMinimized = not PlayerPanelMinimized
         if PlayerPanelMinimized then
             PlayerPanelFrame.Size = UDim2.fromOffset(320, 30)
@@ -2346,7 +2364,7 @@ local function CreatePlayerPanel()
             content.Visible = true
             minimizeBtn.Text = "−"
         end
-    end)
+    end))
     
     -- Make draggable
     if UI.MakeDraggable then
@@ -2515,9 +2533,6 @@ local function CreateESP(player)
     local espData = {
         -- Cache previous values to avoid redundant updates
         lastNickname = "",
-        lastUsername = "",
-        lastDistance = -1,
-        lastTeamColor = nil,
         lastUsername = "",
         lastDistance = -1,
         lastTeamColor = nil,
@@ -2934,13 +2949,32 @@ local function UpdateESP(player, isClosest)
             
             local diffX = targetX - originX
             local diffY = targetY - originY
-            local length = math.sqrt(diffX*diffX + diffY*diffY)
-            local rotation = math.deg(math.atan2(diffY, diffX))
+            local length = floor(sqrt(diffX*diffX + diffY*diffY))
+            local rotation = floor(deg(atan2(diffY, diffX)))
+            local midX = floor((originX + targetX)/2)
+            local midY = floor((originY + targetY)/2)
             
             tracerLine.Visible = true
-            tracerLine.Size = UDim2.fromOffset(length, 1)
-            tracerLine.Position = UDim2.fromOffset((originX + targetX)/2, (originY + targetY)/2)
-            tracerLine.Rotation = rotation
+            
+            -- MEMORY FIX: Only update if values changed to avoid UDim2 allocations
+            local lastTracerLength = espData.lastTracerLength or 0
+            local lastTracerMidX = espData.lastTracerMidX or 0
+            local lastTracerMidY = espData.lastTracerMidY or 0
+            local lastTracerRot = espData.lastTracerRot or 0
+            
+            if abs(length - lastTracerLength) > 3 then
+                tracerLine.Size = UDim2.fromOffset(length, 1)
+                espData.lastTracerLength = length
+            end
+            if abs(midX - lastTracerMidX) > 3 or abs(midY - lastTracerMidY) > 3 then
+                tracerLine.Position = UDim2.fromOffset(midX, midY)
+                espData.lastTracerMidX = midX
+                espData.lastTracerMidY = midY
+            end
+            if abs(rotation - lastTracerRot) > 1 then
+                tracerLine.Rotation = rotation
+                espData.lastTracerRot = rotation
+            end
         else
             espData.Tracer.Visible = false
         end
@@ -2951,22 +2985,23 @@ local function UpdateESP(player, isClosest)
     -- Update off-screen indicator
     if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
         local indicator = espData.OffscreenIndicator
-        local edgePos, angle, isOnScreen = GetEdgePosition(rootPart.Position)
+        -- MEMORY FIX: GetEdgePosition now returns raw numbers instead of Vector2
+        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(rootPart.Position)
         
         if isOnScreen then
             if espData.lastOffscreenVisible then
                 indicator.Frame.Visible = false
                 espData.lastOffscreenVisible = false
             end
-        elseif edgePos then
+        elseif edgeX then
             if not espData.lastOffscreenVisible then
                 indicator.Frame.Visible = true
                 espData.lastOffscreenVisible = true
             end
             
             -- Only update pos if moved > 5px for perf
-            local newX = floor(edgePos.X - 60)
-            local newY = floor(edgePos.Y - 25)
+            local newX = floor(edgeX - 60)
+            local newY = floor(edgeY - 25)
             local lastX = espData.lastOffscreenX or 0
             local lastY = espData.lastOffscreenY or 0
             
@@ -3109,7 +3144,8 @@ local function CreatePerformanceDisplay(parent)
     mCorner.CornerRadius = UDim.new(0, 4)
     mCorner.Parent = minimizeBtn
 
-    minimizeBtn.MouseButton1Click:Connect(function()
+    -- MEMORY LEAK FIX: Track minimize button connection
+    TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         PerfMinimized = not PerfMinimized
         if PerfMinimized then
             PerformanceLabel.Size = UDim2.fromOffset(180, 24)
@@ -3121,7 +3157,7 @@ local function CreatePerformanceDisplay(parent)
             PerformanceLabel.TextYAlignment = Enum.TextYAlignment.Top
             minimizeBtn.Text = "-"
         end
-    end)
+    end))
 
     if UI.MakeDraggable then
         UI.MakeDraggable(PerformanceLabel)
