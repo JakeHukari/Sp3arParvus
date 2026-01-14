@@ -1214,35 +1214,9 @@ local function PruneCharCache()
     end
 end
 
--- CandidateList cleanup (clears object references to prevent stale refs)
-local function ClearCandidateReferences()
-    for i = 1, #CandidateList do
-        local entry = CandidateList[i]
-        if entry then
-            entry.ply = nil
-            entry.char = nil
-            entry.part = nil
-            entry.pos = nil
-        end
-    end
-    -- Also clear ClosestResult to prevent stale references
-    ClosestResult[1] = nil
-    ClosestResult[2] = nil
-    ClosestResult[3] = nil
-    ClosestResult[4] = 0
-    ClosestResult[5] = 0
-end
-
--- cachedPlayerListForSort cleanup (clears player references)
-local function ClearSortCacheReferences()
-    for i = 1, #cachedPlayerListForSort do
-        local entry = cachedPlayerListForSort[i]
-        if entry then
-            entry.player = nil
-            entry.position = nil
-        end
-    end
-end
+-- Forward declarations for cleanup functions (implemented after variable declarations)
+local ClearCandidateReferences
+local ClearSortCacheReferences
 
 -- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
 -- This is a safety net in case PlayerRemoving didn't fire properly
@@ -1387,6 +1361,35 @@ local ClosestResult = {nil, nil, nil, 0, 0} -- [1]=Player, [2]=Character, [3]=Bo
 local CandidateList = {} -- Array of {dist, data...}
 local CandidateCount = 0
 local MAX_CANDIDATES = 15 -- Cap max candidates to process for performance
+
+-- CandidateList cleanup (clears object references to prevent stale refs)
+-- Now properly placed after CandidateList and ClosestResult are declared
+ClearCandidateReferences = function()
+    if not CandidateList then return end -- Safety check
+    for i = 1, #CandidateList do
+        local entry = CandidateList[i]
+        if entry then
+            entry.ply = nil
+            entry.char = nil
+            entry.part = nil
+            entry.pos = nil
+        end
+    end
+    -- Also clear ClosestResult to prevent stale references
+    if ClosestResult then
+        ClosestResult[1] = nil
+        ClosestResult[2] = nil
+        ClosestResult[3] = nil
+        ClosestResult[4] = 0
+        ClosestResult[5] = 0
+    end
+end
+
+-- ClearSortCacheReferences - No-op since cachedPlayerListForSort is not used
+-- Kept for compatibility in case it gets re-added later
+ClearSortCacheReferences = function()
+    -- No-op: cachedPlayerListForSort is not currently used in this script
+end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 local function GetClosest(Enabled,
