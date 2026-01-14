@@ -616,29 +616,30 @@ function UI.CreateWindow(title)
     UIState.TabContainer = TabContainer
 
     -- Dragging Logic Helper
-    -- MEMORY LEAK FIX: Track connections and avoid creating new connections on each click
+    -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
     local function MakeDraggable(Frame)
         local dragging, dragInput, dragStart, startPos
         
-        Frame.InputBegan:Connect(function(input)
+        -- Track frame-level connections for cleanup
+        TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
                 dragStart = input.Position
                 startPos = Frame.Position
             end
-        end)
+        end))
         
-        Frame.InputEnded:Connect(function(input)
+        TrackConnection(Frame.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = false
             end
-        end)
+        end))
         
-        Frame.InputChanged:Connect(function(input)
+        TrackConnection(Frame.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement then
                 dragInput = input
             end
-        end)
+        end))
         
         -- MEMORY LEAK FIX: Track this connection
         TrackConnection(UserInputService.InputChanged:Connect(function(input)
@@ -952,37 +953,53 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     end
     
     local dragging = false
-    local dragging = false
+    local activeSliderMoveConn = nil
+    local activeSliderEndConn = nil
     
     -- OPTIMIZED: Only connect move/end events while dragging to avoid overhead
-    Track.InputBegan:Connect(function(input)
+    -- MEMORY LEAK FIX: Added safety cleanup and tracking to prevent connection accumulation
+    TrackConnection(Track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            -- Safety: Disconnect any existing connections before creating new ones
+            if activeSliderMoveConn then 
+                activeSliderMoveConn:Disconnect() 
+                activeSliderMoveConn = nil 
+            end
+            if activeSliderEndConn then 
+                activeSliderEndConn:Disconnect() 
+                activeSliderEndConn = nil 
+            end
+            
             dragging = true
             TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
             Update(input)
             
-            local moveConn, endConn
-            
             -- Handle dragging
-            moveConn = UserInputService.InputChanged:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseMovement then
-                    Update(input)
+            activeSliderMoveConn = UserInputService.InputChanged:Connect(function(moveInput)
+                if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
+                    Update(moveInput)
                 end
             end)
             
             -- Handle release
-            endConn = UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            activeSliderEndConn = UserInputService.InputEnded:Connect(function(endInput)
+                if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
                     dragging = false
                     TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
                     
                     -- Cleanup connections immediately
-                    if moveConn then moveConn:Disconnect() end
-                    if endConn then endConn:Disconnect() end
+                    if activeSliderMoveConn then 
+                        activeSliderMoveConn:Disconnect() 
+                        activeSliderMoveConn = nil 
+                    end
+                    if activeSliderEndConn then 
+                        activeSliderEndConn:Disconnect() 
+                        activeSliderEndConn = nil 
+                    end
                 end
             end)
         end
-    end)
+    end))
 end
 
 function UI.CreateButton(page, text, callback)
@@ -1167,6 +1184,79 @@ local function GetCharacter(player)
     if healthInst and healthInst.Value <= 0 then return nil end
 
     return character, rootPart
+end
+
+-- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
+local lastCharCachePrune = 0
+local CHAR_CACHE_PRUNE_INTERVAL = 5.0 -- Prune every 5 seconds
+
+local function PruneCharCache()
+    local now = os.clock()
+    if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
+    lastCharCachePrune = now
+    
+    for player, cache in pairs(CharCache) do
+        -- Remove if player left the game
+        if not player or not player.Parent then
+            CharCache[player] = nil
+        -- Remove if character is invalid/destroyed
+        elseif cache.Char and not cache.Char.Parent then
+            CharCache[player] = nil
+        -- Remove if root is invalid/destroyed
+        elseif cache.Root and not cache.Root.Parent then
+            CharCache[player] = nil
+        end
+    end
+end
+
+-- CandidateList cleanup (clears object references to prevent stale refs)
+local function ClearCandidateReferences()
+    for i = 1, #CandidateList do
+        local entry = CandidateList[i]
+        if entry then
+            entry.ply = nil
+            entry.char = nil
+            entry.part = nil
+            entry.pos = nil
+        end
+    end
+end
+
+-- cachedPlayerListForSort cleanup (clears player references)
+local function ClearSortCacheReferences()
+    for i = 1, #cachedPlayerListForSort do
+        local entry = cachedPlayerListForSort[i]
+        if entry then
+            entry.player = nil
+            entry.position = nil
+        end
+    end
+end
+
+-- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
+-- This is a safety net in case PlayerRemoving didn't fire properly
+local function ValidateESPObjects()
+    for player, espData in pairs(ESPObjects) do
+        -- Check if player is gone or orphaned
+        if not player or not player.Parent then
+            -- Cleanup the orphaned ESP
+            pcall(function()
+                if espData.Nametag then espData.Nametag:Destroy() end
+                if espData.Tracer then espData.Tracer:Destroy() end
+                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+                    espData.OffscreenIndicator.Frame:Destroy()
+                end
+                if espData.Connections then
+                    for _, conn in pairs(espData.Connections) do
+                        if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                            conn:Disconnect()
+                        end
+                    end
+                end
+            end)
+            ESPObjects[player] = nil
+        end
+    end
 end
 
 -- ============================================================
@@ -2523,6 +2613,7 @@ local ObjectPool = {
     Highlights = {},
     Billboards = {}
 }
+local MAX_POOL_SIZE = 50 -- Prevent unbounded pool growth
 
 local function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
@@ -2541,9 +2632,18 @@ local function ReturnPooledObject(obj)
     obj.Parent = nil
     
     if obj:IsA("Highlight") then
-        table.insert(ObjectPool.Highlights, obj)
+        -- Enforce pool size limit to prevent memory bloat
+        if #ObjectPool.Highlights < MAX_POOL_SIZE then
+            table.insert(ObjectPool.Highlights, obj)
+        else
+            obj:Destroy()
+        end
     elseif obj:IsA("BillboardGui") then
-        table.insert(ObjectPool.Billboards, obj)
+        if #ObjectPool.Billboards < MAX_POOL_SIZE then
+            table.insert(ObjectPool.Billboards, obj)
+        else
+            obj:Destroy()
+        end
     else
         obj:Destroy()
     end
@@ -3103,9 +3203,18 @@ local function Cleanup()
     for player, espData in pairs(ESPObjects) do
         pcall(function()
             if espData.Nametag then espData.Nametag:Destroy() end
-            if espData.Tracer then espData.Tracer:Remove() end
+            if espData.Tracer then espData.Tracer:Destroy() end
             if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
                 espData.OffscreenIndicator.Frame:Destroy()
+            end
+            -- MEMORY LEAK FIX: Disconnect player-specific connections
+            if espData.Connections then
+                for _, conn in pairs(espData.Connections) do
+                    if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                        conn:Disconnect()
+                    end
+                end
+                table.clear(espData.Connections)
             end
         end)
     end
@@ -3164,6 +3273,13 @@ local function Cleanup()
     ClosestPlayerTrackerLabel = nil
     PlayerPanelFrame = nil
     table.clear(PlayerPanelRows)
+    
+    -- MEMORY LEAK FIX: Clear all cache tables to release object references
+    table.clear(CharCache)
+    table.clear(CandidateList)
+    table.clear(cachedPlayerListForSort)
+    table.clear(cachedSortedPlayers)
+    table.clear(cachedPlayersList)
 
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     local globalEnv = getgenv and getgenv() or _G
@@ -3555,6 +3671,12 @@ local function UnifiedHeartbeat(dt)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
         lastBr3ak3rCleanup = now
         pruneBrokenSet()
+        
+        -- MEMORY LEAK FIX: Periodic cache pruning to clear stale references
+        PruneCharCache()
+        ClearCandidateReferences()
+        ClearSortCacheReferences()
+        ValidateESPObjects()
     end
     
     -- Sweep undo stack (very cheap)
