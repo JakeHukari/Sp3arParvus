@@ -1220,7 +1220,9 @@ local ClearSortCacheReferences
 
 -- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
 -- This is a safety net in case PlayerRemoving didn't fire properly
+-- Note: ESPObjects is declared later in file, so we need nil check
 local function ValidateESPObjects()
+    if not ESPObjects then return end -- Safety: ESPObjects declared later in file
     for player, espData in pairs(ESPObjects) do
         -- Check if player is gone or orphaned
         if not player or not player.Parent then
