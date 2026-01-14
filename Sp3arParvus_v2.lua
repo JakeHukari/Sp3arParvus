@@ -1385,10 +1385,17 @@ ClearCandidateReferences = function()
     end
 end
 
--- ClearSortCacheReferences - No-op since cachedPlayerListForSort is not used
--- Kept for compatibility in case it gets re-added later
+-- ClearSortCacheReferences - Clears cachedPlayerListForSort references
+-- Note: cachedPlayerListForSort is declared at line 118
 ClearSortCacheReferences = function()
-    -- No-op: cachedPlayerListForSort is not currently used in this script
+    if not cachedPlayerListForSort then return end -- Safety check
+    for i = 1, #cachedPlayerListForSort do
+        local entry = cachedPlayerListForSort[i]
+        if entry then
+            entry.player = nil
+            entry.position = nil
+        end
+    end
 end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
