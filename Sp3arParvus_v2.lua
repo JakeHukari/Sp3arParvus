@@ -2632,10 +2632,21 @@ local MAX_POOL_SIZE = 50 -- Prevent unbounded pool growth
 
 local function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
-    if #pool > 0 then
+    while #pool > 0 do
         local obj = table.remove(pool)
-        if obj.Parent then obj.Parent = nil end -- Safety
-        return obj
+        -- FIX: Validate object is still usable (not destroyed)
+        local isValid = false
+        pcall(function()
+            -- Try to access a property - destroyed objects throw errors
+            local _ = obj.Name
+            isValid = true
+        end)
+        
+        if isValid then
+            if obj.Parent then obj.Parent = nil end -- Safety
+            return obj
+        end
+        -- Object was destroyed, skip it and try next
     end
     return Instance.new(className)
 end
@@ -2643,8 +2654,18 @@ end
 local function ReturnPooledObject(obj)
     if not obj then return end
     
-    obj.Adornee = nil
-    obj.Parent = nil
+    -- FIX: Validate object is still valid before pooling
+    local isValid = false
+    pcall(function()
+        obj.Adornee = nil
+        obj.Parent = nil
+        isValid = true
+    end)
+    
+    if not isValid then
+        -- Object is already destroyed, nothing to do
+        return
+    end
     
     if obj:IsA("Highlight") then
         -- Enforce pool size limit to prevent memory bloat
@@ -2697,8 +2718,16 @@ local function UpdatePlayerOutlines(player, character)
         storage.Highlight = highlight
     else
         local highlight = storage.Highlight
-        -- Validate existence
-        if not highlight then -- Parent check removed, we can re-parent
+        -- FIX: Validate highlight is still a valid object (not destroyed)
+        -- Check using pcall since destroyed objects throw errors on property access
+        local isValid = false
+        pcall(function()
+            -- Try to access a property - if object is destroyed this will error
+            local _ = highlight.Enabled
+            isValid = true
+        end)
+        
+        if not isValid then
              storage.Highlight = nil
              return UpdatePlayerOutlines(player, character)
         end
@@ -2741,8 +2770,6 @@ local function UpdatePlayerOutlines(player, character)
             dot.Parent = character
             
             -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
-            -- But since we pool logic correctly, children should stay.
-            -- However, let's verify children exist
             local dotFrame = dot:FindFirstChild("Dot")
             if not dotFrame then
                 dotFrame = Instance.new("Frame")
@@ -2759,9 +2786,39 @@ local function UpdatePlayerOutlines(player, character)
 
             storage[dotType] = dot
         else
+            -- FIX: Validate dot is still valid before reusing
+            local isValid = false
+            pcall(function()
+                local _ = dot.Enabled
+                isValid = true
+            end)
+            
+            if not isValid then
+                storage[dotType] = nil
+                return UpdateDot(dotType, partName) -- Retry with clean state
+            end
+            
+            -- Update adornee and parent
             if dot.Adornee ~= part then
                 dot.Adornee = part
+            end
+            if dot.Parent ~= character then
                 dot.Parent = character
+            end
+            
+            -- FIX: Ensure the dot frame child still exists
+            local dotFrame = dot:FindFirstChild("Dot")
+            if not dotFrame then
+                dotFrame = Instance.new("Frame")
+                dotFrame.Name = "Dot"
+                dotFrame.Size = UDim2.new(1, 0, 1, 0)
+                dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                dotFrame.BorderSizePixel = 0
+                dotFrame.Parent = dot
+                
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(1, 0)
+                corner.Parent = dotFrame
             end
         end
 
