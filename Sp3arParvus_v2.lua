@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.8.4" -- Wireframe Outlines (Highlight AlwaysOnTop)
+local VERSION = "2.8.5" -- Fixed: 'AlwaysEnabled' toggled 'OFF' would send clicks if mouse was over a player even if RMB was not being held & changed default Aimbot Priority to 'Head'
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 -- Prevent duplicate loading
@@ -157,7 +157,7 @@ local Flags = {
     ["Aimbot/Sensitivity"] = 15,
     ["Aimbot/FOV/Radius"] = 100,
     ["Aimbot/DistanceLimit"] = 1000,
-    ["Aimbot/Priority"] = "Closest",
+    ["Aimbot/Priority"] = "Head",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
 
     -- Silent Aim
@@ -169,7 +169,7 @@ local Flags = {
     ["SilentAim/HitChance"] = 100,
     ["SilentAim/FOV/Radius"] = 100,
     ["SilentAim/DistanceLimit"] = 1000,
-    ["SilentAim/Priority"] = "Closest",
+    ["SilentAim/Priority"] = "Head",
     ["SilentAim/BodyParts"] = {"Head", "HumanoidRootPart"},
     ["SilentAim/Mode"] = {
         "Raycast", "FindPartOnRayWithIgnoreList",
@@ -179,7 +179,7 @@ local Flags = {
     -- Trigger Bot
     -- ["Trigger/Enabled"] replaced by ["Aimbot/AutoFire"]
     -- ["Trigger/Enabled"] = true,
-    ["Trigger/AlwaysEnabled"] = true,
+    ["Trigger/AlwaysEnabled"] = false,
     ["Trigger/HoldMouseButton"] = true,
     ["Trigger/Prediction"] = true,
     ["Trigger/TeamCheck"] = false,
@@ -188,7 +188,7 @@ local Flags = {
     ["Trigger/Delay"] = 0,
     ["Trigger/FOV/Radius"] = 25,
     ["Trigger/DistanceLimit"] = 1000,
-    ["Trigger/Priority"] = "Closest",
+    ["Trigger/Priority"] = "Head",
     ["Trigger/BodyParts"] = {"Head", "HumanoidRootPart"},
 
     -- ESP
@@ -3660,10 +3660,14 @@ end
 TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
+-- Logic: Trigger fires when:
+--   1. Trigger/AlwaysEnabled is true (always auto-fire when target in FOV), OR
+--   2. RMB is held (Trigger=true) AND AutoFire is enabled
 local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
-        if Trigger or Flags["Aimbot/AutoFire"] or Flags["Trigger/AlwaysEnabled"] then
+        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (Trigger and Flags["Aimbot/AutoFire"])
+        if triggerActive then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -3693,8 +3697,9 @@ local triggerThread = task.spawn(function()
                                 end
                             end
 
-                            -- Break if target died, player left, or trigger released
-                            if not targetStillValid or not Trigger then break end
+                            -- Break if target died, player left, or trigger released (unless AlwaysEnabled)
+                            local shouldContinue = Flags["Trigger/AlwaysEnabled"] or Trigger
+                            if not targetStillValid or not shouldContinue then break end
                         end
 
                         if iterations >= MAX_TRIGGER_ITERATIONS then
