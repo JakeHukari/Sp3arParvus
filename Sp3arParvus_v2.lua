@@ -1,5 +1,5 @@
 -- Version identifier
-local VERSION = "2.8.6" -- Fixed: Added initialization wait to prevent errors from loading before game has finished loading
+local VERSION = "2.8.6" -- Fixed: Added initialization wait to prevent errors from loading before game has finished loading (this would break aimbot because SP would boot before game finished)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization
