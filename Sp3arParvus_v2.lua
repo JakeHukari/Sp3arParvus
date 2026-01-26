@@ -1,15 +1,83 @@
 -- Version identifier
-local VERSION = "2.8.5" -- Fixed: 'AlwaysEnabled' toggled 'OFF' would send clicks if mouse was over a player even if RMB was not being held & changed default Aimbot Priority to 'Head'
+local VERSION = "2.8.6" -- Fixed: Added initialization wait to prevent errors from loading before game has finished loading
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 
--- Prevent duplicate loading
+local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization
+local initStartTime = tick()
+
+-- Wait for game objects to finish loading 
+print("[Sp3arParvus] Waiting for game to load...")
 repeat task.wait() until game:IsLoaded()
+print("[Sp3arParvus] Game loaded!")
+
+-- Wait for LocalPlayer (you) to finish loading
+print("[Sp3arParvus] Waiting for LocalPlayer...")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    repeat 
+        task.wait(0.1) 
+        LocalPlayer = Players.LocalPlayer
+    until LocalPlayer or (tick() - initStartTime > MAX_INIT_WAIT)
+end
+if not LocalPlayer then
+    return warn("[Sp3arParvus] Failed to get LocalPlayer after " .. MAX_INIT_WAIT .. " seconds. Aborting.")
+end
+print("[Sp3arParvus] LocalPlayer ready: " .. LocalPlayer.Name)
+
+-- Wait for Character (with timeout (just for fun))
+print("[Sp3arParvus] Waiting for Character...")
+local character = LocalPlayer.Character
+if not character then
+    character = LocalPlayer.CharacterAdded:Wait()
+end
+-- Wait for character to be parented into da workspace
+repeat 
+    task.wait(0.1) 
+    character = LocalPlayer.Character
+until (character and character.Parent) or (tick() - initStartTime > MAX_INIT_WAIT)
+if not character or not character.Parent then
+    warn("[Sp3arParvus] Character not fully loaded, continuing anyway...")
+end
+print("[Sp3arParvus] Character ready!")
+
+-- Wait for da camera
+print("[Sp3arParvus] Waiting for Camera...")
+local Workspace = game:GetService("Workspace")
+repeat 
+    task.wait(0.1) 
+until Workspace.CurrentCamera or (tick() - initStartTime > MAX_INIT_WAIT)
+if not Workspace.CurrentCamera then
+    warn("[Sp3arParvus] Camera not found, continuing anyway...")
+end
+print("[Sp3arParvus] Camera ready!")
+
+-- Wait for PlayerScripts (because to avoid CameraSettings errors)
+print("[Sp3arParvus] Waiting for PlayerScripts to initialize...")
+local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+if not playerScripts then
+    repeat 
+        task.wait(0.1) 
+        playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+    until playerScripts or (tick() - initStartTime > MAX_INIT_WAIT)
+end
+-- Give PlayerScripts a bit to finish initializing their internal modules
+if playerScripts then
+    task.wait(0.5)
+end
+print("[Sp3arParvus] PlayerScripts ready!")
+
+-- Final safety buffer for all stuff to finish
+task.wait(0.2)
+print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
+
+-- Prevent duplicate loading (on x on ~2)
 local globalEnv = getgenv and getgenv() or _G
 if rawget(globalEnv, "Sp3arParvusV2") then
     return warn("[Sp3arParvus v2] Already loaded! Use Shutdown button to cleanup first.")
 end
 
--- Initialize global state
+-- Initialize state
 globalEnv.Sp3arParvusV2 = {
     Active = true,
     Version = VERSION,
@@ -18,18 +86,14 @@ globalEnv.Sp3arParvusV2 = {
 }
 local Sp3arParvus = globalEnv.Sp3arParvusV2
 
--- ============================================================
--- SERVICES
--- ============================================================
-local Players = game:GetService("Players")
+-- (additional services not declared during init)
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
 
--- Utility to resolve enums that may have been renamed by Roblox updates
+-- Utility to resolve enums that may have been renamed by stupid dumb Roblox updates
 local function ResolveEnumItem(enumContainer, possibleNames)
     for _, name in ipairs(possibleNames) do
         local success, enumItem = pcall(function()
@@ -45,10 +109,9 @@ local function ResolveEnumItem(enumContainer, possibleNames)
     return nil
 end
 
--- ============================================================
 -- LOCAL REFERENCES
--- ============================================================
-local LocalPlayer = Players.LocalPlayer
+
+-- LocalPlayer already defined during initialization
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
@@ -56,9 +119,7 @@ local Mouse = LocalPlayer:GetMouse()
 local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
--- ============================================================
 -- PERFORMANCE CACHING INFRASTRUCTURE
--- ============================================================
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEEN_INSTANT = TweenInfo.new(0.05)
@@ -105,9 +166,7 @@ local lastPlayerCountForSort = 0
 local lastSortTime = 0
 local SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
--- ============================================================
 -- CONNECTION TRACKING (for proper cleanup)
--- ============================================================
 local function TrackConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
@@ -122,9 +181,7 @@ local function TrackThread(thread)
     return thread
 end
 
--- ============================================================
 -- CONFIGURATION & FLAGS
--- ============================================================
 
 -- Aimbot state variables
 local Aimbot, SilentAim, Trigger = false, nil, false
@@ -207,9 +264,7 @@ local Flags = {
     ["Br3ak3r/Enabled"] = true
 }
 
--- ============================================================
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
--- ============================================================
 local CLICKBREAK_ENABLED = true
 local UNDO_LIMIT = 25
 local RAYCAST_MAX_DISTANCE = 3000
@@ -456,14 +511,10 @@ local function updateBr3ak3rHover()
     end
 end
 
--- ============================================================
 -- UTILITY FUNCTIONS
--- ============================================================
 
 
--- ============================================================
 -- MODERN UI LIBRARY
--- ============================================================
 
 local TweenService = game:GetService("TweenService")
 local ScreenGui -- Define at top level to be accessible to all functions
@@ -1095,9 +1146,7 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     end
 end))
 
--- ============================================================
 -- TEAM & CHARACTER DETECTION
--- ============================================================
 
 -- Check if player is on enemy team
 local function InEnemyTeam(Enabled, Player)
@@ -1246,9 +1295,7 @@ local function ValidateESPObjects()
     end
 end
 
--- ============================================================
 -- PHYSICS & BALLISTICS
--- ============================================================
 
 -- Maximum reasonable velocity magnitude (studs/second) - prevents aim snapping to sky
 local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
@@ -1288,9 +1335,7 @@ local function SolveTrajectory(origin, velocity, time, gravity)
     return predictedPosition
 end
 
--- ============================================================
 -- AIMBOT CORE (EXACT CODE FROM PARVUS)
--- ============================================================
 
 -- Raycast for visibility check
 -- Cache the FilterType enum value once
@@ -1629,9 +1674,7 @@ local function AimAt(Hitbox, Sensitivity)
     mousemoverel(deltaX, deltaY)
 end
 
--- ============================================================
 -- SILENT AIM HOOKS (EXACT CODE FROM WORKING PARVUS)
--- ============================================================
 
 local function Pack(...)
     return {n = select('#', ...), ...}
@@ -1718,9 +1761,7 @@ if hookmetamethod and checkcaller and getnamecallmethod then
     end)
 end
 
--- ============================================================
 -- ESP SYSTEM
--- ============================================================
 
 local ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
 local PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
@@ -2124,9 +2165,7 @@ local function UpdateClosestPlayerTracker()
     end
 end
 
--- ============================================================
 -- PLAYER PANEL (Top 10 Closest Players)
--- ============================================================
 
 local PlayerPanelFrame = nil
 local PlayerPanelRows = {}
@@ -3163,9 +3202,7 @@ local function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
--- ============================================================
 -- PERFORMANCE DISPLAY
--- ============================================================
 
 local PerformanceLabel
 local PerfMinimized = false
@@ -3274,9 +3311,7 @@ local function UpdatePerformanceDisplay()
     )
 end
 
--- ============================================================
 -- MAIN INITIALIZATION & CLEANUP
--- ============================================================
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 local function Cleanup()
@@ -3548,9 +3583,7 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemoveESP(player) 
 end))
 
--- ============================================================
 -- MAIN UPDATE LOOPS
--- ============================================================
 
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -3808,9 +3841,7 @@ local perfThread = task.spawn(function()
 end)
 TrackThread(perfThread)
 
--- ============================================================
 -- INITIALIZATION COMPLETE
--- ============================================================
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
 print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
