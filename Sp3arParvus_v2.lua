@@ -249,7 +249,7 @@ local Flags = {
     ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
     ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
     ["ESP/PlayerOutlines"] = true, -- Player body part outlines (off by default for performance)
-    ["ESP/MaxDistance"] = 5000,
+    ["ESP/MaxDistance"] = 8000,
 
     -- Visuals
     ["Visuals/Fullbright"] = true,
