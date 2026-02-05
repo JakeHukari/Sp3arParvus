@@ -1,9 +1,19 @@
-# Sp3arParvus - Sp3ar Version of Parvus
+# Sp3arParvus - Sp3ar fork of Parvus
 
-**A fully localized, offline-ready fork of [Parvus Hub](https://github.com/AlexR32/Parvus)** - Complete Roblox development toolkit with game-specific features, optimized for stability and ease of use.
+**A consolodated version of [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32**  
+> SilentAim
 
-> This version combines everything into a single file with comprehensive error handling, making it the most reliable way to run Parvus.
+> TriggerBot
 
+> ESP
+
+> Br3ak3r
+
+> Fullbright
+
+> Preformance Stats
+
+> Other stuff
 ---
 ## loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))()
 ---
