@@ -252,7 +252,7 @@ local Flags = {
     ["ESP/MaxDistance"] = 8000,
 
     -- Visuals
-    ["Visuals/Fullbright"] = true,
+    ["Visuals/Fullbright"] = false,
 
     -- Performance
     ["Performance/Enabled"] = true,
