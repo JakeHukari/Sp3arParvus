@@ -79,9 +79,9 @@ globalEnv.Sp3arParvusV2 = {
 }
 local Sp3arParvus = globalEnv.Sp3arParvusV2
 
--- ============================================================
+
 -- SERVICES (additional services not declared during init)
--- ============================================================
+
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
@@ -156,9 +156,9 @@ local lastPlayerCountForSort = 0
 local lastSortTime = 0
 local SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
--- ============================================================
+
 -- CONNECTION TRACKING (for proper cleanup)
--- ============================================================
+
 local function TrackConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
@@ -173,9 +173,9 @@ local function TrackThread(thread)
     return thread
 end
 
--- ============================================================
+
 -- CONFIG
--- ============================================================
+
 
 -- Aimbot state variables
 local Aimbot, SilentAim, Trigger = false, nil, false
@@ -261,9 +261,9 @@ local Flags = {
     ["Br3ak3r/Enabled"] = true
 }
 
--- ============================================================
+
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
--- ============================================================
+
 local CLICKBREAK_ENABLED = true
 local UNDO_LIMIT = 25
 local RAYCAST_MAX_DISTANCE = 3000
@@ -510,14 +510,14 @@ local function updateBr3ak3rHover()
     end
 end
 
--- ============================================================
+
 -- UTILITY FUNCTIONS
--- ============================================================
 
 
--- ============================================================
+
+
 -- MODERN UI LIBRARY
--- ============================================================
+
 
 local TweenService = game:GetService("TweenService")
 local ScreenGui -- Define at top level to be accessible to all functions
@@ -1149,9 +1149,9 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     end
 end))
 
--- ============================================================
+
 -- FULLBRIGHT SYSTEM
--- ============================================================
+
 local function UpdateFullbright()
     if not Flags["Visuals/Fullbright"] then return end
     
@@ -1169,9 +1169,9 @@ local function UpdateFullbright()
     end
 end
 
--- ============================================================
+
 -- TEAM & CHARACTER DETECTION
--- ============================================================
+
 
 -- Check if player is on enemy team
 local function InEnemyTeam(Enabled, Player)
@@ -1320,9 +1320,9 @@ local function ValidateESPObjects()
     end
 end
 
--- ============================================================
+
 -- PHYSICS & BALLISTICS
--- ============================================================
+
 
 -- Maximum reasonable velocity magnitude (studs/second) - prevents aim snapping to sky
 local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
@@ -1362,9 +1362,9 @@ local function SolveTrajectory(origin, velocity, time, gravity)
     return predictedPosition
 end
 
--- ============================================================
+
 -- AIMBOT CORE (EXACT CODE FROM PARVUS)
--- ============================================================
+
 
 -- Raycast for visibility check
 -- Cache the FilterType enum value once
@@ -1703,9 +1703,9 @@ local function AimAt(Hitbox, Sensitivity)
     mousemoverel(deltaX, deltaY)
 end
 
--- ============================================================
+
 -- SILENT AIM HOOKS (EXACT CODE FROM WORKING PARVUS)
--- ============================================================
+
 
 local function Pack(...)
     return {n = select('#', ...), ...}
@@ -1792,9 +1792,9 @@ if hookmetamethod and checkcaller and getnamecallmethod then
     end)
 end
 
--- ============================================================
+
 -- ESP SYSTEM
--- ============================================================
+
 
 local ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
 local PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
@@ -2198,9 +2198,9 @@ local function UpdateClosestPlayerTracker()
     end
 end
 
--- ============================================================
+
 -- PLAYER PANEL (Top 10 Closest Players)
--- ============================================================
+
 
 local PlayerPanelFrame = nil
 local PlayerPanelRows = {}
@@ -3237,9 +3237,9 @@ local function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
--- ============================================================
+
 -- PERFORMANCE DISPLAY
--- ============================================================
+
 
 local PerformanceLabel
 local PerfMinimized = false
@@ -3348,9 +3348,9 @@ local function UpdatePerformanceDisplay()
     )
 end
 
--- ============================================================
+
 -- MAIN INITIALIZATION & CLEANUP
--- ============================================================
+
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 local function Cleanup()
@@ -3623,9 +3623,9 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemoveESP(player) 
 end))
 
--- ============================================================
+
 -- MAIN UPDATE LOOPS
--- ============================================================
+
 
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -3885,9 +3885,9 @@ local perfThread = task.spawn(function()
 end)
 TrackThread(perfThread)
 
--- ============================================================
+
 -- INITIALIZATION COMPLETE
--- ============================================================
+
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
 print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
