@@ -1324,7 +1324,7 @@ end
 -- PHYSICS & BALLISTICS
 
 
--- Maximum reasonable velocity magnitude (studs/second) - prevents aim snapping to sky
+-- Maximum reasonable velocity magnitude (studs/second) - tries to prevents aim snapping to sky (fails) 
 local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
 
 -- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
