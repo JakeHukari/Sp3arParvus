@@ -1,5 +1,7 @@
 # Sp3arParvus - Sp3ar fork of Parvus
 
+Sp3arParvus provides the user a powerful ingame menu that provides esp, tracing, and aimbot once executed.
+
 **A consolodated version of [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32**  
 > SilentAim
 
@@ -18,7 +20,6 @@
 ## loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))()
 ---
 
-Sp3arParvus provides the user a powerful ingame menu that provides esp, tracing, and aimbot once executed.
 
 This script works universally on any roblox game that uses regular player models.
 
