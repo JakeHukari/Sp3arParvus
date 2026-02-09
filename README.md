@@ -16,9 +16,11 @@ Sp3arParvus provides the user a powerful ingame menu that provides esp, tracing,
 > Preformance Stats
 
 > Other stuff
----
-## loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))()
----
+
+### Loadstring
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))() 
+```
 
 
 This script works universally on any roblox game that uses regular player models.
