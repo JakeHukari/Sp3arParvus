@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.6" -- Added fullbright 
+local VERSION = "2.9.7" -- update closest player tracker to use user 'team color' and 'distance color' 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
