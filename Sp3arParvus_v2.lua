@@ -2051,20 +2051,17 @@ local function CreateOffscreenIndicator()
 end
 
 -- Create Closest Player Tracker display
+local TrackerHeaderLabel, TrackerNameLabel, TrackerDistanceLabel -- References to individual labels
+
 local function CreateClosestPlayerTracker()
-    ClosestPlayerTrackerLabel = Instance.new("TextLabel")
+    -- Main container frame
+    ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
     ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, 10)
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.2
     ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
-    ClosestPlayerTrackerLabel.Font = Enum.Font.GothamBold
-    ClosestPlayerTrackerLabel.TextSize = 14
-    ClosestPlayerTrackerLabel.TextXAlignment = Enum.TextXAlignment.Center
-    ClosestPlayerTrackerLabel.TextYAlignment = Enum.TextYAlignment.Center
     ClosestPlayerTrackerLabel.BorderSizePixel = 0
-    ClosestPlayerTrackerLabel.Text = "Closest Player\nSearching..."
     ClosestPlayerTrackerLabel.Parent = ScreenGui
 
     local corner = Instance.new("UICorner")
@@ -2077,6 +2074,57 @@ local function CreateClosestPlayerTracker()
     stroke.Transparency = 0.5
     stroke.Parent = ClosestPlayerTrackerLabel
     TrackerStrokeRef = stroke -- Cache the reference
+
+    -- Container for text labels with vertical layout
+    local textContainer = Instance.new("Frame")
+    textContainer.Name = "TextContainer"
+    textContainer.Size = UDim2.new(1, -30, 1, 0)
+    textContainer.Position = UDim2.fromOffset(0, 0)
+    textContainer.BackgroundTransparency = 1
+    textContainer.Parent = ClosestPlayerTrackerLabel
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0, 2)
+    layout.Parent = textContainer
+
+    -- Header label ("Closest Player")
+    TrackerHeaderLabel = Instance.new("TextLabel")
+    TrackerHeaderLabel.Name = "HeaderLabel"
+    TrackerHeaderLabel.Size = UDim2.new(1, 0, 0, 18)
+    TrackerHeaderLabel.BackgroundTransparency = 1
+    TrackerHeaderLabel.TextColor3 = CLOSEST_COLOR
+    TrackerHeaderLabel.Font = Enum.Font.GothamBold
+    TrackerHeaderLabel.TextSize = 14
+    TrackerHeaderLabel.Text = "Closest Player"
+    TrackerHeaderLabel.LayoutOrder = 1
+    TrackerHeaderLabel.Parent = textContainer
+
+    -- Name label (player name with team color)
+    TrackerNameLabel = Instance.new("TextLabel")
+    TrackerNameLabel.Name = "NameLabel"
+    TrackerNameLabel.Size = UDim2.new(1, 0, 0, 18)
+    TrackerNameLabel.BackgroundTransparency = 1
+    TrackerNameLabel.TextColor3 = NORMAL_COLOR
+    TrackerNameLabel.Font = Enum.Font.GothamBold
+    TrackerNameLabel.TextSize = 14
+    TrackerNameLabel.Text = "Searching..."
+    TrackerNameLabel.LayoutOrder = 2
+    TrackerNameLabel.Parent = textContainer
+
+    -- Distance label (distance with distance-based color)
+    TrackerDistanceLabel = Instance.new("TextLabel")
+    TrackerDistanceLabel.Name = "DistanceLabel"
+    TrackerDistanceLabel.Size = UDim2.new(1, 0, 0, 18)
+    TrackerDistanceLabel.BackgroundTransparency = 1
+    TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+    TrackerDistanceLabel.Font = Enum.Font.GothamBold
+    TrackerDistanceLabel.TextSize = 14
+    TrackerDistanceLabel.Text = ""
+    TrackerDistanceLabel.LayoutOrder = 3
+    TrackerDistanceLabel.Parent = textContainer
 
     -- Minimize button
     local minimizeBtn = Instance.new("TextButton")
@@ -2101,10 +2149,11 @@ local function CreateClosestPlayerTracker()
         TrackerMinimized = not TrackerMinimized
         if TrackerMinimized then
             ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
-            ClosestPlayerTrackerLabel.Text = "Closest Player"
+            textContainer.Visible = false
             minimizeBtn.Text = "+"
         else
             ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
+            textContainer.Visible = true
             minimizeBtn.Text = "−"
         end
     end))
@@ -2175,32 +2224,56 @@ local function UpdateClosestPlayerTracker()
                     name = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
                 end
 
-                -- Update colors based on distance (closest = always pink)
-                local color = GetDistanceColor(distance, true) -- true = is closest
-                ClosestPlayerTrackerLabel.TextColor3 = color
+                -- Get team color for player name
+                local teamColor = GetTeamColor(NearestPlayerRef)
+                
+                -- Get distance color using gradient system (red/yellow/green, NOT always pink)
+                local distColor = GetDistanceColor(distance, false) -- false = use gradient, not pink
 
-                -- Update stroke color to match (using cached reference)
+                -- Update stroke color to match distance color (using cached reference)
                 if TrackerStrokeRef then
-                    TrackerStrokeRef.Color = color
+                    TrackerStrokeRef.Color = distColor
+                end
+
+                -- Update individual labels with their respective colors
+                if TrackerNameLabel then
+                    TrackerNameLabel.Text = name
+                    TrackerNameLabel.TextColor3 = teamColor
+                end
+                
+                if TrackerDistanceLabel then
+                    TrackerDistanceLabel.Text = string.format("%d studs away", distRounded)
+                    TrackerDistanceLabel.TextColor3 = distColor
                 end
 
                 CurrentTargetDistance = distRounded
-                ClosestPlayerTrackerLabel.Text = string.format("Closest Player\n%s\n%d studs away", name, distRounded)
             else
-                ClosestPlayerTrackerLabel.Text = "Closest Player\n---"
-                ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+                if TrackerNameLabel then
+                    TrackerNameLabel.Text = "---"
+                    TrackerNameLabel.TextColor3 = NORMAL_COLOR
+                end
+                if TrackerDistanceLabel then
+                    TrackerDistanceLabel.Text = ""
+                    TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+                end
             end
         else
-            ClosestPlayerTrackerLabel.Text = "Closest Player\nNo players nearby"
-            ClosestPlayerTrackerLabel.TextColor3 = CLOSEST_COLOR
+            if TrackerNameLabel then
+                TrackerNameLabel.Text = "No players nearby"
+                TrackerNameLabel.TextColor3 = NORMAL_COLOR
+            end
+            if TrackerDistanceLabel then
+                TrackerDistanceLabel.Text = ""
+                TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+            end
             NearestPlayerRef = nil
         end
     end
 end
 
-
+-- ============================================================
 -- PLAYER PANEL (Top 10 Closest Players)
-
+-- ============================================================
 
 local PlayerPanelFrame = nil
 local PlayerPanelRows = {}
@@ -3237,9 +3310,9 @@ local function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
-
+-- ============================================================
 -- PERFORMANCE DISPLAY
-
+-- ============================================================
 
 local PerformanceLabel
 local PerfMinimized = false
@@ -3348,9 +3421,9 @@ local function UpdatePerformanceDisplay()
     )
 end
 
-
+-- ============================================================
 -- MAIN INITIALIZATION & CLEANUP
-
+-- ============================================================
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 local function Cleanup()
@@ -3623,9 +3696,9 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemoveESP(player) 
 end))
 
-
+-- ============================================================
 -- MAIN UPDATE LOOPS
-
+-- ============================================================
 
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -3885,9 +3958,9 @@ local perfThread = task.spawn(function()
 end)
 TrackThread(perfThread)
 
-
+-- ============================================================
 -- INITIALIZATION COMPLETE
-
+-- ============================================================
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
 print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
