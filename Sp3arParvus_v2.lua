@@ -103,7 +103,7 @@ local function ResolveEnumItem(enumContainer, possibleNames)
 
     return nil
 end
-n
+
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
