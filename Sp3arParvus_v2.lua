@@ -2271,9 +2271,7 @@ local function UpdateClosestPlayerTracker()
     end
 end
 
--- ============================================================
 -- PLAYER PANEL (Top 10 Closest Players)
--- ============================================================
 
 local PlayerPanelFrame = nil
 local PlayerPanelRows = {}
@@ -3310,9 +3308,7 @@ local function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
--- ============================================================
 -- PERFORMANCE DISPLAY
--- ============================================================
 
 local PerformanceLabel
 local PerfMinimized = false
@@ -3421,9 +3417,7 @@ local function UpdatePerformanceDisplay()
     )
 end
 
--- ============================================================
 -- MAIN INITIALIZATION & CLEANUP
--- ============================================================
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 local function Cleanup()
@@ -3696,9 +3690,7 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemoveESP(player) 
 end))
 
--- ============================================================
 -- MAIN UPDATE LOOPS
--- ============================================================
 
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -3958,9 +3950,7 @@ local perfThread = task.spawn(function()
 end)
 TrackThread(perfThread)
 
--- ============================================================
 -- INITIALIZATION COMPLETE
--- ============================================================
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
 print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
