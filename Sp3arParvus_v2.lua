@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.7" -- update closest player tracker to use user 'team color' and 'distance color' 
+local VERSION = "2.9.8" -- removed distance limit for nametags
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -200,47 +200,24 @@ local Flags = {
     -- Aimbot
     ["Aimbot/AimLock"] = true,
     ["Aimbot/AutoFire"] = true,
-    ["Aimbot/AlwaysEnabled"] = false,
+    ["Aimbot/AlwaysEnabled"] = true,
     ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
-    ["Aimbot/DistanceCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
     ["Aimbot/Sensitivity"] = 15,
     ["Aimbot/FOV/Radius"] = 100,
-    ["Aimbot/DistanceLimit"] = 1000,
     ["Aimbot/Priority"] = "Head",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
 
     -- Silent Aim
     ["SilentAim/Enabled"] = true,
-    ["SilentAim/Prediction"] = true,
-    ["SilentAim/TeamCheck"] = false,
-    ["SilentAim/DistanceCheck"] = false,
-    ["SilentAim/VisibilityCheck"] = true,
     ["SilentAim/HitChance"] = 100,
     ["SilentAim/FOV/Radius"] = 100,
-    ["SilentAim/DistanceLimit"] = 1000,
-    ["SilentAim/Priority"] = "Head",
-    ["SilentAim/BodyParts"] = {"Head", "HumanoidRootPart"},
-    ["SilentAim/Mode"] = {
-        "Raycast", "FindPartOnRayWithIgnoreList",
-        "Target", "Hit"
-    },
 
-    -- Trigger Bot
-    -- ["Trigger/Enabled"] replaced by ["Aimbot/AutoFire"]
-    -- ["Trigger/Enabled"] = true,
     ["Trigger/AlwaysEnabled"] = false,
     ["Trigger/HoldMouseButton"] = true,
-    ["Trigger/Prediction"] = true,
-    ["Trigger/TeamCheck"] = false,
-    ["Trigger/DistanceCheck"] = false,
-    ["Trigger/VisibilityCheck"] = true,
     ["Trigger/Delay"] = 0,
     ["Trigger/FOV/Radius"] = 25,
-    ["Trigger/DistanceLimit"] = 1000,
-    ["Trigger/Priority"] = "Head",
-    ["Trigger/BodyParts"] = {"Head", "HumanoidRootPart"},
 
     -- ESP
     ["ESP/Enabled"] = true,
@@ -249,7 +226,6 @@ local Flags = {
     ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
     ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
     ["ESP/PlayerOutlines"] = true, -- Player body part outlines (off by default for performance)
-    ["ESP/MaxDistance"] = 8000,
 
     -- Visuals
     ["Visuals/Fullbright"] = false,
@@ -3085,16 +3061,7 @@ local function UpdateESP(player, isClosest)
     -- Calculate distance
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
-    -- Distance culling
-    if distance > Flags["ESP/MaxDistance"] then
-        RemovePlayerOutlines(player)
-        if espData.Nametag then espData.Nametag.Enabled = false end
-        if espData.Tracer then espData.Tracer.Visible = false end
-        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-            espData.OffscreenIndicator.Frame.Visible = false
-        end
-        return
-    end
+    -- Distance culling REMOVED: All nametags visible at any distance
 
     -- Update nametag
     if Flags["ESP/Nametags"] and espData.Nametag then
@@ -3556,7 +3523,6 @@ UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamChec
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
 UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
 UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
-UI.CreateSlider(AimTab, "Distance Limit", "Aimbot/DistanceLimit", 25, 3000, Flags["Aimbot/DistanceLimit"], " st")
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
@@ -3619,7 +3585,6 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
     end
 end)
 UI.CreateToggle(VisualsTab, "Fullbright (Remove Shadows/Fog)", "Visuals/Fullbright", Flags["Visuals/Fullbright"])
-UI.CreateSlider(VisualsTab, "Maximum Distance", "ESP/MaxDistance", 100, 8000, Flags["ESP/MaxDistance"], " st")
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
@@ -3760,8 +3725,8 @@ local function GetCachedTarget()
         Flags["Aimbot/Enabled"] or Flags["SilentAim/Enabled"] or Flags["Trigger/Enabled"],
         Flags["Aimbot/TeamCheck"],
         Flags["Aimbot/VisibilityCheck"],
-        Flags["Aimbot/DistanceCheck"],
-        Flags["Aimbot/DistanceLimit"],
+        false, -- Distance check disabled (no cap)
+        0, -- Distance limit unused
         max(Flags["Aimbot/FOV/Radius"], Flags["SilentAim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
