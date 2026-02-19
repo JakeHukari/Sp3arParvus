@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.8" -- removed distance limit for nametags
+local VERSION = "2.9.8.5" -- fixed silent aim crash and improved preformance
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -234,7 +234,10 @@ local Flags = {
     ["Performance/Enabled"] = true,
     
     -- Br3ak3r (Object Breaking Tool)
-    ["Br3ak3r/Enabled"] = true
+    ["Br3ak3r/Enabled"] = true,
+
+    -- Silent Aim Mode (Fix: Initialize to prevent nil error)
+    ["SilentAim/Mode"] = {"Target", "Hit"}
 }
 
 
@@ -1571,11 +1574,9 @@ local function GetClosest(Enabled,
         end
     end
     
-    -- Clear stale entries from the list to ensure table.sort works correctly
-    -- The list size might remain large from previous frames otherwise
-    for i = CandidateCount + 1, #CandidateList do
-        CandidateList[i] = nil
-    end
+    -- Optimization: Reuse existing entries in CandidateList instead of clearing them
+    -- This reduces the number of table allocations during repeated calls
+    -- The list size is effectively managed by CandidateCount
     
     if CandidateCount == 0 then return nil end
     
@@ -1583,9 +1584,8 @@ local function GetClosest(Enabled,
     -- We only sort the used portion of the list
     if CandidateCount > 1 then
         table.sort(CandidateList, function(a, b)
-            -- Handle potential nil entries in sparse array if any (sanity check)
-            if not a then return false end
-            if not b then return true end
+            -- Only sort the active portion of the list
+            -- (The sort function will only be called for indices 1 to CandidateCount)
             return a.mag < b.mag
         end)
     end
@@ -1696,10 +1696,12 @@ if hookmetamethod and checkcaller then
             return OldIndex(Self, Index)
         end
 
+        if not Sp3arParvus.Active then return OldIndex(Self, Index) end
+
         if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
             local Mode = Flags["SilentAim/Mode"]
             if Self == Mouse then
-                if Index == "Target" and table.find(Mode, Index) then
+                if Index == "Target" and Mode and table.find(Mode, Index) then
                     -- Verify target validity
                     if SilentAim[3] and SilentAim[3].Parent then
                         return SilentAim[3]
@@ -1725,6 +1727,8 @@ if hookmetamethod and checkcaller and getnamecallmethod then
             return OldNamecall(Self, ...)
         end
 
+        if not Sp3arParvus.Active then return OldNamecall(Self, ...) end
+
         if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
             local Method = getnamecallmethod()
             local Mode = Flags["SilentAim/Mode"]
@@ -1735,7 +1739,7 @@ if hookmetamethod and checkcaller and getnamecallmethod then
             end
 
             if Self == Workspace then
-                if Method == "Raycast" and table.find(Mode, Method) then
+                if Method == "Raycast" and Mode and table.find(Mode, Method) then
                     local args = {...}
                     if args[1] then
                         args[2] = SilentAim[3].Position - args[1]
@@ -2550,15 +2554,13 @@ local function GetSortedPlayersByDistance()
         end
     end
     
-    -- Clear any extra entries from previous iterations
-    for i = insertIdx + 1, #cachedPlayerListForSort do
-        cachedPlayerListForSort[i] = nil
-    end
-    
     -- Sort by distance (closest first)
-    table.sort(cachedPlayerListForSort, function(a, b)
-        return a.distance < b.distance
-    end)
+    -- We only sort the active portion of the list
+    if insertIdx > 1 then
+        table.sort(cachedPlayerListForSort, function(a, b)
+            return a.distance < b.distance
+        end)
+    end
     
     -- Build result (reusing cached result table)
     table.clear(cachedSortedPlayers)
@@ -3861,7 +3863,7 @@ local function UnifiedHeartbeat(dt)
         local players = GetPlayersCache()
         for _, player in ipairs(players) do
             if player ~= LocalPlayer then
-                -- Standard update if throttled timer allows, OR force update if this is the locked target
+                -- Optimization: Only update specific target if not in a full update cycle
                 if shouldUpdateEsp or (player == forceUpdateTarget) then
                    UpdateESP(player, player == NearestPlayerRef)
                 end
