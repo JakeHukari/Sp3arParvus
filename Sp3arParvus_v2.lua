@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.8.5" -- fixed silent aim crash and improved preformance
+local VERSION = "2.9.8.6" -- improved preformance
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -1417,10 +1417,18 @@ local CandidateList = {} -- Array of {dist, data...}
 local CandidateCount = 0
 local MAX_CANDIDATES = 15 -- Cap max candidates to process for performance
 
--- CandidateList cleanup (clears object references to prevent stale refs)
+-- CandidateList cleanup (clears object references to prevent stale refs and shrinks table)
 -- Now properly placed after CandidateList and ClosestResult are declared
 ClearCandidateReferences = function()
     if not CandidateList then return end -- Safety check
+    
+    -- If CandidateList bloated beyond reasonable bounds, explicitly shrink it
+    if #CandidateList > MAX_CANDIDATES * 2 then
+        for i = MAX_CANDIDATES * 2 + 1, #CandidateList do
+            CandidateList[i] = nil
+        end
+    end
+
     for i = 1, #CandidateList do
         local entry = CandidateList[i]
         if entry then
@@ -1508,18 +1516,23 @@ local function GetClosest(Enabled,
                          
                          if Magnitude < FieldOfView then
                              CandidateCount = CandidateCount + 1
-                             local entry = CandidateList[CandidateCount]
-                             if not entry then 
-                                 entry = {}
-                                 CandidateList[CandidateCount] = entry
+                             -- Cap candidate insertion to prevent table bloat
+                             if CandidateCount <= MAX_CANDIDATES * 3 then
+                                 local entry = CandidateList[CandidateCount]
+                                 if not entry then 
+                                     entry = {}
+                                     CandidateList[CandidateCount] = entry
+                                 end
+                                 entry.mag = Magnitude
+                                 entry.ply = Player
+                                 entry.char = Character
+                                 entry.part = BodyPart
+                                 entry.sx = screenX
+                                 entry.sy = screenY
+                                 entry.pos = BodyPartPosition -- Predicted position
+                             else
+                                 CandidateCount = MAX_CANDIDATES * 3 -- keep at cap
                              end
-                             entry.mag = Magnitude
-                             entry.ply = Player
-                             entry.char = Character
-                             entry.part = BodyPart
-                             entry.sx = screenX
-                             entry.sy = screenY
-                             entry.pos = BodyPartPosition -- Predicted position
                          end
                      end
                  end
@@ -1556,18 +1569,23 @@ local function GetClosest(Enabled,
                      
                      if Magnitude < FieldOfView then
                          CandidateCount = CandidateCount + 1
-                         local entry = CandidateList[CandidateCount]
-                         if not entry then 
-                             entry = {}
-                             CandidateList[CandidateCount] = entry
+                         -- Cap candidate insertion to prevent table bloat
+                         if CandidateCount <= MAX_CANDIDATES * 3 then
+                             local entry = CandidateList[CandidateCount]
+                             if not entry then 
+                                 entry = {}
+                                 CandidateList[CandidateCount] = entry
+                             end
+                             entry.mag = Magnitude
+                             entry.ply = Player
+                             entry.char = Character
+                             entry.part = BodyPart
+                             entry.sx = screenX
+                             entry.sy = screenY
+                             entry.pos = BodyPartPosition
+                         else
+                             CandidateCount = MAX_CANDIDATES * 3 -- keep at cap
                          end
-                         entry.mag = Magnitude
-                         entry.ply = Player
-                         entry.char = Character
-                         entry.part = BodyPart
-                         entry.sx = screenX
-                         entry.sy = screenY
-                         entry.pos = BodyPartPosition
                      end
                  end
             end
@@ -3616,6 +3634,18 @@ local function SetupPlayerESP(player)
     local espData = ESPObjects[player]
     
     if espData then
+        -- FIX: Prevent duplicate connections if SetupPlayerESP is called multiple times for the same player
+        if espData.Connections then
+            for _, conn in pairs(espData.Connections) do
+                if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                    conn:Disconnect()
+                end
+            end
+            table.clear(espData.Connections)
+        else
+            espData.Connections = {}
+        end
+
         -- Track CharacterAdded connection LOCALLY in espData, not globally
         -- this ensures it gets cleaned up when the player leaves
         local conn = player.CharacterAdded:Connect(function(character)
@@ -3816,6 +3846,11 @@ local triggerThread = task.spawn(function()
                     end
 
                     mouse1release()
+                    
+                    -- Explicitly release strong references that might keep characters alive
+                    TriggerClosest = nil
+                    lockedPlayer = nil
+                    lockedCharacter = nil
                 end
             end
         end
