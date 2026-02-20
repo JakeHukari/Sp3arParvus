@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.8.7" -- improved preformance, .adornee property given 
+local VERSION = "2.9.8.9" -- Added Waypoints  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -237,8 +237,25 @@ local Flags = {
     ["Br3ak3r/Enabled"] = true,
 
     -- Silent Aim Mode (Fix: Initialize to prevent nil error)
-    ["SilentAim/Mode"] = {"Target", "Hit"}
+    ["SilentAim/Mode"] = {"Target", "Hit"},
+    
+    -- Waypoints
+    ["Waypoints/Enabled"] = true
 }
+
+-- WAYPOINTS SYSTEM STATE
+local ActiveWaypoints = {}
+local WaypointCounter = 0
+local WaypointColors = {
+    Color3.fromRGB(0, 200, 255),
+    Color3.fromRGB(255, 100, 100),
+    Color3.fromRGB(100, 255, 100),
+    Color3.fromRGB(255, 200, 50),
+    Color3.fromRGB(200, 100, 255)
+}
+local WaypointsTabButton = nil
+local WaypointsPage = nil
+local WaypointsUIList = nil
 
 
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
@@ -489,6 +506,180 @@ local function updateBr3ak3rHover()
     end
 end
 
+
+-- WAYPOINTS SYSTEM LOGIC
+
+local function RefreshWaypointUI()
+    if not WaypointsUIList then return end
+    
+    -- Clear current UI logic
+    for _, child in ipairs(WaypointsUIList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    
+    local keys = {}
+    for id in pairs(ActiveWaypoints) do
+        table.insert(keys, id)
+    end
+    table.sort(keys) -- Display in order
+    
+    for _, id in ipairs(keys) do
+        local wpData = ActiveWaypoints[id]
+        
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 30)
+        row.BackgroundColor3 = UI_THEME.Element
+        row.BorderSizePixel = 0
+        row.Parent = WaypointsUIList
+        local rC = Instance.new("UICorner", row)
+        rC.CornerRadius = UDim.new(0, 4)
+        
+        local nameBox = Instance.new("TextBox")
+        nameBox.Size = UDim2.new(0.5, -5, 1, 0)
+        nameBox.Position = UDim2.new(0, 5, 0, 0)
+        nameBox.BackgroundTransparency = 1
+        nameBox.Text = wpData.Name
+        nameBox.Font = Enum.Font.Gotham
+        nameBox.TextSize = 13
+        nameBox.TextColor3 = wpData.Color
+        nameBox.TextXAlignment = Enum.TextXAlignment.Left
+        nameBox.ClearTextOnFocus = false
+        nameBox.Parent = row
+        TrackConnection(nameBox.FocusLost:Connect(function()
+            wpData.Name = nameBox.Text
+            if wpData.Label then
+                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+            end
+        end))
+        
+        -- Color cycle button
+        local colBtn = Instance.new("TextButton")
+        colBtn.Size = UDim2.new(0, 24, 0, 24)
+        colBtn.Position = UDim2.new(1, -60, 0.5, -12)
+        colBtn.BackgroundColor3 = wpData.Color
+        colBtn.Text = ""
+        colBtn.Parent = row
+        local cC = Instance.new("UICorner", colBtn)
+        cC.CornerRadius = UDim.new(0, 4)
+        TrackConnection(colBtn.MouseButton1Click:Connect(function()
+            wpData.ColorIndex = (wpData.ColorIndex % #WaypointColors) + 1
+            wpData.Color = WaypointColors[wpData.ColorIndex]
+            colBtn.BackgroundColor3 = wpData.Color
+            nameBox.TextColor3 = wpData.Color
+            if wpData.Label then
+                wpData.Label.TextColor3 = wpData.Color
+            end
+            if wpData.Pin then
+                wpData.Pin.BackgroundColor3 = wpData.Color
+            end
+        end))
+        
+        -- Del button
+        local delBtn = Instance.new("TextButton")
+        delBtn.Size = UDim2.new(0, 24, 0, 24)
+        delBtn.Position = UDim2.new(1, -30, 0.5, -12)
+        delBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        delBtn.Text = "X"
+        delBtn.Font = Enum.Font.GothamBold
+        delBtn.TextColor3 = Color3.fromRGB(255,255,255)
+        delBtn.TextSize = 12
+        delBtn.Parent = row
+        local dC = Instance.new("UICorner", delBtn)
+        dC.CornerRadius = UDim.new(0, 4)
+        
+        TrackConnection(delBtn.MouseButton1Click:Connect(function()
+            if _G.DestroyWaypointFunc then _G.DestroyWaypointFunc(id) end
+        end))
+    end
+    
+    -- Update Tab Visibility
+    local hasWaypoints = #keys > 0
+    if WaypointsTabButton then
+        WaypointsTabButton.Visible = hasWaypoints
+    end
+end
+
+local function DestroyWaypoint(id)
+    local wpData = ActiveWaypoints[id]
+    if wpData then
+        if wpData.Billboard then
+            wpData.Billboard:Destroy()
+        end
+        if wpData.Part then
+            wpData.Part:Destroy()
+        end
+        ActiveWaypoints[id] = nil
+        RefreshWaypointUI()
+    end
+end
+_G.DestroyWaypointFunc = DestroyWaypoint
+
+local function CreateWaypoint(position)
+    if not Flags["Waypoints/Enabled"] then return end
+    
+    WaypointCounter = WaypointCounter + 1
+    local id = WaypointCounter
+    local colorIndex = ((id - 1) % #WaypointColors) + 1
+    local color = WaypointColors[colorIndex]
+    local name = "Waypoint " .. id
+    
+    -- Create anchor part
+    local part = Instance.new("Part")
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Size = Vector3.new(0.1, 0.1, 0.1)
+    part.Position = position
+    part.Parent = Workspace
+    
+    -- Create Billboard
+    local bg = Instance.new("BillboardGui")
+    bg.AlwaysOnTop = true
+    bg.Size = UDim2.new(0, 100, 0, 50)
+    bg.StudsOffset = Vector3.new(0, 2, 0)
+    bg.Adornee = part
+    bg.Parent = part
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = string.format("%s\n0 studs", name)
+    label.TextColor3 = color
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.TextStrokeTransparency = 0.2
+    label.Parent = bg
+    
+    -- Create Pin (Dot)
+    local pinBg = Instance.new("BillboardGui")
+    pinBg.AlwaysOnTop = true
+    pinBg.Size = UDim2.new(0, 8, 0, 8)
+    pinBg.Adornee = part
+    pinBg.Parent = part
+    
+    local pin = Instance.new("Frame")
+    pin.Size = UDim2.new(1,0,1,0)
+    pin.BackgroundColor3 = color
+    pin.Parent = pinBg
+    local pinC = Instance.new("UICorner", pin)
+    pinC.CornerRadius = UDim.new(1,0)
+    
+    ActiveWaypoints[id] = {
+        Id = id,
+        Name = name,
+        Position = position,
+        ColorIndex = colorIndex,
+        Color = color,
+        Part = part,
+        Billboard = bg,
+        PinBg = pinBg,
+        Pin = pin,
+        Label = label,
+        DistanceText = "0 studs"
+    }
+    
+    RefreshWaypointUI()
+end
 
 -- UTILITY FUNCTIONS
 
@@ -3473,6 +3664,15 @@ local function Cleanup()
         table.clear(pool)
     end
 
+    -- Cleanup Waypoints
+    for id, wpData in pairs(ActiveWaypoints) do
+        pcall(function()
+            if wpData.Billboard then wpData.Billboard:Destroy() end
+            if wpData.Part then wpData.Part:Destroy() end
+        end)
+    end
+    table.clear(ActiveWaypoints)
+
     -- Cleanup Br3ak3r (restore all broken parts)
     for part, _ in pairs(brokenSet) do
         pcall(function()
@@ -3537,6 +3737,32 @@ local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
 local MiscTab = UI.CreateTab("Misc")
 local SettingsTab = UI.CreateTab("Settings")
+
+local WaypointsPage = UI.CreateTab("Waypoints")
+
+-- Find the button to hide it initially
+for _, t in pairs(UIState.Tabs) do
+    if t.Label.Text == "Waypoints" then
+        WaypointsTabButton = t.Button
+        WaypointsTabButton.Visible = false
+        break
+    end
+end
+
+UI.CreateSection(WaypointsPage, "Active Waypoints")
+WaypointsUIList = Instance.new("Frame")
+WaypointsUIList.Size = UDim2.new(1, 0, 0, 0)
+WaypointsUIList.BackgroundTransparency = 1
+WaypointsUIList.Parent = WaypointsPage
+local wListLayout = Instance.new("UIListLayout")
+wListLayout.Padding = UDim.new(0, 5)
+wListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+wListLayout.Parent = WaypointsUIList
+
+-- Automatic canvas resizing for WaypointsPage based on children
+TrackConnection(wListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    WaypointsUIList.Size = UDim2.new(1, 0, 0, wListLayout.AbsoluteContentSize.Y)
+end))
 
 -- AIMBOT TAB
 UI.CreateSection(AimTab, "General Aim")
@@ -3609,6 +3835,11 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
     end
 end)
 UI.CreateToggle(VisualsTab, "Fullbright (Remove Shadows/Fog)", "Visuals/Fullbright", Flags["Visuals/Fullbright"])
+
+UI.CreateSection(VisualsTab, "Waypoints Settings")
+UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
+    RefreshWaypointUI()
+end)
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
@@ -3713,6 +3944,55 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
             local hit = worldRaycastBr3ak3r(origin, direction, true)
             if hit and hit.Instance and hit.Instance:IsA("BasePart") then
                 markBroken(hit.Instance)
+            end
+        end
+    end
+
+    -- Waypoints: Ctrl+MiddleClick to add/remove
+    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
+        if Flags["Waypoints/Enabled"] then
+            -- First check for deletion (click on existing waypoint screen pos)
+            local mouseLoc = UserInputService:GetMouseLocation()
+            local origin, direction = getMouseRay()
+            local raycastHit = nil
+            if origin and direction then
+                raycastHit = worldRaycastBr3ak3r(origin, direction, true)
+            end
+            
+            local deleted = false
+            for id, wpData in pairs(ActiveWaypoints) do
+                local screenPos, onScreen = Camera:WorldToViewportPoint(wpData.Position)
+                
+                -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
+                local screenClose = false
+                if onScreen then
+                    local dist = math.sqrt((mouseLoc.X - screenPos.X)^2 + (mouseLoc.Y - screenPos.Y)^2)
+                    if dist < 60 then 
+                        screenClose = true
+                    end
+                end
+                
+                -- Check 2: Is it close in 3D World Space? (15 studs buffer if raycast hit)
+                local worldClose = false
+                if raycastHit and raycastHit.Position then
+                    local dist3D = (wpData.Position - raycastHit.Position).Magnitude
+                    if dist3D < 15 then
+                        worldClose = true
+                    end
+                end
+                
+                if screenClose or worldClose then
+                    DestroyWaypoint(id)
+                    deleted = true
+                    -- Note: Intentionally NOT breaking here, so we can delete multiple clustered waypoints at once
+                end
+            end
+            
+            -- If not deleted, create a new one via raycast
+            if not deleted then
+                if raycastHit then
+                    CreateWaypoint(raycastHit.Position)
+                end
             end
         end
     end
@@ -3880,6 +4160,26 @@ local function UnifiedHeartbeat(dt)
     
     UpdateFullbright()
     
+    -- Update Waypoint Distances
+    if Flags["Waypoints/Enabled"] then
+        for id, wpData in pairs(ActiveWaypoints) do
+            if wpData.Part and wpData.Label then
+                local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
+                local distRounded = math.floor(dist)
+                wpData.DistanceText = distRounded .. " studs"
+                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+            end
+            if wpData.Billboard and not wpData.Billboard.Enabled then wpData.Billboard.Enabled = true end
+            if wpData.PinBg and not wpData.PinBg.Enabled then wpData.PinBg.Enabled = true end
+        end
+    else
+        -- Hide all if disabled
+        for id, wpData in pairs(ActiveWaypoints) do
+            if wpData.Billboard then wpData.Billboard.Enabled = false end
+            if wpData.PinBg then wpData.PinBg.Enabled = false end
+        end
+    end
+
     local now = os.clock()
     
     -- 1. ESP & Tracker Updates
