@@ -29,15 +29,15 @@ This script works universally on any roblox game that uses regular player models
 
 ### Upcoming Features
 
-> 'Any Item ESP' native integration ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
+> 'Any Item ESP' native integration. ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
 
-> Extended 'fullbright' customization (Time, sky hue, reflections, colors, etc..(basically just customization for any 'light' or sky))
+> Extended 'fullbright' customization. (Time, sky hue, reflections, colors, etc..(basically just customization for any 'light' or sky))
 
-> Freecam
+> Freecam.
 
-> Extended workspace explorer(dex)
+> Extended workspace explorer. (dex)
 
-> Block 'placing' tool (obviously will only work locally, probably will function like wallbreak except placing a local object that you can walk on or climb up or something idk)  
+> Block 'placing' tool. (probably will function like wallbreak except placing a local object that you can walk on or climb up or something idk, obviously will only work locally)  
 
 
 **For educational and development purposes only 😉**
