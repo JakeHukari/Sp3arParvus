@@ -17,13 +17,13 @@ This script works universally on any roblox game that uses regular player models
 
 > TriggerBot.
 
-> ESP.
+> Player-ESP.
 
-> Free-cam.
+> Free-cam. (Ctrl + P)
 
-> Waypoint System.
+> Waypoint System. (Ctrl + Middle-Mouse-Button)
 
-> Br3ak3r. (Wallbreak)
+> Br3ak3r. (Wallbreak) (Ctrl + Left-Click to break)(Ctrl + Z to undo break)
 
 > Fullbright.
 
