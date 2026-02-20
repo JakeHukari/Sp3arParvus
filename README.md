@@ -19,6 +19,8 @@ This script works universally on any roblox game that uses regular player models
 
 > Player-ESP.
 
+> Item-ESP. (Ctrl + E)
+
 > Free-cam. (Ctrl + P)
 
 > Waypoint System. (Ctrl + Middle-Mouse-Button)
@@ -32,8 +34,6 @@ This script works universally on any roblox game that uses regular player models
 > Other stuff.
 
 ### Upcoming Features
-
-> 'Any Item ESP' native integration. ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
 
 > Extended 'fullbright' customization. (Time, sky hue, reflections, colors, etc..(basically just customization for any 'light' or sky))
 
