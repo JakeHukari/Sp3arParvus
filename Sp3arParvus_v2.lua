@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.8.6" -- improved preformance
+local VERSION = "2.9.8.7" -- improved preformance, .adornee property given 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -2699,7 +2699,7 @@ local function CreateESP(player)
     billboard.AlwaysOnTop = true
     billboard.Size = UDim2.new(0, 200, 0, 60) -- Increased height for 3 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.Parent = nil
+    billboard.Parent = ScreenGui
 
     -- Container frame for vertical layout
     local container = Instance.new("Frame")
@@ -3033,17 +3033,22 @@ local function UpdateESP(player, isClosest)
     if espData then
         -- Check if nametag is valid
         local nametag = espData.Nametag
-        if not nametag or not nametag.Parent then
+        local isValid = false
+        if nametag then
+            isValid = pcall(function() return nametag.Name end)
+        end
+        
+        if not isValid then
             -- Recreate if missing
              -- Fix: Capture connections to preserve them (prevents untracked CharacterAdded listeners)
              local savedConnections = espData.Connections
              
-             if nametag then nametag:Destroy() end
-             if espData.Tracer then espData.Tracer:Destroy() end -- Fix: Use Destroy instead of Remove (deprecated)
+             if nametag then pcall(function() nametag:Destroy() end) end
+             if espData.Tracer then pcall(function() espData.Tracer:Destroy() end) end 
              
              -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
              if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                 espData.OffscreenIndicator.Frame:Destroy()
+                 pcall(function() espData.OffscreenIndicator.Frame:Destroy() end)
              end
              
              ESPObjects[player] = nil
@@ -3089,7 +3094,6 @@ local function UpdateESP(player, isClosest)
         -- Ensure nametag is attached and enabled
         if nametag.Adornee ~= rootPart then
             nametag.Adornee = rootPart
-            nametag.Parent = rootPart
         end
         if not nametag.Enabled then
             nametag.Enabled = true
