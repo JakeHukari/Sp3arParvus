@@ -2,7 +2,7 @@
 
 Sp3arParvus provides the user a powerful ingame menu which enables esp, player tracking, and movement/physics prediction for combat as well as assistive tools like wallbreak, fullbright, preformance monitoring, and others.
 
-## A lot of the aim stuff is based off [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32  
+**A lot of the aim stuff is based off [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32**
 
 ### Loadstring
 ```lua
