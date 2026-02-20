@@ -280,7 +280,7 @@ local CTRL_HELD = false     -- Track if Ctrl key is held
 local br3akerRaycastParams = RaycastParams.new()
 br3akerRaycastParams.IgnoreWater = true
 
--- PERFORMANCE FIX: Cache filter type ONCE at startup, not on every raycast
+-- PERFORMANCE FIX: Cache filter type ONCE at startup
 local Br3ak3rFilterType = (function()
     local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
     if ok and val and typeof(val) == "EnumItem" then return val end
@@ -294,7 +294,7 @@ if Br3ak3rFilterType then
 end
 
 -- Rebuild the broken parts ignore cache for raycasts
-local function rebuildBrokenIgnore()
+local function RebuildBrokenIgnore()
     if not next(brokenSet) then
         table.clear(brokenIgnoreCache)
         brokenCacheDirty = false
@@ -312,7 +312,7 @@ local function rebuildBrokenIgnore()
 end
 
 -- Get ray from mouse cursor position
-local function getMouseRay()
+local function GetMouseRay()
     local mouseLocation = UserInputService:GetMouseLocation()
     if not Camera then Camera = Workspace.CurrentCamera end
     if not Camera then return nil end
@@ -327,12 +327,14 @@ end
 -- PERFORMANCE FIX: Removed nested closure function, use inline logic instead
 local MAX_IGNORE_COUNT = 200
 
-local function worldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
+local function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
     if brokenCacheDirty then
-        rebuildBrokenIgnore()
+        RebuildBrokenIgnore()
     end
     
     local ignore = scratchIgnore
+    -- Optimization: Instead of clearing and repopulating every frame, 
+    -- we manage the table indices directly if possible, or use table.clear
     table.clear(ignore)
     
     local ignoreCount = 0
@@ -340,7 +342,7 @@ local function worldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgno
     -- Always prioritize ignoring the local character
     if ignoreLocalChar then
         local ch = LocalPlayer.Character
-        if ch and ignoreCount < MAX_IGNORE_COUNT then
+        if ch then
             ignoreCount = ignoreCount + 1
             ignore[ignoreCount] = ch
         end
@@ -349,7 +351,6 @@ local function worldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgno
     -- Add extra ignore items
     if extraIgnore then
         for i = 1, #extraIgnore do
-            if ignoreCount >= MAX_IGNORE_COUNT then break end
             local item = extraIgnore[i]
             if item then
                 ignoreCount = ignoreCount + 1
@@ -359,9 +360,9 @@ local function worldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgno
     end
     
     -- Add broken parts to ignore list
+    -- Use cached length to avoid repeated table length lookups
     local brokenCacheLen = #brokenIgnoreCache
     for i = 1, brokenCacheLen do
-        if ignoreCount >= MAX_IGNORE_COUNT then break end
         local item = brokenIgnoreCache[i]
         if item then
             ignoreCount = ignoreCount + 1
@@ -477,7 +478,7 @@ end
 
 -- Update hover highlight for Br3ak3r (called each frame)
 -- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
-local function updateBr3ak3rHover()
+local function UpdateBr3ak3rHover()
     -- Early exit - don't do ANY work if feature disabled or Ctrl not held
     if not CLICKBREAK_ENABLED or not CTRL_HELD then
         if hoverHL and hoverHL.Enabled then
@@ -490,9 +491,9 @@ local function updateBr3ak3rHover()
         createHoverHighlight()
     end
     
-    local origin, direction = getMouseRay()
+    local origin, direction = GetMouseRay()
     if origin and direction then
-        local result = worldRaycastBr3ak3r(origin, direction, true)
+        local result = WorldRaycastBr3ak3r(origin, direction, true)
         local part = result and result.Instance
         if part and part:IsA("BasePart") and not brokenSet[part] then
             hoverHL.Adornee = part
@@ -591,7 +592,7 @@ local function RefreshWaypointUI()
         dC.CornerRadius = UDim.new(0, 4)
         
         TrackConnection(delBtn.MouseButton1Click:Connect(function()
-            if _G.DestroyWaypointFunc then _G.DestroyWaypointFunc(id) end
+            if Sp3arParvus.DestroyWaypointFunc then Sp3arParvus.DestroyWaypointFunc(id) end
         end))
     end
     
@@ -615,7 +616,10 @@ local function DestroyWaypoint(id)
         RefreshWaypointUI()
     end
 end
-_G.DestroyWaypointFunc = DestroyWaypoint
+local function SetDestroyWaypointFunc(func)
+    Sp3arParvus.DestroyWaypointFunc = func
+end
+SetDestroyWaypointFunc(DestroyWaypoint)
 
 local function CreateWaypoint(position)
     if not Flags["Waypoints/Enabled"] then return end
@@ -4433,9 +4437,9 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
     
     -- Br3ak3r: Ctrl+Click to break object
     if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 and CLICKBREAK_ENABLED then
-        local origin, direction = getMouseRay()
+        local origin, direction = GetMouseRay()
         if origin and direction then
-            local hit = worldRaycastBr3ak3r(origin, direction, true)
+            local hit = WorldRaycastBr3ak3r(origin, direction, true)
             if hit and hit.Instance and hit.Instance:IsA("BasePart") then
                 markBroken(hit.Instance)
             end
@@ -4447,10 +4451,10 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
         if Flags["Waypoints/Enabled"] then
             -- First check for deletion (click on existing waypoint screen pos)
             local mouseLoc = UserInputService:GetMouseLocation()
-            local origin, direction = getMouseRay()
+            local origin, direction = GetMouseRay()
             local raycastHit = nil
             if origin and direction then
-                raycastHit = worldRaycastBr3ak3r(origin, direction, true)
+                raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
             end
             
             local deleted = false
@@ -4716,7 +4720,7 @@ local function UnifiedHeartbeat(dt)
     -- Update hover highlight (throttled to 30fps)
     if (now - lastHoverUpdate) > hoverUpdateRate then
         lastHoverUpdate = now
-        updateBr3ak3rHover()
+        UpdateBr3ak3rHover()
     end
     
     -- Periodic cleanup (throttled)
