@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.9.1" -- Added Freecam  
+local VERSION = "2.9.9.2" -- Added handler for ScreenGui parented to nil (would cause esp nametags to abort)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -718,16 +718,22 @@ local UI_THEME = {
     Fail = Color3.fromRGB(220, 50, 50)
 }
 
-function UI.CreateWindow(title)
-    -- Destroy old instances
-    if ScreenGui then ScreenGui:Destroy() end
+-- Helper to ensure ScreenGui exists and is parented correctly
+local function EnsureScreenGui()
+    if ScreenGui and ScreenGui.Parent then
+        return ScreenGui
+    end
 
-    -- ScreenGui
+    -- Re-create if missing or parented to nil
+    if ScreenGui then
+        pcall(function() ScreenGui:Destroy() end)
+    end
+
     ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "Sp3arParvusUI"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
+
     if gethui then
         ScreenGui.Parent = gethui()
     elseif syn and syn.protect_gui then
@@ -736,6 +742,13 @@ function UI.CreateWindow(title)
     else
         ScreenGui.Parent = game.CoreGui
     end
+
+    return ScreenGui
+end
+
+function UI.CreateWindow(title)
+    -- Destroy old instances
+    EnsureScreenGui()
 
     -- Main Container
     local MainFrame = Instance.new("Frame")
@@ -2182,6 +2195,7 @@ local function CreateOffscreenIndicator()
     indicator.BorderSizePixel = 0
     indicator.Visible = false
     indicator.ZIndex = 100
+    EnsureScreenGui()
     indicator.Parent = ScreenGui
     
     local corner = Instance.new("UICorner")
@@ -2258,6 +2272,7 @@ local function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.2
     ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     ClosestPlayerTrackerLabel.BorderSizePixel = 0
+    EnsureScreenGui()
     ClosestPlayerTrackerLabel.Parent = ScreenGui
 
     local corner = Instance.new("UICorner")
@@ -2520,6 +2535,7 @@ local function CreatePlayerPanel()
     PlayerPanelFrame.BorderSizePixel = 0
     PlayerPanelFrame.Visible = false
     PlayerPanelFrame.ZIndex = 50
+    EnsureScreenGui()
     PlayerPanelFrame.Parent = ScreenGui
     
     local corner = Instance.new("UICorner")
@@ -2897,6 +2913,7 @@ local function CreateESP(player)
     billboard.AlwaysOnTop = true
     billboard.Size = UDim2.new(0, 200, 0, 60) -- Increased height for 3 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
+    EnsureScreenGui() -- Ensure parent exists
     billboard.Parent = ScreenGui
 
     -- Container frame for vertical layout
@@ -2962,6 +2979,7 @@ local function CreateESP(player)
     tracer.BackgroundColor3 = TRACER_COLOR
     tracer.BorderSizePixel = 0
     tracer.AnchorPoint = Vector2.new(0.5, 0.5) -- Center anchor for rotation
+    EnsureScreenGui()
     tracer.Parent = ScreenGui -- Render on top of everything
     
     espData.Tracer = tracer
@@ -3233,7 +3251,11 @@ local function UpdateESP(player, isClosest)
         local nametag = espData.Nametag
         local isValid = false
         if nametag then
-            isValid = pcall(function() return nametag.Name end)
+            isValid = pcall(function() return nametag.Parent and nametag.Name end)
+            -- Verify critical children still exist
+            if isValid and (not espData.NicknameLabel or not espData.NicknameLabel.Parent) then
+                isValid = false
+            end
         end
         
         if not isValid then
@@ -3258,6 +3280,18 @@ local function UpdateESP(player, isClosest)
              if espData then
                  espData.Connections = savedConnections
              end
+        else
+            -- Ensure correctly parented if still valid
+            local targetGui = EnsureScreenGui()
+            if nametag.Parent ~= targetGui then
+                nametag.Parent = targetGui
+            end
+            if espData.Tracer and espData.Tracer.Parent ~= targetGui then
+                espData.Tracer.Parent = targetGui
+            end
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Parent ~= targetGui then
+                espData.OffscreenIndicator.Frame.Parent = targetGui
+            end
         end
     end
     
@@ -4380,24 +4414,37 @@ local function SetupPlayerESP(player)
         end
 
         -- Track CharacterAdded connection LOCALLY in espData, not globally
-        -- this ensures it gets cleaned up when the player leaves
         local conn = player.CharacterAdded:Connect(function(character)
             -- FIX: Invalidate character cache immediately on spawn
             CharCache[player] = nil
             
-            task.delay(0.1, function()
-                if player.Parent and Sp3arParvus.Active then
-                    -- Force ESP update for this player when their character spawns
-                    if ESPObjects[player] then -- Re-fetch in case it changed
-                        local data = ESPObjects[player]
-                        data.lastNickname = ""
-                        data.lastUsername = ""
-                        data.lastDistance = -1
-                        data.lastTeamColor = nil
-                        data.lastDistanceColor = nil
-                    end
+            -- Wait for character to be fully parented and have a root part
+            local attempts = 0
+            local root = nil
+            repeat
+                task.wait(0.2)
+                root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+                attempts = attempts + 1
+            until root or attempts > 10
+            
+            if player.Parent and Sp3arParvus.Active then
+                -- Force ESP update for this player when their character spawns
+                local data = ESPObjects[player]
+                if data then
+                    -- Reset cache to force full update of labels and colors
+                    data.lastNickname = ""
+                    data.lastUsername = ""
+                    data.lastDistance = -1
+                    data.lastTeamColor = nil
+                    data.lastDistanceColor = nil
+                    
+                    -- Ensure ScreenGui is valid
+                    EnsureScreenGui()
+                    
+                    -- Update immediately
+                    UpdateESP(player, player == NearestPlayerRef)
                 end
-            end)
+            end
         end)
         table.insert(espData.Connections, conn)
     end
