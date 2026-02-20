@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.9.2" -- Added handler for ScreenGui parented to nil (would cause esp nametags to abort)
+local VERSION = "2.9.9.2" -- Added handler for ScreenGui parented to nil (would cause esp nametags to abort after an hour or so)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
