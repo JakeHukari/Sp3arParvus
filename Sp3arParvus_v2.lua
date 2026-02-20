@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "2.9.9.2" -- Added handler for ScreenGui parented to nil (would cause esp nametags to abort after an hour or so)
+local VERSION = "3.0.1" -- Added Any-Item-ESP integration (Ctrl+E to toggle)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -4554,6 +4554,9 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
             if not CLICKBREAK_ENABLED and hoverHL then
                 hoverHL.Enabled = false
             end
+        elseif input.KeyCode == Enum.KeyCode.E then
+            -- Ctrl+E: Load Any-Item-ESP
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
         end
     end
 end))
