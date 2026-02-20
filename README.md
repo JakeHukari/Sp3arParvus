@@ -1,4 +1,4 @@
-# Sp3arParvus - Universal Aim Client with a variety of other developer tools
+# Sp3arParvus - Universal Aim Client and other developer tools
 
 Sp3arParvus provides the user a powerful ingame menu which enables esp, player tracking, and movement/physics prediction for combat as well as assistive tools like wallbreak, fullbright, preformance monitoring, and others.
 
