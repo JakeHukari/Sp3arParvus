@@ -19,6 +19,10 @@ This script works universally on any roblox game that uses regular player models
 
 > ESP.
 
+> Free-cam.
+
+> Waypoint System.
+
 > Br3ak3r. (Wallbreak)
 
 > Fullbright.
@@ -32,10 +36,6 @@ This script works universally on any roblox game that uses regular player models
 > 'Any Item ESP' native integration. ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
 
 > Extended 'fullbright' customization. (Time, sky hue, reflections, colors, etc..(basically just customization for any 'light' or sky))
-
-> Waypoint System.
-
-> Freecam.
 
 > Extended workspace explorer. (dex)
 
