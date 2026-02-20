@@ -19,17 +19,17 @@ This script works universally on any roblox game that uses regular player models
 
 > Player-ESP.
 
-> Item-ESP. (Ctrl + E)
+> Item-ESP. `Ctrl + E`
 
-> Free-cam. (Ctrl + P)
+> Free-cam. `Ctrl + P`
 
-> Waypoint System. (Ctrl + Middle-Mouse-Button)
+> Waypoint System. `Ctrl + Middle-Mouse-Button`
 
-> Br3ak3r. (Wallbreak) (Ctrl + Left-Click to break)(Ctrl + Z to undo break)
+> Br3ak3r. (Wallbreak) `Ctrl + Left-Click to break` | `Ctrl + Z to undo break`
 
 > Fullbright.
 
-> Preformance Stats.
+> Preformance Monitor.
 
 > Other stuff.
 
