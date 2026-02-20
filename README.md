@@ -2,7 +2,7 @@
 
 Sp3arParvus provides the user a powerful ingame menu which enables esp, player tracking, and movement/physics prediction for combat as well as assistive tools like wallbreak, fullbright, preformance monitoring, and others.
 
-** A lot of the aim stuff is based off [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32**  
+## A lot of the aim stuff is based off [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32  
 
 ### Loadstring
 ```lua
@@ -11,7 +11,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvu
 
 This script works universally on any roblox game that uses regular player models.
 
-*** Current Features
+### Current Features
 
 > SilentAim
 
@@ -27,7 +27,7 @@ This script works universally on any roblox game that uses regular player models
 
 > Other stuff
 
-*** Upcoming Features
+### Upcoming Features
 
 > 'Any Item ESP' native integration ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
 
