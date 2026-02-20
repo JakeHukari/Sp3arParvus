@@ -12,19 +12,31 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvu
 This script works universally on any roblox game that uses regular player models.
 
 *** Current Features
+
 > SilentAim
+
 > TriggerBot
+
 > ESP
+
 > Br3ak3r (Wallbreak)
+
 > Fullbright
+
 > Preformance Stats
+
 > Other stuff
 
 *** Upcoming Features
+
 > 'Any Item ESP' native integration ([AIE](https://github.com/JakeHukari/Any-Item-ESP) is another script of mine that provides a workspace explorer to create esp highlights for any item or folder, this will soon be natively integrated into Sp3arParvus)
+
 > Extended 'fullbright' customization (Time, sky hue, reflections, colors, etc..(basically just customization for any 'light' or sky))
+
 > Freecam
+
 > Extended workspace explorer(dex)
+
 > Block 'placing' tool (obviously will only work locally, probably will function like wallbreak except placing a local object that you can walk on or climb up or something idk)  
 
 
