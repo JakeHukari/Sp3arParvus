@@ -43,6 +43,6 @@ This script works universally on any roblox game that uses regular player models
 
 **A lot of the aim stuff is based off [Parvus Hub](https://github.com/AlexR32/Parvus) from AlexR32**
 
-Special thanks to @AlexR32, original author of Parvus
+Special thanks to @[AlexR32](https://github.com/AlexR32), original author of Parvus
 
 **For educational and development purposes only 😉**
