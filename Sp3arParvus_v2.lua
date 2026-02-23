@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.0.1" -- Added Any-Item-ESP integration (Ctrl+E to toggle)
+local VERSION = "3.0.2" -- Optimized ESP/Highlight management and UI throttling to prevent lag spikes
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -1464,9 +1464,13 @@ local function PruneCharCache()
     if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
     lastCharCachePrune = now
     
+    local players = GetPlayersCache()
+    local playerMap = {}
+    for _, p in ipairs(players) do playerMap[p] = true end
+
     for player, cache in pairs(CharCache) do
         -- Remove if player left the game
-        if not player or not player.Parent then
+        if not playerMap[player] or not player.Parent then
             CharCache[player] = nil
         -- Remove if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
@@ -2016,6 +2020,8 @@ local OUTLINE_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (same as closest pla
 -- Off-screen indicator settings
 local OFFSCREEN_EDGE_PADDING = 50  -- Pixels from screen edge
 local OFFSCREEN_ARROW_SIZE = 20    -- Size of the direction arrow
+-- PERFORMANCE: Max highlights to use (Roblox hard limit is 31, shared with other scripts)
+local MAX_OUTLINE_HIGHLIGHTS = 15 
 local OFFSCREEN_INDICATOR_COLOR = Color3.fromRGB(255, 200, 50) -- Yellow/gold for visibility
 
 -- Distance-based color zones (for tracker, but closest overrides to pink)
@@ -2998,6 +3004,7 @@ local ObjectPool = {
     Billboards = {}
 }
 local MAX_POOL_SIZE = 50 -- Prevent unbounded pool growth
+local ActiveHighlightCount = 0 -- Performance: Keep track of count instead of iterating
 
 local function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
@@ -3073,18 +3080,54 @@ local function UpdatePlayerOutlines(player, character)
     
     -- Create single Highlight for the character
     if not storage.Highlight then
-        local highlight = GetPooledObject("Highlights", "Highlight")
-        highlight.Name = "PlayerOutlineHighlight"
-        highlight.Adornee = character
-        highlight.FillColor = OUTLINE_COLOR
-        highlight.FillTransparency = 1 -- Invisible fill (Wireframe only)
-        highlight.OutlineColor = OUTLINE_COLOR
-        highlight.OutlineTransparency = 0 -- Fully visible outline
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Visible through walls
-        highlight.Enabled = true
-        highlight.Parent = character
-        
-        storage.Highlight = highlight
+        -- Count current highlights to respect cap
+        if ActiveHighlightCount >= MAX_OUTLINE_HIGHLIGHTS then
+            -- Find the furthest player with a highlight and steal it
+            local furthest = nil
+            local maxDist = -1
+            local myPos = Camera.CFrame.Position
+            
+            for p, obj in pairs(PlayerOutlineObjects) do
+                if obj.Highlight then
+                    local _, root = GetCharacter(p)
+                    if root then
+                        local d = (root.Position - myPos).Magnitude
+                        if d > maxDist then
+                            maxDist = d
+                            furthest = p
+                        end
+                    else
+                        -- Orphaned highlighting, just take it
+                        furthest = p
+                        break
+                    end
+                end
+            end
+            
+            if furthest and PlayerOutlineObjects[furthest] then
+                storage.Highlight = PlayerOutlineObjects[furthest].Highlight
+                PlayerOutlineObjects[furthest].Highlight = nil
+                storage.Highlight.Adornee = character
+                storage.Highlight.Parent = character
+                -- Count remains same as we stole one
+            end
+        end
+
+        if not storage.Highlight then
+            local highlight = GetPooledObject("Highlights", "Highlight")
+            highlight.Name = "PlayerOutlineHighlight"
+            highlight.Adornee = character
+            highlight.FillColor = OUTLINE_COLOR
+            highlight.FillTransparency = 1 -- Invisible fill (Wireframe only)
+            highlight.OutlineColor = OUTLINE_COLOR
+            highlight.OutlineTransparency = 0 -- Fully visible outline
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Visible through walls
+            highlight.Enabled = true
+            highlight.Parent = character
+            
+            storage.Highlight = highlight
+            ActiveHighlightCount = ActiveHighlightCount + 1
+        end
     else
         local highlight = storage.Highlight
         -- FIX: Validate highlight is still a valid object (not destroyed)
@@ -3223,11 +3266,19 @@ local function RemovePlayerOutlines(player)
     -- Cleanup Highlight
     if storage.Highlight then
         ReturnPooledObject(storage.Highlight)
+        storage.Highlight = nil
+        ActiveHighlightCount = math.max(0, ActiveHighlightCount - 1)
     end
     
     -- Cleanup Billboard dots
-    if storage.HeadDot then ReturnPooledObject(storage.HeadDot) end
-    if storage.RootDot then ReturnPooledObject(storage.RootDot) end
+    if storage.HeadDot then 
+        ReturnPooledObject(storage.HeadDot) 
+        storage.HeadDot = nil
+    end
+    if storage.RootDot then 
+        ReturnPooledObject(storage.RootDot) 
+        storage.RootDot = nil
+    end
     
     -- Cleanup any legacy parts
     for k, v in pairs(storage) do
@@ -4748,10 +4799,32 @@ local function UnifiedHeartbeat(dt)
         
         -- Update ESP for all players
         local players = GetPlayersCache()
+        local myPos = Camera.CFrame.Position
+        
         for _, player in ipairs(players) do
             if player ~= LocalPlayer then
-                -- Optimization: Only update specific target if not in a full update cycle
-                if shouldUpdateEsp or (player == forceUpdateTarget) then
+                -- Optimization: Level of Detail (LoD) updates
+                -- Only update specific target if not in a full update cycle
+                local pChar, pRoot = GetCharacter(player)
+                local skip = false
+                
+                if not shouldUpdateEsp and player ~= forceUpdateTarget then
+                    skip = true
+                end
+                
+                -- Extra throttling for distant players
+                if not skip and pRoot and player ~= forceUpdateTarget then
+                    local dist = (pRoot.Position - myPos).Magnitude
+                    if dist > 1000 then
+                        -- Update very distant players only every ~2 seconds (1 in 10 full updates)
+                        if (floor(now * 5) % 10) ~= 0 then skip = true end
+                    elseif dist > 400 then
+                        -- Update mid-range players only every ~0.8 seconds (1 in 4 full updates)
+                        if (floor(now * 5) % 4) ~= 0 then skip = true end
+                    end
+                end
+
+                if not skip then
                    UpdateESP(player, player == NearestPlayerRef)
                 end
             end
