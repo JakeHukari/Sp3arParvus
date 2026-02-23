@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.0.2" -- Optimized ESP/Highlight management and UI throttling to prevent lag spikes
+local VERSION = "3.0.3" -- Updated Preformance Monitor, fps and ping now use more accurate values
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -1282,19 +1282,13 @@ function UI.CreateButton(page, text, callback)
     end))
 end
 
--- Get ping from server stats
-local Ping
-do
-    local serverStats = Stats.Network:FindFirstChild("ServerStatsItem")
-    if serverStats then
-        local dataPing = serverStats:FindFirstChild("Data Ping")
-        if dataPing and type(dataPing.GetValue) == "function" then
-            Ping = dataPing
-        end
-    end
-    if not Ping then
-        Ping = {GetValue = function() return 0 end}
-    end
+-- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
+local function GetPing()
+    local ping = 0
+    pcall(function()
+        ping = LocalPlayer:GetNetworkPing() * 1000
+    end)
+    return ping
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
@@ -3597,8 +3591,8 @@ local function CreatePerformanceDisplay(parent)
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
     PerformanceLabel.Position = UDim2.new(1, -190, 0, 10)
-    PerformanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    PerformanceLabel.BackgroundTransparency = 0.8
+    PerformanceLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    PerformanceLabel.BackgroundTransparency = 0
     PerformanceLabel.BorderSizePixel = 0
     PerformanceLabel.Parent = parent
 
@@ -3720,7 +3714,7 @@ local function UpdatePerformanceDisplay()
     if not PerformanceLabel.Visible then return end
 
     local fps = floor(GetFPS())
-    local ping = floor(Ping:GetValue())
+    local ping = floor(GetPing())
     local playerCount = #GetPlayersCache()
     local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
     local activeTargets = max(0, playerCount - 1)
