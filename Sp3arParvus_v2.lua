@@ -1370,12 +1370,12 @@ local function InEnemyTeam(Enabled, Player)
         end
     end
 
-    -- AR2 Squad check
+    -- AR2 Squad check (Improved verification)
     local localSquad = LocalPlayer:FindFirstChild("Squad")
     local playerSquad = Player:FindFirstChild("Squad")
     
-    if localSquad and playerSquad then
-        if localSquad.Value == playerSquad.Value and localSquad.Value ~= nil then
+    if localSquad and playerSquad and localSquad:IsA("ValueBase") and playerSquad:IsA("ValueBase") then
+        if localSquad.Value == playerSquad.Value and localSquad.Value ~= nil and localSquad.Value ~= "" then
             return false
         end
     end
@@ -1429,11 +1429,14 @@ local function GetCharacter(player)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local healthInst = nil
     
-    -- If no humanoid, check for AR2 style stats
+    -- If no humanoid, check for AR2 style stats (Improved verification)
     if not humanoid then
         local stats = player:FindFirstChild("Stats")
-        if stats then
-            healthInst = stats:FindFirstChild("Health")
+        if stats and stats:IsA("Folder") then
+            local health = stats:FindFirstChild("Health")
+            if health and health:IsA("ValueBase") then
+                healthInst = health
+            end
         end
     end
     
