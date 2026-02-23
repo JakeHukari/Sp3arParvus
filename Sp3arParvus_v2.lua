@@ -1613,6 +1613,9 @@ local OcclusionFilter = {nil, nil}
 
 local function ObjectOccluded(Enabled, Origin, Position, Object)
     if not Enabled then return false end
+    -- Safety check: Ensure Position is a valid Vector3 to prevent arithmetic errors
+    if typeof(Position) ~= "Vector3" then return false end
+    
     -- Reuse filter table instead of creating new one every call
     OcclusionFilter[1] = Object
     OcclusionFilter[2] = LocalPlayer.Character
@@ -1810,11 +1813,17 @@ local function GetClosest(Enabled,
     if CandidateCount == 0 then return nil end
     
     -- Sort candidates by screen distance (Magnitude)
-    -- We only sort the used portion of the list
+    -- PERFORMANCE FIX: table.sort sorts from index 1 to #CandidateList.
+    -- We must prune the "tail" of the reused table to prevent it from sorting stale data from previous frames.
     if CandidateCount > 1 then
+        local currentSize = #CandidateList
+        if currentSize > CandidateCount then
+            for i = CandidateCount + 1, currentSize do
+                CandidateList[i] = nil
+            end
+        end
+
         table.sort(CandidateList, function(a, b)
-            -- Only sort the active portion of the list
-            -- (The sort function will only be called for indices 1 to CandidateCount)
             return a.mag < b.mag
         end)
     end
