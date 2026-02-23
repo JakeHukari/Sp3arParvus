@@ -1298,26 +1298,28 @@ do
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
+-- FPS counter setup (RE-OPTIMIZED - uses proper frame counting via RenderStepped)
 local GetFPS
 do
     local frameCount = 0
     local lastTime = os.clock()
     local cachedFPS = 60
-    local updateInterval = 0.25 -- Update every 250ms instead of every frame
+    local updateInterval = 0.5 -- Update display value every 500ms
     
-    GetFPS = function()
+    GetFPS = function() return cachedFPS end
+    
+    -- Hidden internal update loop
+    TrackConnection(RunService.RenderStepped:Connect(function()
         frameCount = frameCount + 1
         local now = os.clock()
         local elapsed = now - lastTime
         
         if elapsed >= updateInterval then
-            cachedFPS = frameCount / elapsed
+            cachedFPS = math.floor(frameCount / elapsed)
             frameCount = 0
             lastTime = now
         end
-        
-        return cachedFPS
-    end
+    end))
 end
 
 -- Rejoin current server
@@ -3586,62 +3588,123 @@ end
 
 local PerformanceLabel
 local PerfMinimized = false
-local PerfOriginalSize = UDim2.fromOffset(180, 95)
+local PerfOriginalSize = UDim2.fromOffset(180, 115)
+
+local PerformanceRows = {}
 
 local function CreatePerformanceDisplay(parent)
-    PerformanceLabel = Instance.new("TextLabel")
+    PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
     PerformanceLabel.Position = UDim2.new(1, -190, 0, 10)
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    PerformanceLabel.BackgroundTransparency = 0.3
-    PerformanceLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-    PerformanceLabel.Font = Enum.Font.Code
-    PerformanceLabel.TextSize = 10
-    PerformanceLabel.TextXAlignment = Enum.TextXAlignment.Left
-    PerformanceLabel.Text = "Loading..." -- Initial text
+    PerformanceLabel.BackgroundTransparency = 0.8
     PerformanceLabel.BorderSizePixel = 0
     PerformanceLabel.Parent = parent
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
+    corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = PerformanceLabel
 
-    local padding = Instance.new("UIPadding")
-    padding.PaddingLeft = UDim.new(0, 8)
-    padding.PaddingTop = UDim.new(0, 4)
-    padding.Parent = PerformanceLabel
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = UI_THEME.Accent
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = PerformanceLabel
+
+    -- Header Title
+    local headerTitle = Instance.new("TextLabel")
+    headerTitle.Name = "HeaderTitle"
+    headerTitle.Size = UDim2.new(1, -30, 0, 24)
+    headerTitle.Position = UDim2.fromOffset(8, 2)
+    headerTitle.BackgroundTransparency = 1
+    headerTitle.Text = "Performance"
+    headerTitle.Font = Enum.Font.GothamBold
+    headerTitle.TextSize = 12
+    headerTitle.TextColor3 = UI_THEME.Accent
+    headerTitle.TextXAlignment = Enum.TextXAlignment.Left
+    headerTitle.Parent = PerformanceLabel
+
+    local container = Instance.new("Frame")
+    container.Name = "Container"
+    container.Size = UDim2.new(1, -16, 1, -36)
+    container.Position = UDim2.fromOffset(8, 28)
+    container.BackgroundTransparency = 1
+    container.Parent = PerformanceLabel
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 2)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = container
+
+    local function CreateRow(name, initialValue)
+        local row = Instance.new("Frame")
+        row.Name = name .. "Row"
+        row.Size = UDim2.new(1, 0, 0, 14)
+        row.BackgroundTransparency = 1
+        row.Parent = container
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.4, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = name .. ":"
+        label.Font = Enum.Font.GothamMedium
+        label.TextSize = 11
+        label.TextColor3 = Color3.fromRGB(200, 200, 200)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = row
+
+        local value = Instance.new("TextLabel")
+        value.Size = UDim2.new(0.6, 0, 1, 0)
+        value.Position = UDim2.new(0.4, 0, 0, 0)
+        value.BackgroundTransparency = 1
+        value.Text = initialValue
+        value.Font = Enum.Font.GothamBold
+        value.TextSize = 11
+        value.TextColor3 = Color3.fromRGB(255, 255, 255)
+        value.TextXAlignment = Enum.TextXAlignment.Right
+        value.Parent = row
+
+        PerformanceRows[name] = value
+    end
+
+    CreateRow("FPS", "0")
+    CreateRow("Ping", "0 ms")
+    CreateRow("Memory", "0 MB")
+    CreateRow("Players", "0")
+    CreateRow("Aimbot", "OFF")
 
     -- Minimize Button
     local minimizeBtn = Instance.new("TextButton")
     minimizeBtn.Name = "Minimize"
     minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     minimizeBtn.BackgroundTransparency = 0.5
-    minimizeBtn.Size = UDim2.fromOffset(16, 16)
-    minimizeBtn.Position = UDim2.new(1, -20, 0, 4)
-    minimizeBtn.Text = "-"
+    minimizeBtn.Size = UDim2.fromOffset(18, 18)
+    minimizeBtn.Position = UDim2.new(1, -22, 0, 4)
+    minimizeBtn.Text = "−"
     minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 12
+    minimizeBtn.TextSize = 14
     minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.ZIndex = 10
     minimizeBtn.Parent = PerformanceLabel
 
     local mCorner = Instance.new("UICorner")
     mCorner.CornerRadius = UDim.new(0, 4)
     mCorner.Parent = minimizeBtn
 
-    -- MEMORY LEAK FIX: Track minimize button connection
     TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         PerfMinimized = not PerfMinimized
         if PerfMinimized then
-            PerformanceLabel.Size = UDim2.fromOffset(180, 24)
-            PerformanceLabel.TextYAlignment = Enum.TextYAlignment.Center
-            PerformanceLabel.Text = "Performance Stats"
+            PerformanceLabel.Size = UDim2.fromOffset(180, 28)
+            container.Visible = false
+            headerTitle.Text = "Performance Stats"
             minimizeBtn.Text = "+"
         else
             PerformanceLabel.Size = PerfOriginalSize
-            PerformanceLabel.TextYAlignment = Enum.TextYAlignment.Top
-            minimizeBtn.Text = "-"
+            container.Visible = true
+            headerTitle.Text = "Performance"
+            minimizeBtn.Text = "−"
         end
     end))
 
@@ -3651,7 +3714,7 @@ local function CreatePerformanceDisplay(parent)
 end
 
 local function UpdatePerformanceDisplay()
-    if not Flags["Performance/Enabled"] or not PerformanceLabel then return end
+    if not Flags["Performance/Enabled"] or not PerformanceLabel or PerfMinimized then return end
 
     -- Only update if visible (performance optimization)
     if not PerformanceLabel.Visible then return end
@@ -3659,36 +3722,45 @@ local function UpdatePerformanceDisplay()
     local fps = floor(GetFPS())
     local ping = floor(Ping:GetValue())
     local playerCount = #GetPlayersCache()
-
-    -- Get memory usage (MB)
     local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
-
-    -- PERFORMANCE FIX: Use playerCount - 1 instead of iterating ESPObjects
-    -- This is a good approximation since ESP is created for all non-local players
     local activeTargets = max(0, playerCount - 1)
 
-    -- Aimbot lock status
-    local aimbotStatus = "─"
-    if Aimbot or Flags["Aimbot/AlwaysEnabled"] then
-        aimbotStatus = "🔒" -- Locked indicator
-    end
-
     -- FPS color coding
-    local fpsColor
-    if fps >= 60 then
-        fpsColor = Color3.fromRGB(50, 255, 50) -- Green
-    elseif fps >= 30 then
-        fpsColor = Color3.fromRGB(255, 200, 50) -- Yellow
-    else
+    local fpsColor = Color3.fromRGB(50, 255, 50) -- Green
+    if fps < 30 then
         fpsColor = Color3.fromRGB(255, 50, 50) -- Red
+    elseif fps < 60 then
+        fpsColor = Color3.fromRGB(255, 200, 50) -- Yellow
     end
 
-    PerformanceLabel.TextColor3 = fpsColor
+    -- Ping color coding
+    local pingColor = Color3.fromRGB(50, 255, 50) -- Green
+    if ping > 200 then
+        pingColor = Color3.fromRGB(255, 50, 50) -- Red
+    elseif ping > 100 then
+        pingColor = Color3.fromRGB(255, 200, 50) -- Yellow
+    end
 
-    PerformanceLabel.Text = string.format(
-        "FPS: %d\nPing: %d ms\nPlayers: %d\nTargets: %d\nMemory: %d MB\nAimbot: %s",
-        fps, ping, playerCount, activeTargets, memoryUsed, aimbotStatus
-    )
+    -- Update Rows
+    if PerformanceRows.FPS then
+        PerformanceRows.FPS.Text = tostring(fps)
+        PerformanceRows.FPS.TextColor3 = fpsColor
+    end
+    if PerformanceRows.Ping then
+        PerformanceRows.Ping.Text = ping .. " ms"
+        PerformanceRows.Ping.TextColor3 = pingColor
+    end
+    if PerformanceRows.Memory then
+        PerformanceRows.Memory.Text = memoryUsed .. " MB"
+    end
+    if PerformanceRows.Players then
+        PerformanceRows.Players.Text = tostring(playerCount)
+    end
+    if PerformanceRows.Aimbot then
+        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot)
+        PerformanceRows.Aimbot.Text = aimbotActive and "LOCKED 🔒" or "IDLE ─"
+        PerformanceRows.Aimbot.TextColor3 = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
+    end
 end
 
 ------------------------------------------------------------------------
