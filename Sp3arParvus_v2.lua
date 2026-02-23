@@ -64,6 +64,30 @@ print("[Sp3arParvus] PlayerScripts ready!")
 task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
+-- RESPAWN HANDLING
+local LocalCharReady = true
+local function OnLocalCharacterAdded(newChar)
+    LocalCharReady = false
+    -- Invalidate caches
+    _G.CharCache = {} 
+    
+    -- Pause specifically for camera/PlayerModule setup
+    task.wait(1.5) 
+    
+    -- Wait for root part
+    local root = nil
+    local attempts = 0
+    repeat
+        task.wait(0.2)
+        root = newChar:FindFirstChild("HumanoidRootPart") or newChar.PrimaryPart
+        attempts = attempts + 1
+    until root or attempts > 15
+    
+    LocalCharReady = true
+    print("[Sp3arParvus] Local character re-cached and ready.")
+end
+LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded)
+
 -- Prevent duplicate
 local globalEnv = getgenv and getgenv() or _G
 if rawget(globalEnv, "Sp3arParvusV2") then
@@ -4731,7 +4755,7 @@ end
 
 -- Aimbot & Silent Aim update loop (OPTIMIZED - uses cached target)
 local function UpdateAimAndSilent()
-    if not Sp3arParvus.Active then return end
+    if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
     -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
@@ -4833,7 +4857,7 @@ local hoverUpdateRate = 0.033 -- Hover at 30fps
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
 local function UnifiedHeartbeat(dt)
-    if not Sp3arParvus.Active then return end
+    if not Sp3arParvus.Active or not LocalCharReady then return end
     
     UpdateFullbright()
     
