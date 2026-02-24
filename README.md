@@ -55,10 +55,10 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvu
 ## Community & Contributing
 
 Any contributions are welcome! If you have ideas for new features or have found any bugs, please check out our:
-- [Contributing Guidelines](CONTRIBUTING.md)
-- [Issue Templates](.github/ISSUE_TEMPLATE/)
+- [Contributing Guidelines](.github\CONTRIBUTING.md)
+- [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md)
+- [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md)
 - [Licensed under MIT](LICENSE)
-
 
 
 ## Disclaimer
