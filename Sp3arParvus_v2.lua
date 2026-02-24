@@ -203,6 +203,7 @@ end
 
 -- Aimbot state variables
 local Aimbot, SilentAim, Trigger = false, nil, false
+local LastAimbotTarget = nil
 local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
 
 -- Shared Target Cache (Defined here for scope visibility)
@@ -1711,8 +1712,22 @@ local function GetClosest(Enabled,
     if not Enabled then return nil end
     
     local CameraPosition = Camera.CFrame.Position
-    local MouseLocation = UserInputService:GetMouseLocation()
-    local mouseX, mouseY = MouseLocation.X, MouseLocation.Y
+
+    -- Determine mouse/crosshair location based on mouse behavior
+    local mouseX, mouseY
+    local mouseBehavior = UserInputService.MouseBehavior
+    local useViewport = false
+
+    if mouseBehavior == Enum.MouseBehavior.LockCenter then
+        local viewportSize = Camera.ViewportSize
+        mouseX = viewportSize.X / 2
+        mouseY = viewportSize.Y / 2
+        useViewport = true
+    else
+        local MouseLocation = UserInputService:GetMouseLocation()
+        mouseX = MouseLocation.X
+        mouseY = MouseLocation.Y
+    end
     
     -- Reset candidate list
     CandidateCount = 0
@@ -1731,7 +1746,7 @@ local function GetClosest(Enabled,
         if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
         
         -- Optimization: Start with just RootPart for screen check before iterating all body parts
-        local _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        local _, rootOnScreen = (useViewport and Camera:WorldToViewportPoint(RootPart.Position) or Camera:WorldToScreenPoint(RootPart.Position))
         if not rootOnScreen then continue end
 
         -- Gather valid body parts
@@ -1749,7 +1764,7 @@ local function GetClosest(Enabled,
                             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
                      end
 
-                     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                     local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
                      if OnScreen then
                          local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                          local dx, dy = screenX - mouseX, screenY - mouseY
@@ -1802,7 +1817,7 @@ local function GetClosest(Enabled,
                        BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
                 end
 
-                 local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                 local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
                  if OnScreen then
                      local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                      local dx, dy = screenX - mouseX, screenY - mouseY
@@ -1901,16 +1916,10 @@ local function AimAt(Hitbox, Sensitivity)
             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
     end
     
-    -- Calculate FRESH screen position from current camera
-    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-    
-    -- Safety check - don't aim at targets behind camera
-    -- WorldToViewportPoint returns Z < 0 for points behind camera
-    if not OnScreen or ScreenPosition.Z < 0 then return end
-    
     -- Determine mouse/crosshair location based on mouse behavior
     local mouseX, mouseY
     local mouseBehavior = UserInputService.MouseBehavior
+    local useViewport = false
     
     -- In LockCenter mode (shift-lock/first-person), use viewport center directly
     -- This avoids stale GetMouseLocation() during mode transitions
@@ -1919,15 +1928,33 @@ local function AimAt(Hitbox, Sensitivity)
         -- MEMORY FIX: Use raw numbers instead of Vector2.new
         mouseX = viewportSize.X / 2
         mouseY = viewportSize.Y / 2
+        useViewport = true
     else
         local MouseLocation = UserInputService:GetMouseLocation()
         mouseX = MouseLocation.X
         mouseY = MouseLocation.Y
     end
+
+    -- Calculate FRESH screen position from current camera
+    local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
+
+    -- Safety check - don't aim at targets behind camera
+    -- WorldToViewportPoint/WorldToScreenPoint returns Z < 0 for points behind camera
+    if not OnScreen or ScreenPosition.Z < 0 then return end
     
     -- Calculate delta movement
-    local deltaX = (ScreenPosition.X - mouseX) * Sensitivity
-    local deltaY = (ScreenPosition.Y - mouseY) * Sensitivity
+    local diffX = ScreenPosition.X - mouseX
+    local diffY = ScreenPosition.Y - mouseY
+
+    -- MAGNITUDE CLAMPING: Discard if distance to target exceeds FOV radius
+    -- This prevents the "bounce" or massive jerks if coordinate mismatch occurs
+    local fov = Flags["Aimbot/FOV/Radius"]
+    if (diffX*diffX + diffY*diffY) > (fov*fov) then
+        return
+    end
+
+    local deltaX = diffX * Sensitivity
+    local deltaY = diffY * Sensitivity
     
     -- NaN Safety Check: If delta is invalid, abort immediately
     if deltaX ~= deltaX or deltaY ~= deltaY then
@@ -4385,6 +4412,7 @@ local function Cleanup()
     Aimbot = false
     Trigger = false
     CachedTarget = nil
+    LastAimbotTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
     ClosestPlayerTrackerLabel = nil
@@ -4764,6 +4792,7 @@ local function UpdateAimAndSilent()
     
     if not aimbotActive and not silentActive then
         SilentAim = nil
+        LastAimbotTarget = nil -- Reset target tracking
         return
     end
 
@@ -4775,7 +4804,16 @@ local function UpdateAimAndSilent()
 
     -- Aimbot uses cached target
     if aimbotActive and target then
+        -- FIRST-FRAME VALIDATION
+        -- Skip the first frame of acquisition for a new target to "prime" variables and prevent jerks
+        if target[1] ~= LastAimbotTarget then
+            LastAimbotTarget = target[1]
+            return
+        end
+
         AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+    else
+        LastAimbotTarget = nil -- Reset tracking when no target is found
     end
 end
 
