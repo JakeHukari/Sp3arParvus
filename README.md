@@ -1,8 +1,8 @@
 # <p align="center">Sp3arParvus</p>
 
 <p align="center">
-  <strong>Universal Expansion Script for Roblox games</strong><br>
-  <em>Performance-optimized Lua scripts and advanced developer tools.</em>
+  <strong>Universal Expansion Script for Roblox games.</strong><br>
+  <em>Performance-optimized client-sided combat and developer tools.</em>
 </p>
 
 <p align="center">
@@ -11,7 +11,6 @@
   <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=00c8ff" alt="License">
 </p>
 
----
 
 ## Overview
 
