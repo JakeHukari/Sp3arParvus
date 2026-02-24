@@ -69,5 +69,5 @@ Any contributions are welcome! If you have ideas for new features or have found 
 
 <p align="center">
   Made by <a href="https://github.com/JakeHukari">Jake Hukari</a><br>
-  Special thanks to <a href="https://github.com/AlexR32">@AlexR32</a> (Parvus Hub)
+  Special thanks to <a href="https://github.com/AlexR32">@AlexR32</a> (creator of Parvus)
 </p>
