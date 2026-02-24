@@ -43,18 +43,18 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvu
 *   **Player ESP**: Full hitbox, nametag, distance tracking, team tracking, and tracer support.
 *   **Offscreen Indicators**: Never get snuck again.
 *   **Fullbright**: Complete control over workspace lighting and sky hues.
-*   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Track any item, folder, or group of items in the games workspace (`Ctrl + E`).
+*   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace (`Ctrl + E`).
 
 ### Developer Utilities
 *   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls (`Ctrl + Left Click` to break, `Ctrl + Z` to undo).
 *   **Waypoint System**: Create and manage custom map markers (`Ctrl + Middle Mouse Button`).
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting (`Ctrl + P`).
-*   **Performance Monitor**: Real-time FPS and resource usage monitoring.
+*   **Performance Monitor**: Real-time FPS, ping, and resource usage monitoring.
 
 
 ## Community & Contributing
 
-We welcome contributions! If you have ideas for new features or have found a bug, please check out our:
+Any contributions are welcome! If you have ideas for new features or have found any bugs, please check out our:
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Issue Templates](.github/ISSUE_TEMPLATE/)
 - [Licensed under MIT](LICENSE)
