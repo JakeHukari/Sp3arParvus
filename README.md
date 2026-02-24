@@ -15,7 +15,7 @@
 
 ## Overview
 
-Sp3arParvus is a powerful, universal in-game menu designed to enhance your experience with advanced player tracking, combat prediction, and utility tools. Whether you're debugging your own games or exploring others, Sp3arParvus provides a professional-grade interface with minimal performance impact.
+Sp3arParvus is a lua client designed to enhance your in-game senses with universal player tracking, bullet prediction, and various utility tools. Sp3arParvus provides an easy to use interface with minimal performance impact.
 
 ### UI Demo
 
