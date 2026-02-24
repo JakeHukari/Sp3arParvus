@@ -52,7 +52,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvu
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting (`Ctrl + P`).
 *   **Performance Monitor**: Real-time FPS and resource usage monitoring.
 
----
 
 ## Community & Contributing
 
@@ -61,9 +60,9 @@ We welcome contributions! If you have ideas for new features or have found a bug
 - [Issue Templates](.github/ISSUE_TEMPLATE/)
 - [Licensed under MIT](LICENSE)
 
----
 
-## 📜 Disclaimer
+
+## Disclaimer
 
 **For educational and development purposes only.** Sp3arParvus is intended for game developers and researchers to understand Lua environment interactions.
 
