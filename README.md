@@ -25,7 +25,7 @@ Sp3arParvus is a lua client designed to enhance your in-game senses with univers
 </p>
 
 
-## Quick Start
+## Loadstring
 
 Execute the loadstring below:
 
