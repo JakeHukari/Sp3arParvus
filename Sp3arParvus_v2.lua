@@ -1746,7 +1746,13 @@ local function GetClosest(Enabled,
         if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
         
         -- Optimization: Start with just RootPart for screen check before iterating all body parts
-        local _, rootOnScreen = (useViewport and Camera:WorldToViewportPoint(RootPart.Position) or Camera:WorldToScreenPoint(RootPart.Position))
+        local _, rootOnScreen
+        if useViewport then
+            _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        else
+            _, rootOnScreen = Camera:WorldToScreenPoint(RootPart.Position)
+        end
+
         if not rootOnScreen then continue end
 
         -- Gather valid body parts
@@ -1764,7 +1770,13 @@ local function GetClosest(Enabled,
                             BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
                      end
 
-                     local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
+                     local ScreenPosition, OnScreen
+                     if useViewport then
+                         ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                     else
+                         ScreenPosition, OnScreen = Camera:WorldToScreenPoint(BodyPartPosition)
+                     end
+
                      if OnScreen then
                          local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                          local dx, dy = screenX - mouseX, screenY - mouseY
@@ -1817,7 +1829,13 @@ local function GetClosest(Enabled,
                        BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
                 end
 
-                 local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
+                 local ScreenPosition, OnScreen
+                 if useViewport then
+                     ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                 else
+                     ScreenPosition, OnScreen = Camera:WorldToScreenPoint(BodyPartPosition)
+                 end
+
                  if OnScreen then
                      local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                      local dx, dy = screenX - mouseX, screenY - mouseY
@@ -1936,7 +1954,12 @@ local function AimAt(Hitbox, Sensitivity)
     end
 
     -- Calculate FRESH screen position from current camera
-    local ScreenPosition, OnScreen = (useViewport and Camera:WorldToViewportPoint(BodyPartPosition) or Camera:WorldToScreenPoint(BodyPartPosition))
+    local ScreenPosition, OnScreen
+    if useViewport then
+        ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+    else
+        ScreenPosition, OnScreen = Camera:WorldToScreenPoint(BodyPartPosition)
+    end
 
     -- Safety check - don't aim at targets behind camera
     -- WorldToViewportPoint/WorldToScreenPoint returns Z < 0 for points behind camera
