@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Universal Expansion Script for Roblox games.</strong><br>
-  <em>Performance-optimized client-sided combat and developer tools.</em>
+  <em>Performance-optimized client-sided tools for combat & development.</em>
 </p>
 
 <p align="center">
