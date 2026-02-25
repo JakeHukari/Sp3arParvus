@@ -247,7 +247,6 @@ local Flags = {
     ["ESP/Enabled"] = true,
     ["ESP/Nametags"] = true,
     ["ESP/Tracers"] = false,
-    ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
     ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
     ["ESP/PlayerOutlines"] = true, -- Player body part outlines (off by default for performance)
 
@@ -1521,9 +1520,7 @@ local function ValidateESPObjects()
             pcall(function()
                 if espData.Nametag then espData.Nametag:Destroy() end
                 if espData.Tracer then espData.Tracer:Destroy() end
-                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                    espData.OffscreenIndicator.Frame:Destroy()
-                end
+                if espData.StickyNametag then espData.StickyNametag:Destroy() end
                 if espData.Connections then
                     for _, conn in pairs(espData.Connections) do
                         if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
@@ -2050,11 +2047,9 @@ local TRACER_COLOR = Color3.fromRGB(0, 255, 255)    -- Cyan
 local OUTLINE_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (same as closest player indicator)
 
 -- Off-screen indicator settings
-local OFFSCREEN_EDGE_PADDING = 50  -- Pixels from screen edge
-local OFFSCREEN_ARROW_SIZE = 20    -- Size of the direction arrow
+local OFFSCREEN_EDGE_PADDING = 40  -- Pixels from screen edge
 -- PERFORMANCE: Max highlights to use (Roblox hard limit is 31, shared with other scripts)
 local MAX_OUTLINE_HIGHLIGHTS = 15 
-local OFFSCREEN_INDICATOR_COLOR = Color3.fromRGB(255, 200, 50) -- Yellow/gold for visibility
 
 -- Distance-based color zones (for tracker, but closest overrides to pink)
 local COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-2000 studs)
@@ -2130,23 +2125,23 @@ local function UpdateCameraCache()
 end
 
 -- Calculate screen edge position for off-screen indicator
--- Returns the position clamped to screen edges and the angle toward the target
+-- Returns the position clamped to screen edges
 -- PERFORMANCE: Uses cached camera data to avoid redundant property access
 local function GetEdgePosition(worldPosition)
     -- Update camera cache (shared across all players per frame)
-    if not UpdateCameraCache() then return nil, nil, nil, false end
+    if not UpdateCameraCache() then return nil, nil, true end
     
     local viewportSize = cachedCameraData.viewportSize
     
     -- Still need to call WorldToViewportPoint per-player (can't cache this)
     if not Camera then Camera = Workspace.CurrentCamera end
-    if not Camera then return nil, nil, nil, false end
+    if not Camera then return nil, nil, true end
     local screenPos, onScreen = Camera:WorldToViewportPoint(worldPosition)
     
     -- If on screen, return nil (use normal nametag)
     if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
        and screenPos.Y > OFFSCREEN_EDGE_PADDING and screenPos.Y < viewportSize.Y - OFFSCREEN_EDGE_PADDING then
-        return nil, nil, nil, true
+        return nil, nil, true
     end
     
     -- Calculate center of screen
@@ -2173,9 +2168,6 @@ local function GetEdgePosition(worldPosition)
         upDot = -upDot
     end
     
-    -- Calculate angle for arrow rotation
-    local angle = atan2(rightDot, -upDot)
-    
     -- Normalize to get direction on screen
     local screenDirX = rightDot
     local screenDirY = -upDot
@@ -2190,8 +2182,8 @@ local function GetEdgePosition(worldPosition)
     
     -- Calculate edge intersection using constrained approach
     local edgeX, edgeY
-    local maxX = viewportSize.X - OFFSCREEN_EDGE_PADDING - 100 -- Extra space for label
-    local maxY = viewportSize.Y - OFFSCREEN_EDGE_PADDING - 40
+    local maxX = viewportSize.X - OFFSCREEN_EDGE_PADDING
+    local maxY = viewportSize.Y - OFFSCREEN_EDGE_PADDING
     local minX = OFFSCREEN_EDGE_PADDING
     local minY = OFFSCREEN_EDGE_PADDING
     
@@ -2220,82 +2212,7 @@ local function GetEdgePosition(worldPosition)
     edgeY = max(minY, min(maxY, edgeY))
     
     -- MEMORY FIX: Return raw numbers instead of Vector2.new() to avoid allocations
-    return edgeX, edgeY, angle, false
-end
-
--- Create off-screen indicator UI element
-local function CreateOffscreenIndicator()
-    local indicator = Instance.new("Frame")
-    indicator.Name = "OffscreenIndicator"
-    indicator.Size = UDim2.fromOffset(120, 50)
-    indicator.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    indicator.BackgroundTransparency = 0.3
-    indicator.BorderSizePixel = 0
-    indicator.Visible = false
-    indicator.ZIndex = 100
-    EnsureScreenGui()
-    indicator.Parent = ScreenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = indicator
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = OFFSCREEN_INDICATOR_COLOR
-    stroke.Thickness = 2
-    stroke.Transparency = 0.3
-    stroke.Parent = indicator
-    
-    -- Arrow indicator (pointing toward player)
-    local arrow = Instance.new("ImageLabel")
-    arrow.Name = "Arrow"
-    arrow.Size = UDim2.fromOffset(OFFSCREEN_ARROW_SIZE, OFFSCREEN_ARROW_SIZE)
-    arrow.Position = UDim2.new(0, 5, 0.5, -OFFSCREEN_ARROW_SIZE/2)
-    arrow.BackgroundTransparency = 1
-    arrow.Image = "rbxassetid://6034818372" -- Arrow/chevron icon
-    arrow.ImageColor3 = OFFSCREEN_INDICATOR_COLOR
-    arrow.ImageTransparency = 0
-    arrow.ZIndex = 101
-    arrow.Parent = indicator
-    
-    -- Name label
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NameLabel"
-    nameLabel.Size = UDim2.new(1, -30, 0, 20)
-    nameLabel.Position = UDim2.fromOffset(28, 5)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextStrokeTransparency = 0
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 12
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLabel.ZIndex = 101
-    nameLabel.Text = ""
-    nameLabel.Parent = indicator
-    
-    -- Distance label
-    local distLabel = Instance.new("TextLabel")
-    distLabel.Name = "DistLabel"
-    distLabel.Size = UDim2.new(1, -30, 0, 18)
-    distLabel.Position = UDim2.fromOffset(28, 26)
-    distLabel.BackgroundTransparency = 1
-    distLabel.TextColor3 = OFFSCREEN_INDICATOR_COLOR
-    distLabel.TextStrokeTransparency = 0
-    distLabel.Font = Enum.Font.Gotham
-    distLabel.TextSize = 11
-    distLabel.TextXAlignment = Enum.TextXAlignment.Left
-    distLabel.ZIndex = 101
-    distLabel.Text = ""
-    distLabel.Parent = indicator
-    
-    return {
-        Frame = indicator,
-        Arrow = arrow,
-        NameLabel = nameLabel,
-        DistLabel = distLabel,
-        Stroke = stroke
-    }
+    return edgeX, edgeY, false
 end
 
 -- Create Closest Player Tracker display
@@ -3009,6 +2926,66 @@ local function CreateESP(player)
     espData.UsernameLabel = usernameLabel
     espData.DistanceLabel = distanceLabel
 
+    -- Sticky nametag for off-screen top 5
+    local stickyFrame = Instance.new("Frame")
+    stickyFrame.Name = "StickyNametag"
+    stickyFrame.Size = UDim2.fromOffset(200, 60)
+    stickyFrame.BackgroundTransparency = 1
+    stickyFrame.Visible = false
+    EnsureScreenGui()
+    stickyFrame.Parent = ScreenGui
+
+    local stickyContainer = Instance.new("Frame")
+    stickyContainer.Name = "Container"
+    stickyContainer.Size = UDim2.new(1, 0, 1, 0)
+    stickyContainer.BackgroundTransparency = 1
+    stickyContainer.Parent = stickyFrame
+
+    local stickyLayout = Instance.new("UIListLayout")
+    stickyLayout.FillDirection = Enum.FillDirection.Vertical
+    stickyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    stickyLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    stickyLayout.Padding = UDim.new(0, 0)
+    stickyLayout.Parent = stickyContainer
+
+    local stickyNickname = Instance.new("TextLabel")
+    stickyNickname.Name = "NicknameLabel"
+    stickyNickname.Size = UDim2.new(1, 0, 0, 18)
+    stickyNickname.BackgroundTransparency = 1
+    stickyNickname.TextColor3 = NORMAL_COLOR
+    stickyNickname.TextStrokeTransparency = 0
+    stickyNickname.Font = Enum.Font.GothamBold
+    stickyNickname.TextSize = 14
+    stickyNickname.LayoutOrder = 1
+    stickyNickname.Parent = stickyContainer
+
+    local stickyUsername = Instance.new("TextLabel")
+    stickyUsername.Name = "UsernameLabel"
+    stickyUsername.Size = UDim2.new(1, 0, 0, 18)
+    stickyUsername.BackgroundTransparency = 1
+    stickyUsername.TextColor3 = NORMAL_COLOR
+    stickyUsername.TextStrokeTransparency = 0
+    stickyUsername.Font = Enum.Font.GothamBold
+    stickyUsername.TextSize = 14
+    stickyUsername.LayoutOrder = 2
+    stickyUsername.Parent = stickyContainer
+
+    local stickyDistance = Instance.new("TextLabel")
+    stickyDistance.Name = "DistanceLabel"
+    stickyDistance.Size = UDim2.new(1, 0, 0, 18)
+    stickyDistance.BackgroundTransparency = 1
+    stickyDistance.TextColor3 = NORMAL_COLOR
+    stickyDistance.TextStrokeTransparency = 0
+    stickyDistance.Font = Enum.Font.GothamBold
+    stickyDistance.TextSize = 14
+    stickyDistance.LayoutOrder = 3
+    stickyDistance.Parent = stickyContainer
+
+    espData.StickyNametag = stickyFrame
+    espData.StickyNicknameLabel = stickyNickname
+    espData.StickyUsernameLabel = stickyUsername
+    espData.StickyDistanceLabel = stickyDistance
+
     -- Create tracer (Frame based for AlwaysOnTop)
     -- Using a Frame instead of Drawing ensures it renders through walls
     local tracer = Instance.new("Frame")
@@ -3022,9 +2999,6 @@ local function CreateESP(player)
     
     espData.Tracer = tracer
 
-    -- Create off-screen indicator
-    espData.OffscreenIndicator = CreateOffscreenIndicator()
-    espData.lastOffscreenVisible = false
 
     ESPObjects[player] = espData
 end
@@ -3323,7 +3297,7 @@ local function RemovePlayerOutlines(player)
 end
 
 -- Update ESP for a player (optimized - uses cached closest player)
-local function UpdateESP(player, isClosest)
+local function UpdateESP(player, isClosest, isTop5)
     if not Flags["ESP/Enabled"] then return end
 
     local espData = ESPObjects[player]
@@ -3347,12 +3321,8 @@ local function UpdateESP(player, isClosest)
              local savedConnections = espData.Connections
              
              if nametag then pcall(function() nametag:Destroy() end) end
-             if espData.Tracer then pcall(function() espData.Tracer:Destroy() end) end 
-             
-             -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
-             if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                 pcall(function() espData.OffscreenIndicator.Frame:Destroy() end)
-             end
+            if espData.Tracer then pcall(function() espData.Tracer:Destroy() end) end
+            if espData.StickyNametag then pcall(function() espData.StickyNametag:Destroy() end) end
              
              ESPObjects[player] = nil
              espData = nil
@@ -3372,8 +3342,8 @@ local function UpdateESP(player, isClosest)
             if espData.Tracer and espData.Tracer.Parent ~= targetGui then
                 espData.Tracer.Parent = targetGui
             end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Parent ~= targetGui then
-                espData.OffscreenIndicator.Frame.Parent = targetGui
+            if espData.StickyNametag and espData.StickyNametag.Parent ~= targetGui then
+                espData.StickyNametag.Parent = targetGui
             end
         end
     end
@@ -3392,67 +3362,125 @@ local function UpdateESP(player, isClosest)
         -- Hide ESP elements
         if espData.Nametag then espData.Nametag.Enabled = false end
         if espData.Tracer then espData.Tracer.Visible = false end
-        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-            espData.OffscreenIndicator.Frame.Visible = false
-        end
+        if espData.StickyNametag then espData.StickyNametag.Visible = false end
         return
     end
 
     -- Calculate distance
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
-    -- Distance culling REMOVED: All nametags visible at any distance
-
     -- Update nametag
-    if Flags["ESP/Nametags"] and espData.Nametag then
-        local nametag = espData.Nametag
-        -- Ensure nametag is attached and enabled
-        if nametag.Adornee ~= rootPart then
-            nametag.Adornee = rootPart
-        end
-        if not nametag.Enabled then
-            nametag.Enabled = true
-        end
+    if Flags["ESP/Nametags"] then
+        local edgeX, edgeY, isOnScreen = GetEdgePosition(rootPart.Position)
 
-        -- Get team color for name labels
-        local teamColor = GetTeamColor(player)
+        -- Top 5 players get sticky ESP when off-screen
+        if isTop5 and not isOnScreen and edgeX then
+            -- Show Sticky Nametag
+            if espData.Nametag and espData.Nametag.Enabled then
+                espData.Nametag.Enabled = false
+            end
+
+            local sticky = espData.StickyNametag
+            if sticky then
+                if not sticky.Visible then
+                    sticky.Visible = true
+                end
+
+                -- Position sticky nametag (centered on edge point)
+                local newX = floor(edgeX - 100)
+                local newY = floor(edgeY - 30)
+
+                -- Only update pos if moved > 2px for perf
+                local lastX = espData.lastStickyX or 0
+                local lastY = espData.lastStickyY or 0
+                if abs(newX - lastX) > 2 or abs(newY - lastY) > 2 then
+                    sticky.Position = UDim2.fromOffset(newX, newY)
+                    espData.lastStickyX = newX
+                    espData.lastStickyY = newY
+                end
+
+                -- Update Labels
+                local nickname = player.DisplayName or player.Name
+                local username = "@" .. player.Name
+                local distRounded = floor(distance)
+                local teamColor = GetTeamColor(player)
+                local distanceColor = GetDistanceColor(distance, isClosest)
+
+                if espData.lastNickname ~= nickname then
+                    espData.StickyNicknameLabel.Text = nickname
+                end
+                if espData.lastUsername ~= username then
+                    espData.StickyUsernameLabel.Text = username
+                end
+                if espData.lastDistance ~= distRounded then
+                    espData.StickyDistanceLabel.Text = string.format("%d studs", distRounded)
+                end
+                if espData.lastTeamColor ~= teamColor then
+                    espData.StickyNicknameLabel.TextColor3 = teamColor
+                end
+                if espData.lastDistanceColor ~= distanceColor then
+                    espData.StickyUsernameLabel.TextColor3 = distanceColor
+                    espData.StickyDistanceLabel.TextColor3 = distanceColor
+                end
+            end
+        else
+            -- Show Standard Billboard Nametag
+            if espData.StickyNametag and espData.StickyNametag.Visible then
+                espData.StickyNametag.Visible = false
+            end
+
+            if espData.Nametag then
+                local nametag = espData.Nametag
+                if nametag.Adornee ~= rootPart then
+                    nametag.Adornee = rootPart
+                end
+                if not nametag.Enabled then
+                    nametag.Enabled = true
+                end
+
+                -- Update Labels
+                local nickname = player.DisplayName or player.Name
+                local username = "@" .. player.Name
+                local distRounded = floor(distance)
+                local teamColor = GetTeamColor(player)
+                local distanceColor = GetDistanceColor(distance, isClosest)
+
+                if espData.lastNickname ~= nickname then
+                    espData.NicknameLabel.Text = nickname
+                end
+                if espData.lastUsername ~= username then
+                    espData.UsernameLabel.Text = username
+                end
+                if abs(espData.lastDistance - distRounded) > 5 then
+                    espData.DistanceLabel.Text = string.format("%d studs", distRounded)
+                end
+                if espData.lastTeamColor ~= teamColor then
+                    espData.NicknameLabel.TextColor3 = teamColor
+                end
+                if espData.lastDistanceColor ~= distanceColor then
+                    espData.DistanceLabel.TextColor3 = distanceColor
+                    espData.UsernameLabel.TextColor3 = distanceColor
+                end
+            end
+        end
         
-        -- Get display name and username
+        -- Update cached values globally for both nametags
         local nickname = player.DisplayName or player.Name
         local username = "@" .. player.Name
         local distRounded = floor(distance)
-        
-        -- PERFORMANCE: Only update text/color if values changed
-        if espData.lastNickname ~= nickname then
-            espData.NicknameLabel.Text = nickname
-            espData.lastNickname = nickname
-        end
-        
-        if espData.lastUsername ~= username then
-            espData.UsernameLabel.Text = username
-            espData.lastUsername = username
-        end
-        
-        if espData.lastTeamColor ~= teamColor then
-            espData.NicknameLabel.TextColor3 = teamColor
-            -- Username color is now handled by distance logic
-            espData.lastTeamColor = teamColor
-        end
-
-        -- Update Distance
-        if math.abs(espData.lastDistance - distRounded) > 5 then
-            espData.DistanceLabel.Text = string.format("%d studs", distRounded)
-            espData.lastDistance = distRounded
-        end
-        
+        local teamColor = GetTeamColor(player)
         local distanceColor = GetDistanceColor(distance, isClosest)
-        if espData.lastDistanceColor ~= distanceColor then
-            espData.DistanceLabel.TextColor3 = distanceColor
-            espData.UsernameLabel.TextColor3 = distanceColor
-            espData.lastDistanceColor = distanceColor
-        end
-    elseif espData.Nametag then
-        if espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+        
+        espData.lastNickname = nickname
+        espData.lastUsername = username
+        espData.lastDistance = distRounded
+        espData.lastTeamColor = teamColor
+        espData.lastDistanceColor = distanceColor
+        
+    else
+        -- Nametags disabled
+        if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+        if espData.StickyNametag and espData.StickyNametag.Visible then espData.StickyNametag.Visible = false end
     end
 
     -- Update tracer (LOD: skip for distant players to save performance)
@@ -3502,76 +3530,6 @@ local function UpdateESP(player, isClosest)
         espData.Tracer.Visible = false
     end
 
-    -- Update off-screen indicator
-    if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
-        local indicator = espData.OffscreenIndicator
-        -- MEMORY FIX: GetEdgePosition now returns raw numbers instead of Vector2
-        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(rootPart.Position)
-        
-        if isOnScreen then
-            if espData.lastOffscreenVisible then
-                indicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        elseif edgeX then
-            if not espData.lastOffscreenVisible then
-                indicator.Frame.Visible = true
-                espData.lastOffscreenVisible = true
-            end
-            
-            -- Only update pos if moved > 5px for perf
-            local newX = floor(edgeX - 60)
-            local newY = floor(edgeY - 25)
-            local lastX = espData.lastOffscreenX or 0
-            local lastY = espData.lastOffscreenY or 0
-            
-            if abs(newX - lastX) > 5 or abs(newY - lastY) > 5 then
-                indicator.Frame.Position = UDim2.fromOffset(newX, newY)
-                espData.lastOffscreenX = newX
-                espData.lastOffscreenY = newY
-            end
-            
-            if angle then
-                local newRotation = floor(deg(angle) - 90)
-                if espData.lastOffscreenAngle ~= newRotation then
-                    indicator.Arrow.Rotation = newRotation
-                    espData.lastOffscreenAngle = newRotation
-                end
-            end
-            
-            local nickname = espData.lastNickname or (player.DisplayName or player.Name)
-            if espData.lastOffscreenName ~= nickname then
-                indicator.NameLabel.Text = nickname
-                espData.lastOffscreenName = nickname
-            end
-            
-            local distRounded = floor(distance)
-            if abs((espData.lastOffscreenDist or 0) - distRounded) > 5 then
-                indicator.DistLabel.Text = distRounded .. " studs"
-                espData.lastOffscreenDist = distRounded
-            end
-            
-            local distanceColor = espData.lastDistanceColor or GetDistanceColor(distance, isClosest)
-            if espData.lastOffscreenColor ~= distanceColor then
-                indicator.DistLabel.TextColor3 = distanceColor
-                indicator.Stroke.Color = distanceColor
-                indicator.Arrow.ImageColor3 = distanceColor
-                espData.lastOffscreenColor = distanceColor
-            end
-            
-            if espData.Nametag and espData.Nametag.Enabled then
-                espData.Nametag.Enabled = false
-            end
-        else
-            if espData.lastOffscreenVisible then
-                indicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        end
-    elseif espData.OffscreenIndicator and espData.lastOffscreenVisible then
-        espData.OffscreenIndicator.Frame.Visible = false
-        espData.lastOffscreenVisible = false
-    end
     
     if Flags["ESP/PlayerOutlines"] then
         UpdatePlayerOutlines(player, character)
@@ -3596,9 +3554,8 @@ local function RemoveESP(player)
     if espData.Tracer then
         espData.Tracer:Destroy()
     end
-    -- Clean up off-screen indicator
-    if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-        espData.OffscreenIndicator.Frame:Destroy()
+    if espData.StickyNametag then
+        espData.StickyNametag:Destroy()
     end
 
     -- Clean up player-specific connections
@@ -4312,9 +4269,7 @@ local function Cleanup()
         pcall(function()
             if espData.Nametag then espData.Nametag:Destroy() end
             if espData.Tracer then espData.Tracer:Destroy() end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                espData.OffscreenIndicator.Frame:Destroy()
-            end
+            if espData.StickyNametag then espData.StickyNametag:Destroy() end
             -- MEMORY LEAK FIX: Disconnect player-specific connections
             if espData.Connections then
                 for _, conn in pairs(espData.Connections) do
@@ -4482,17 +4437,6 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
 end)
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
 UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", Flags["ESP/Tracers"])
-UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", Flags["ESP/OffscreenIndicators"], function(state)
-    -- When disabled, hide all existing off-screen indicators
-    if not state then
-        for _, espData in pairs(ESPObjects) do
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                espData.OffscreenIndicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        end
-    end
-end)
 UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", Flags["ESP/PlayerPanel"], function(state)
     -- Create panel if it doesn't exist yet
     if state and not PlayerPanelFrame then
@@ -4594,8 +4538,8 @@ local function SetupPlayerESP(player)
                     -- Ensure ScreenGui is valid
                     EnsureScreenGui()
                     
-                    -- Update immediately
-                    UpdateESP(player, player == NearestPlayerRef)
+                    -- Update immediately (default isTop5 to false until next sort)
+                    UpdateESP(player, player == NearestPlayerRef, false)
                 end
             end
         end)
@@ -4899,6 +4843,15 @@ local function UnifiedHeartbeat(dt)
             lastEspUpdate = now
         end
         
+        -- Get top 5 closest players for sticky ESP
+        local sortedPlayers = GetSortedPlayersByDistance()
+        local top5 = {}
+        for i = 1, 5 do
+            if sortedPlayers[i] then
+                top5[sortedPlayers[i].player] = true
+            end
+        end
+
         -- Update ESP for all players
         local players = GetPlayersCache()
         local myPos = Camera.CFrame.Position
@@ -4910,12 +4863,15 @@ local function UnifiedHeartbeat(dt)
                 local pChar, pRoot = GetCharacter(player)
                 local skip = false
                 
-                if not shouldUpdateEsp and player ~= forceUpdateTarget then
+                -- Top 5 players should always be updated if we're doing any ESP update
+                local isTop5 = top5[player]
+
+                if not shouldUpdateEsp and player ~= forceUpdateTarget and not isTop5 then
                     skip = true
                 end
                 
-                -- Extra throttling for distant players
-                if not skip and pRoot and player ~= forceUpdateTarget then
+                -- Extra throttling for distant players (don't throttle top 5)
+                if not skip and pRoot and player ~= forceUpdateTarget and not isTop5 then
                     local dist = (pRoot.Position - myPos).Magnitude
                     if dist > 1000 then
                         -- Update very distant players only every ~2 seconds (1 in 10 full updates)
@@ -4927,7 +4883,7 @@ local function UnifiedHeartbeat(dt)
                 end
 
                 if not skip then
-                   UpdateESP(player, player == NearestPlayerRef)
+                   UpdateESP(player, player == NearestPlayerRef, isTop5)
                 end
             end
         end
