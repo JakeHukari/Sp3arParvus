@@ -24,13 +24,17 @@ Sp3arParvus is a lua client designed to enhance your in-game senses with univers
 </p>
 
 
-## Loadstring
+## How to use
 
-Execute the loadstring below:
+Copy the loadstring below:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))()
 ```
+
+Paste the loadstring into an executor [e.g. [Solara](https://getsolara.dev/), Wave, Delta] or use any other method of executing scripts in your workspace
+
+Upon execution, the Sp3arParvus client will immediately begin enhancing the user.
 
 ## Features
 
