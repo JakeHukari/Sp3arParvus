@@ -9,12 +9,12 @@ Help us keep this project open and inclusive by being respectful and helpful to 
 ## How Can I Contribute?
 
 ### Reporting Bugs
-- Use the **Bug Report** template when opening an issue.
+- Use the [**Bug Report**](ISSUE_TEMPLATE\bug_report.md) template when opening an issue.
 - Describe the steps to reproduce the issue.
 - Mention which game you were playing and what executor you were using.
 
 ### Suggesting Enhancements
-- Use the **Feature Request** template.
+- Use the [**Feature Request**](ISSUE_TEMPLATE\feature_request.md) template.
 - Explain why the feature would be useful.
 
 ### Pull Requests
