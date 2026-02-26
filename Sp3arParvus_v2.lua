@@ -64,12 +64,15 @@ print("[Sp3arParvus] PlayerScripts ready!")
 task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
+-- CHARACTER CACHE
+local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst}
+
 -- RESPAWN HANDLING
 local LocalCharReady = true
 local function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
     -- Invalidate caches
-    _G.CharCache = {} 
+    table.clear(CharCache)
     
     -- Pause specifically for camera/PlayerModule setup
     task.wait(1.5) 
@@ -108,6 +111,8 @@ local Sp3arParvus = globalEnv.Sp3arParvusV2
 
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local StarterGui = game:GetService("StarterGui")
 local Lighting = game:GetService("Lighting")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
@@ -134,6 +139,28 @@ local Mouse = LocalPlayer:GetMouse()
 -- Math shortcuts
 local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+
+-- GC PERFORMANCE CACHES
+local COLOR_PERF_GOOD   = Color3.fromRGB(50,  255, 50)
+local COLOR_PERF_WARN   = Color3.fromRGB(255, 200, 50)
+local COLOR_PERF_BAD    = Color3.fromRGB(255, 50,  50)
+
+local function CandidateSortFn(a, b) return a.mag < b.mag end
+local function DistanceSortFn(a, b)  return a.distance < b.distance end
+
+local SilentAimModeSet = {}
+local function RebuildModeSet(flags)
+    table.clear(SilentAimModeSet)
+    local mode = flags["SilentAim/Mode"]
+    if mode then
+        for _, v in ipairs(mode) do SilentAimModeSet[v] = true end
+    end
+end
+
+local CachedFOVMax = 100
+local function UpdateCachedFOVMax(flags)
+    CachedFOVMax = max(flags["Aimbot/FOV/Radius"] or 0, flags["SilentAim/FOV/Radius"] or 0, flags["Trigger/FOV/Radius"] or 0)
+end
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEEN_INSTANT = TweenInfo.new(0.05)
@@ -245,6 +272,7 @@ local Flags = {
 
     -- ESP
     ["ESP/Enabled"] = true,
+    ["ESP/MaxDistance"] = 5000, -- Default to 5000 studs
     ["ESP/Nametags"] = true,
     ["ESP/Tracers"] = false,
     ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
@@ -269,6 +297,10 @@ local Flags = {
     -- Freecam
     ["Settings/Freecam Toggle"] = true
 }
+
+-- Initialize performance caches
+RebuildModeSet(Flags)
+UpdateCachedFOVMax(Flags)
 
 -- WAYPOINTS SYSTEM STATE
 local ActiveWaypoints = {}
@@ -454,18 +486,21 @@ local function sweepUndo(dt)
     if sweepAccum < 2 then return end
     sweepAccum = 0
     
-    local i = 1
-    while i <= #undoStack do
-        local entry = undoStack[i]
-        if not entry.part or not entry.part:IsDescendantOf(game) then
-            if entry and entry.part then
+    local writeIdx = 1
+    for readIdx = 1, #undoStack do
+        local entry = undoStack[readIdx]
+        if entry.part and entry.part:IsDescendantOf(game) then
+            undoStack[writeIdx] = entry
+            writeIdx = writeIdx + 1
+        else
+            if entry.part then
                 brokenSet[entry.part] = nil
                 brokenCacheDirty = true
             end
-            table.remove(undoStack, i)
-        else
-            i = i + 1
         end
+    end
+    for i = writeIdx, #undoStack do
+        undoStack[i] = nil
     end
 end
 
@@ -537,6 +572,17 @@ end
 
 -- WAYPOINTS SYSTEM LOGIC
 
+local function ClearWaypointConnections(wpData)
+    if wpData.UIConnections then
+        for _, conn in ipairs(wpData.UIConnections) do
+            if conn then conn:Disconnect() end
+        end
+        table.clear(wpData.UIConnections)
+    else
+        wpData.UIConnections = {}
+    end
+end
+
 local function RefreshWaypointUI()
     if not WaypointsUIList then return end
     
@@ -545,6 +591,11 @@ local function RefreshWaypointUI()
         if child:IsA("Frame") then child:Destroy() end
     end
     
+    -- Disconnect old waypoint UI connections before rebuilding
+    for _, wpData in pairs(ActiveWaypoints) do
+        ClearWaypointConnections(wpData)
+    end
+
     local keys = {}
     for id in pairs(ActiveWaypoints) do
         table.insert(keys, id)
@@ -573,7 +624,7 @@ local function RefreshWaypointUI()
         nameBox.TextXAlignment = Enum.TextXAlignment.Left
         nameBox.ClearTextOnFocus = false
         nameBox.Parent = row
-        TrackConnection(nameBox.FocusLost:Connect(function()
+        table.insert(wpData.UIConnections, nameBox.FocusLost:Connect(function()
             wpData.Name = nameBox.Text
             if wpData.Label then
                 wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
@@ -589,7 +640,7 @@ local function RefreshWaypointUI()
         colBtn.Parent = row
         local cC = Instance.new("UICorner", colBtn)
         cC.CornerRadius = UDim.new(0, 4)
-        TrackConnection(colBtn.MouseButton1Click:Connect(function()
+        table.insert(wpData.UIConnections, colBtn.MouseButton1Click:Connect(function()
             wpData.ColorIndex = (wpData.ColorIndex % #WaypointColors) + 1
             wpData.Color = WaypointColors[wpData.ColorIndex]
             colBtn.BackgroundColor3 = wpData.Color
@@ -615,7 +666,7 @@ local function RefreshWaypointUI()
         local dC = Instance.new("UICorner", delBtn)
         dC.CornerRadius = UDim.new(0, 4)
         
-        TrackConnection(delBtn.MouseButton1Click:Connect(function()
+        table.insert(wpData.UIConnections, delBtn.MouseButton1Click:Connect(function()
             if Sp3arParvus.DestroyWaypointFunc then Sp3arParvus.DestroyWaypointFunc(id) end
         end))
     end
@@ -630,6 +681,7 @@ end
 local function DestroyWaypoint(id)
     local wpData = ActiveWaypoints[id]
     if wpData then
+        ClearWaypointConnections(wpData)
         if wpData.Billboard then
             wpData.Billboard:Destroy()
         end
@@ -706,7 +758,8 @@ local function CreateWaypoint(position)
         PinBg = pinBg,
         Pin = pin,
         Label = label,
-        DistanceText = "0 studs"
+        DistanceText = "0 studs",
+        UIConnections = {}
     }
     
     RefreshWaypointUI()
@@ -1408,7 +1461,6 @@ local function InEnemyTeam(Enabled, Player)
 end
 
 -- Get character and check health (Heavily Optimized with Cache)
-local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst}
 
 local function GetCharacter(player)
     if not player then return nil end
@@ -1850,9 +1902,7 @@ local function GetClosest(Enabled,
             end
         end
 
-        table.sort(CandidateList, function(a, b)
-            return a.mag < b.mag
-        end)
+        table.sort(CandidateList, CandidateSortFn)
     end
     
     -- Iterate sorted candidates and perform Raycast on the closest ones
@@ -1964,14 +2014,13 @@ if hookmetamethod and checkcaller then
         if not Sp3arParvus.Active then return OldIndex(Self, Index) end
 
         if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-            local Mode = Flags["SilentAim/Mode"]
             if Self == Mouse then
-                if Index == "Target" and Mode and table.find(Mode, Index) then
+                if Index == "Target" and SilentAimModeSet[Index] then
                     -- Verify target validity
                     if SilentAim[3] and SilentAim[3].Parent then
                         return SilentAim[3]
                     end
-                elseif Index == "Hit" and table.find(Mode, Index) then
+                elseif Index == "Hit" and SilentAimModeSet[Index] then
                      if SilentAim[3] and SilentAim[3].Parent then
                         return SilentAim[3].CFrame
                      end
@@ -1996,7 +2045,6 @@ if hookmetamethod and checkcaller and getnamecallmethod then
 
         if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
             local Method = getnamecallmethod()
-            local Mode = Flags["SilentAim/Mode"]
             
             -- Validation check
             if not SilentAim[3] or not SilentAim[3].Parent then
@@ -2004,15 +2052,15 @@ if hookmetamethod and checkcaller and getnamecallmethod then
             end
 
             if Self == Workspace then
-                if Method == "Raycast" and Mode and table.find(Mode, Method) then
+                if Method == "Raycast" and SilentAimModeSet[Method] then
                     local args = {...}
                     if args[1] then
                         args[2] = SilentAim[3].Position - args[1]
                         return OldNamecall(Self, unpack(args))
                     end
-                elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
-                or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
-                or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
+                elseif (Method == "FindPartOnRayWithIgnoreList" and SilentAimModeSet[Method])
+                or (Method == "FindPartOnRayWithWhitelist" and SilentAimModeSet[Method])
+                or (Method == "FindPartOnRay" and SilentAimModeSet[Method]) then
                     local args = {...}
                     if args[1] then
                          -- Reconstruct ray safely
@@ -2021,11 +2069,11 @@ if hookmetamethod and checkcaller and getnamecallmethod then
                     end
                 end
             elseif Self == Camera then
-                if (Method == "ScreenPointToRay" and table.find(Mode, Method))
-                or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
+                if (Method == "ScreenPointToRay" and SilentAimModeSet[Method])
+                or (Method == "ViewportPointToRay" and SilentAimModeSet[Method]) then
                     return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
-                elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
-                or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
+                elseif (Method == "WorldToScreenPoint" and SilentAimModeSet[Method])
+                or (Method == "WorldToViewportPoint" and SilentAimModeSet[Method]) then
                     local args = {...}
                     args[1] = SilentAim[3].Position
                     return OldNamecall(Self, unpack(args))
@@ -2543,17 +2591,24 @@ local function GetDirectionToPlayer(targetPosition)
     local camLook = Camera.CFrame.LookVector
     local camRight = Camera.CFrame.RightVector
     
-    -- Calculate angle relative to camera
-    local forward2D = Vector2.new(camLook.X, camLook.Z).Unit
-    local right2D = Vector2.new(camRight.X, camRight.Z).Unit
-    local dir2D = Vector2.new(direction.X, direction.Z)
+    -- Calculate angle relative to camera (zero allocations)
+    local fX, fZ = camLook.X, camLook.Z
+    local rX, rZ = camRight.X, camRight.Z
+    local dX, dZ = direction.X, direction.Z
+
+    local dMag = sqrt(dX*dX + dZ*dZ)
+    if dMag < 0.01 then return 0 end
+    dX = dX / dMag; dZ = dZ / dMag
     
-    if dir2D.Magnitude < 0.01 then return 0 end
-    dir2D = dir2D.Unit
+    local fMag = sqrt(fX*fX + fZ*fZ)
+    if fMag > 0 then fX = fX/fMag; fZ = fZ/fMag end
+
+    local rMag = sqrt(rX*rX + rZ*rZ)
+    if rMag > 0 then rX = rX/rMag; rZ = rZ/rMag end
     
     -- Dot product gives us the angle components
-    local forwardDot = forward2D.X * dir2D.X + forward2D.Y * dir2D.Y
-    local rightDot = right2D.X * dir2D.X + right2D.Y * dir2D.Y
+    local forwardDot = fX * dX + fZ * dZ
+    local rightDot = rX * dX + rZ * dZ
     
     local angle = atan2(rightDot, forwardDot)
     return deg(angle)
@@ -2827,9 +2882,7 @@ local function GetSortedPlayersByDistance()
     -- Sort by distance (closest first)
     -- We only sort the active portion of the list
     if insertIdx > 1 then
-        table.sort(cachedPlayerListForSort, function(a, b)
-            return a.distance < b.distance
-        end)
+        table.sort(cachedPlayerListForSort, DistanceSortFn)
     end
     
     -- Build result (reusing cached result table)
@@ -3031,6 +3084,7 @@ end
 
 -- Create/Update player body part outlines (Highlight based for Wireframe + AlwaysOnTop)
 -- OPTIMIZED: Object Pooling to prevent churning
+local PoolFolder = Instance.new("Folder")
 local ObjectPool = {
     Highlights = {},
     Billboards = {}
@@ -3042,19 +3096,11 @@ local function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
     while #pool > 0 do
         local obj = table.remove(pool)
-        -- FIX: Validate object is still usable (not destroyed)
-        local isValid = false
-        pcall(function()
-            -- Try to access a property - destroyed objects throw errors
-            local _ = obj.Name
-            isValid = true
-        end)
-        
-        if isValid then
-            if obj.Parent then obj.Parent = nil end -- Safety
+        -- Lightweight validity check
+        if obj and obj.Parent == PoolFolder then
+            obj.Parent = nil
             return obj
         end
-        -- Object was destroyed, skip it and try next
     end
     return Instance.new(className)
 end
@@ -3062,16 +3108,13 @@ end
 local function ReturnPooledObject(obj)
     if not obj then return end
     
-    -- FIX: Validate object is still valid before pooling
-    local isValid = false
-    pcall(function()
+    -- FIX: Use a single pcall for property resets
+    local success = pcall(function()
         obj.Adornee = nil
-        obj.Parent = nil
-        isValid = true
+        obj.Parent = PoolFolder
     end)
     
-    if not isValid then
-        -- Object is already destroyed, nothing to do
+    if not success then
         return
     end
     
@@ -3163,13 +3206,7 @@ local function UpdatePlayerOutlines(player, character)
     else
         local highlight = storage.Highlight
         -- FIX: Validate highlight is still a valid object (not destroyed)
-        -- Check using pcall since destroyed objects throw errors on property access
-        local isValid = false
-        pcall(function()
-            -- Try to access a property - if object is destroyed this will error
-            local _ = highlight.Enabled
-            isValid = true
-        end)
+        local isValid = highlight and highlight.Parent ~= nil
         
         if not isValid then
              storage.Highlight = nil
@@ -3231,11 +3268,7 @@ local function UpdatePlayerOutlines(player, character)
             storage[dotType] = dot
         else
             -- FIX: Validate dot is still valid before reusing
-            local isValid = false
-            pcall(function()
-                local _ = dot.Enabled
-                isValid = true
-            end)
+            local isValid = dot and dot.Parent ~= nil
             
             if not isValid then
                 storage[dotType] = nil
@@ -3333,8 +3366,8 @@ local function UpdateESP(player, isClosest)
         -- Check if nametag is valid
         local nametag = espData.Nametag
         local isValid = false
-        if nametag then
-            isValid = pcall(function() return nametag.Parent and nametag.Name end)
+        if nametag and nametag.Parent then
+            isValid = true
             -- Verify critical children still exist
             if isValid and (not espData.NicknameLabel or not espData.NicknameLabel.Parent) then
                 isValid = false
@@ -3756,19 +3789,19 @@ local function UpdatePerformanceDisplay()
     local activeTargets = max(0, playerCount - 1)
 
     -- FPS color coding
-    local fpsColor = Color3.fromRGB(50, 255, 50) -- Green
+    local fpsColor = COLOR_PERF_GOOD
     if fps < 30 then
-        fpsColor = Color3.fromRGB(255, 50, 50) -- Red
+        fpsColor = COLOR_PERF_BAD
     elseif fps < 60 then
-        fpsColor = Color3.fromRGB(255, 200, 50) -- Yellow
+        fpsColor = COLOR_PERF_WARN
     end
 
     -- Ping color coding
-    local pingColor = Color3.fromRGB(50, 255, 50) -- Green
+    local pingColor = COLOR_PERF_GOOD
     if ping > 200 then
-        pingColor = Color3.fromRGB(255, 50, 50) -- Red
+        pingColor = COLOR_PERF_BAD
     elseif ping > 100 then
-        pingColor = Color3.fromRGB(255, 200, 50) -- Yellow
+        pingColor = COLOR_PERF_WARN
     end
 
     -- Update Rows
@@ -3811,25 +3844,8 @@ local sign  = math.sign
 local sqrt  = math.sqrt
 local tan   = math.tan
 
-local ContextActionService = game:GetService("ContextActionService")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
-
 local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-LocalPlayer = Players.LocalPlayer
-end
-
 local Camera = workspace.CurrentCamera
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-local newCamera = workspace.CurrentCamera
-if newCamera then
-Camera = newCamera
-end
-end)
 
 ------------------------------------------------------------------------
 
@@ -4452,7 +4468,7 @@ UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock ont
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
 UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
-UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
+UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px", function() UpdateCachedFOVMax(Flags) end)
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
@@ -4462,7 +4478,7 @@ UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, F
 UI.CreateSection(AimTab, "Silent Aim")
 UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", Flags["SilentAim/Enabled"])
 UI.CreateSlider(AimTab, "Hit Chance", "SilentAim/HitChance", 0, 100, Flags["SilentAim/HitChance"], "%")
-UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, Flags["SilentAim/FOV/Radius"], "px")
+UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, Flags["SilentAim/FOV/Radius"], "px", function() UpdateCachedFOVMax(Flags) end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -4480,6 +4496,7 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
         end
     end
 end)
+UI.CreateSlider(VisualsTab, "Max Distance", "ESP/MaxDistance", 100, 10000, Flags["ESP/MaxDistance"], " studs")
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
 UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", Flags["ESP/Tracers"])
 UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", Flags["ESP/OffscreenIndicators"], function(state)
@@ -4739,12 +4756,12 @@ local function GetCachedTarget()
     
     -- Use broadest settings to find targets (Aimbot settings as primary)
     CachedTarget = GetClosest(
-        Flags["Aimbot/Enabled"] or Flags["SilentAim/Enabled"] or Flags["Trigger/Enabled"],
+        Flags["Aimbot/AimLock"] or Flags["SilentAim/Enabled"] or Flags["Aimbot/AutoFire"],
         Flags["Aimbot/TeamCheck"],
         Flags["Aimbot/VisibilityCheck"],
         false, -- Distance check disabled (no cap)
         0, -- Distance limit unused
-        max(Flags["Aimbot/FOV/Radius"], Flags["SilentAim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
+        CachedFOVMax,
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
         Flags["Aimbot/Prediction"]
@@ -4856,19 +4873,30 @@ local hoverUpdateRate = 0.033 -- Hover at 30fps
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
+local lastWaypointUpdate = 0
 local function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
+    local now = os.clock()
     UpdateFullbright()
     
     -- Update Waypoint Distances
     if Flags["Waypoints/Enabled"] then
+        local shouldUpdateWaypoints = (now - lastWaypointUpdate) > 0.5
+        if shouldUpdateWaypoints then
+            lastWaypointUpdate = now
+        end
         for id, wpData in pairs(ActiveWaypoints) do
             if wpData.Part and wpData.Label then
-                local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
-                local distRounded = math.floor(dist)
-                wpData.DistanceText = distRounded .. " studs"
-                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+                if shouldUpdateWaypoints then
+                    local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
+                    local distRounded = math.floor(dist)
+                    if distRounded ~= wpData.lastDistRounded then
+                        wpData.lastDistRounded = distRounded
+                        wpData.DistanceText = distRounded .. " studs"
+                        wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+                    end
+                end
             end
             if wpData.Billboard and not wpData.Billboard.Enabled then wpData.Billboard.Enabled = true end
             if wpData.PinBg and not wpData.PinBg.Enabled then wpData.PinBg.Enabled = true end
@@ -4881,8 +4909,6 @@ local function UnifiedHeartbeat(dt)
         end
     end
 
-    local now = os.clock()
-    
     -- 1. ESP & Tracker Updates
     -- Check throttle FIRST before anything else to save perf
     local shouldUpdateEsp = (now - lastEspUpdate) > espUpdateRate
