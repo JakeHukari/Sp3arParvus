@@ -205,6 +205,20 @@ end
 local Aimbot, SilentAim, Trigger = false, nil, false
 local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
 
+-- Optimized Silent Aim Mode Lookup
+local SilentAimModeSet = {
+    Target = true,
+    Hit = true,
+    Raycast = true,
+    FindPartOnRayWithIgnoreList = true,
+    FindPartOnRayWithWhitelist = true,
+    FindPartOnRay = true,
+    ScreenPointToRay = true,
+    ViewportPointToRay = true,
+    WorldToScreenPoint = true,
+    WorldToViewportPoint = true
+}
+
 -- Shared Target Cache (Defined here for scope visibility)
 local CachedTarget = nil
 local CachedTargetTime = 0
@@ -283,6 +297,7 @@ local WaypointColors = {
 local WaypointsTabButton = nil
 local WaypointsPage = nil
 local WaypointsUIList = nil
+local WaypointConnections = {}
 
 
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
@@ -454,18 +469,27 @@ local function sweepUndo(dt)
     if sweepAccum < 2 then return end
     sweepAccum = 0
     
-    local i = 1
-    while i <= #undoStack do
+    local n = #undoStack
+    if n == 0 then return end
+
+    local j = 1
+    for i = 1, n do
         local entry = undoStack[i]
-        if not entry.part or not entry.part:IsDescendantOf(game) then
-            if entry and entry.part then
+        if entry.part and entry.part:IsDescendantOf(game) then
+            if i ~= j then
+                undoStack[j] = entry
+            end
+            j = j + 1
+        else
+            if entry.part then
                 brokenSet[entry.part] = nil
                 brokenCacheDirty = true
             end
-            table.remove(undoStack, i)
-        else
-            i = i + 1
         end
+    end
+
+    for i = j, n do
+        undoStack[i] = nil
     end
 end
 
@@ -540,6 +564,12 @@ end
 local function RefreshWaypointUI()
     if not WaypointsUIList then return end
     
+    -- Disconnect old row-specific connections
+    for _, conn in ipairs(WaypointConnections) do
+        if conn.Connected then conn:Disconnect() end
+    end
+    table.clear(WaypointConnections)
+
     -- Clear current UI logic
     for _, child in ipairs(WaypointsUIList:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
@@ -573,7 +603,7 @@ local function RefreshWaypointUI()
         nameBox.TextXAlignment = Enum.TextXAlignment.Left
         nameBox.ClearTextOnFocus = false
         nameBox.Parent = row
-        TrackConnection(nameBox.FocusLost:Connect(function()
+        table.insert(WaypointConnections, nameBox.FocusLost:Connect(function()
             wpData.Name = nameBox.Text
             if wpData.Label then
                 wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
@@ -589,7 +619,7 @@ local function RefreshWaypointUI()
         colBtn.Parent = row
         local cC = Instance.new("UICorner", colBtn)
         cC.CornerRadius = UDim.new(0, 4)
-        TrackConnection(colBtn.MouseButton1Click:Connect(function()
+        table.insert(WaypointConnections, colBtn.MouseButton1Click:Connect(function()
             wpData.ColorIndex = (wpData.ColorIndex % #WaypointColors) + 1
             wpData.Color = WaypointColors[wpData.ColorIndex]
             colBtn.BackgroundColor3 = wpData.Color
@@ -615,7 +645,7 @@ local function RefreshWaypointUI()
         local dC = Instance.new("UICorner", delBtn)
         dC.CornerRadius = UDim.new(0, 4)
         
-        TrackConnection(delBtn.MouseButton1Click:Connect(function()
+        table.insert(WaypointConnections, delBtn.MouseButton1Click:Connect(function()
             if Sp3arParvus.DestroyWaypointFunc then Sp3arParvus.DestroyWaypointFunc(id) end
         end))
     end
@@ -1308,11 +1338,8 @@ end
 
 -- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
 local function GetPing()
-    local ping = 0
-    pcall(function()
-        ping = LocalPlayer:GetNetworkPing() * 1000
-    end)
-    return ping
+    local success, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
+    return success and ping * 1000 or 0
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
@@ -1384,31 +1411,8 @@ end
 
 
 -- Check if player is on enemy team
-local function InEnemyTeam(Enabled, Player)
-    if not Enabled then return true end
-
-    -- Standard team check
-    if LocalPlayer.Team and Player.Team then
-        if LocalPlayer.Team == Player.Team then
-            return false
-        end
-    end
-
-    -- AR2 Squad check (Improved verification)
-    local localSquad = LocalPlayer:FindFirstChild("Squad")
-    local playerSquad = Player:FindFirstChild("Squad")
-    
-    if localSquad and playerSquad and localSquad:IsA("ValueBase") and playerSquad:IsA("ValueBase") then
-        if localSquad.Value == playerSquad.Value and localSquad.Value ~= nil and localSquad.Value ~= "" then
-            return false
-        end
-    end
-
-    return true
-end
-
 -- Get character and check health (Heavily Optimized with Cache)
-local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst}
+local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst, Squad}
 
 local function GetCharacter(player)
     if not player then return nil end
@@ -1438,8 +1442,11 @@ local function GetCharacter(player)
                 return char, root
             end
         else
-             -- Invalid cache
-             CharCache[player] = nil
+             -- Stale cache
+             cache.Char = nil
+             cache.Root = nil
+             cache.Humanoid = nil
+             cache.HealthInst = nil
         end
     end
 
@@ -1453,7 +1460,7 @@ local function GetCharacter(player)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local healthInst = nil
     
-    -- If no humanoid, check for AR2 style stats (Improved verification)
+    -- If no humanoid, check for AR2 style stats
     if not humanoid then
         local stats = player:FindFirstChild("Stats")
         if stats and stats:IsA("Folder") then
@@ -1465,17 +1472,67 @@ local function GetCharacter(player)
     end
     
     -- Populate cache
-    CharCache[player] = {
-        Char = character,
-        Root = rootPart,
-        Humanoid = humanoid,
-        HealthInst = healthInst
-    }
+    if not cache then
+        cache = {}
+        CharCache[player] = cache
+    end
+    cache.Char = character
+    cache.Root = rootPart
+    cache.Humanoid = humanoid
+    cache.HealthInst = healthInst
 
     if humanoid and humanoid.Health <= 0 then return nil end
     if healthInst and healthInst.Value <= 0 then return nil end
 
     return character, rootPart
+end
+
+-- Check if player is on enemy team
+local function InEnemyTeam(Enabled, Player)
+    if not Enabled then return true end
+
+    -- Standard team check
+    local lpTeam, pTeam = LocalPlayer.Team, Player.Team
+    if lpTeam and pTeam then
+        if lpTeam == pTeam then
+            return false
+        end
+    end
+
+    -- AR2 Squad check
+    local pCache = CharCache[Player]
+    if not pCache then
+        GetCharacter(Player)
+        pCache = CharCache[Player]
+    end
+
+    if pCache then
+        if pCache.Squad == nil then
+            pCache.Squad = Player:FindFirstChild("Squad") or false
+        end
+
+        local playerSquad = pCache.Squad
+        if playerSquad then
+            local lpCache = CharCache[LocalPlayer]
+            if not lpCache then
+                GetCharacter(LocalPlayer)
+                lpCache = CharCache[LocalPlayer]
+            end
+
+            if lpCache then
+                if lpCache.Squad == nil then
+                    lpCache.Squad = LocalPlayer:FindFirstChild("Squad") or false
+                end
+
+                local localSquad = lpCache.Squad
+                if localSquad and localSquad.Value ~= "" and localSquad.Value == playerSquad.Value then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true
 end
 
 -- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
@@ -1489,18 +1546,22 @@ local function PruneCharCache()
     
     local players = GetPlayersCache()
     local playerMap = {}
-    for _, p in ipairs(players) do playerMap[p] = true end
+    for i = 1, #players do playerMap[players[i]] = true end
 
     for player, cache in pairs(CharCache) do
         -- Remove if player left the game
         if not playerMap[player] or not player.Parent then
             CharCache[player] = nil
-        -- Remove if character is invalid/destroyed
+        -- Clear character-linked fields if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
-            CharCache[player] = nil
-        -- Remove if root is invalid/destroyed
+            cache.Char = nil
+            cache.Root = nil
+            cache.Humanoid = nil
+            cache.HealthInst = nil
         elseif cache.Root and not cache.Root.Parent then
-            CharCache[player] = nil
+            cache.Root = nil
+            cache.Humanoid = nil
+            cache.HealthInst = nil
         end
     end
 end
@@ -1651,7 +1712,17 @@ end
 
 -- OPTIMIZED: Reusable result table to avoid allocations per frame
 -- Changed to store x,y directly instead of Vector2 to avoid allocations
-local ClosestResult = {nil, nil, nil, 0, 0} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY
+local ClosestResult = {nil, nil, nil, 0, 0, nil} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY, [6]=pos
+
+-- Hoisted comparator for candidate sorting
+local function CandidateSortFn(a, b)
+    return a.mag < b.mag
+end
+
+-- Hoisted comparator for distance sorting
+local function DistanceSortFn(a, b)
+    return a.distance < b.distance
+end
 
 -- OPTIMIZED: Reusable tables for candidate sorting to avoid per-frame allocations
 local CandidateList = {} -- Array of {dist, data...}
@@ -1664,8 +1735,9 @@ ClearCandidateReferences = function()
     if not CandidateList then return end -- Safety check
     
     -- If CandidateList bloated beyond reasonable bounds, explicitly shrink it
-    if #CandidateList > MAX_CANDIDATES * 2 then
-        for i = MAX_CANDIDATES * 2 + 1, #CandidateList do
+    -- but keep a reasonable pool size to avoid re-allocation
+    if #CandidateList > MAX_CANDIDATES * 3 then
+        for i = MAX_CANDIDATES * 3 + 1, #CandidateList do
             CandidateList[i] = nil
         end
     end
@@ -1679,6 +1751,7 @@ ClearCandidateReferences = function()
             entry.pos = nil
         end
     end
+
     -- Also clear ClosestResult to prevent stale references
     if ClosestResult then
         ClosestResult[1] = nil
@@ -1686,6 +1759,7 @@ ClearCandidateReferences = function()
         ClosestResult[3] = nil
         ClosestResult[4] = 0
         ClosestResult[5] = 0
+        ClosestResult[6] = nil
     end
 end
 
@@ -1842,17 +1916,22 @@ local function GetClosest(Enabled,
     -- Sort candidates by screen distance (Magnitude)
     -- PERFORMANCE FIX: table.sort sorts from index 1 to #CandidateList.
     -- We must prune the "tail" of the reused table to prevent it from sorting stale data from previous frames.
-    if CandidateCount > 1 then
-        local currentSize = #CandidateList
-        if currentSize > CandidateCount then
-            for i = CandidateCount + 1, currentSize do
-                CandidateList[i] = nil
+    local currentSize = #CandidateList
+    if currentSize > CandidateCount then
+        for i = CandidateCount + 1, currentSize do
+            local entry = CandidateList[i]
+            if entry then
+                entry.ply = nil
+                entry.char = nil
+                entry.part = nil
+                entry.pos = nil
             end
+            CandidateList[i] = nil
         end
+    end
 
-        table.sort(CandidateList, function(a, b)
-            return a.mag < b.mag
-        end)
+    if CandidateCount > 1 then
+        table.sort(CandidateList, CandidateSortFn)
     end
     
     -- Iterate sorted candidates and perform Raycast on the closest ones
@@ -1874,6 +1953,7 @@ local function GetClosest(Enabled,
         ClosestResult[3] = entry.part
         ClosestResult[4] = entry.sx
         ClosestResult[5] = entry.sy
+        ClosestResult[6] = entry.pos
         
         return ClosestResult
     end
@@ -1886,27 +1966,9 @@ local function AimAt(Hitbox, Sensitivity)
     if not Hitbox then return end
     if not mousemoverel then return end
     
-    -- Get the body part from hitbox
-    local BodyPart = Hitbox[3]
-    if not BodyPart or not BodyPart.Parent then return end
-    
-    -- Get FRESH world position (not cached screen position)
-    local BodyPartPosition = BodyPart.Position
-    
-    -- Apply prediction if enabled (same logic as GetClosest)
-    if Flags["Aimbot/Prediction"] then
-        local CameraPosition = Camera.CFrame.Position
-        local Distance = (BodyPartPosition - CameraPosition).Magnitude
-        BodyPartPosition = SolveTrajectory(BodyPartPosition,
-            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
-    end
-    
-    -- Calculate FRESH screen position from current camera
-    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-    
-    -- Safety check - don't aim at targets behind camera
-    -- WorldToViewportPoint returns Z < 0 for points behind camera
-    if not OnScreen or ScreenPosition.Z < 0 then return end
+    -- Optimization: Use cached screen position from Hitbox (ClosestResult)
+    -- This eliminates redundant WorldToViewportPoint and SolveTrajectory calls
+    local screenX, screenY = Hitbox[4], Hitbox[5]
     
     -- Determine mouse/crosshair location based on mouse behavior
     local mouseX, mouseY
@@ -1916,7 +1978,6 @@ local function AimAt(Hitbox, Sensitivity)
     -- This avoids stale GetMouseLocation() during mode transitions
     if mouseBehavior == Enum.MouseBehavior.LockCenter then
         local viewportSize = Camera.ViewportSize
-        -- MEMORY FIX: Use raw numbers instead of Vector2.new
         mouseX = viewportSize.X / 2
         mouseY = viewportSize.Y / 2
     else
@@ -1926,8 +1987,8 @@ local function AimAt(Hitbox, Sensitivity)
     end
     
     -- Calculate delta movement
-    local deltaX = (ScreenPosition.X - mouseX) * Sensitivity
-    local deltaY = (ScreenPosition.Y - mouseY) * Sensitivity
+    local deltaX = (screenX - mouseX) * Sensitivity
+    local deltaY = (screenY - mouseY) * Sensitivity
     
     -- NaN Safety Check: If delta is invalid, abort immediately
     if deltaX ~= deltaX or deltaY ~= deltaY then
@@ -1948,33 +2009,30 @@ end
 -- SILENT AIM HOOKS (EXACT CODE FROM WORKING PARVUS)
 
 
-local function Pack(...)
-    return {n = select('#', ...), ...}
-end
-
 -- Hook __index for Mouse.Target and Mouse.Hit
 local OldIndex = nil
 if hookmetamethod and checkcaller then
     OldIndex = hookmetamethod(game, "__index", function(Self, Index)
-        -- PERFORMANCE: Removed pcall overhead
         if checkcaller() then
             return OldIndex(Self, Index)
         end
 
         if not Sp3arParvus.Active then return OldIndex(Self, Index) end
 
-        if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-            local Mode = Flags["SilentAim/Mode"]
-            if Self == Mouse then
-                if Index == "Target" and Mode and table.find(Mode, Index) then
-                    -- Verify target validity
-                    if SilentAim[3] and SilentAim[3].Parent then
-                        return SilentAim[3]
+        -- Fast path: Check if we are indexing Mouse and if the index is handled
+        if Self == Mouse and (Index == "Target" or Index == "Hit") then
+            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+                if SilentAimModeSet[Index] then
+                    local targetPart = SilentAim[3]
+                    if targetPart and targetPart.Parent then
+                        if Index == "Target" then
+                            return targetPart
+                        else
+                            -- For "Hit", use predicted position if available
+                            local targetPos = SilentAim[6] or targetPart.Position
+                            return CFrame.new(targetPos)
+                        end
                     end
-                elseif Index == "Hit" and table.find(Mode, Index) then
-                     if SilentAim[3] and SilentAim[3].Parent then
-                        return SilentAim[3].CFrame
-                     end
                 end
             end
         end
@@ -1987,48 +2045,39 @@ end
 local OldNamecall = nil
 if hookmetamethod and checkcaller and getnamecallmethod then
     OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-        -- PERFORMANCE: Removed pcall overhead
         if checkcaller() then
             return OldNamecall(Self, ...)
         end
 
         if not Sp3arParvus.Active then return OldNamecall(Self, ...) end
 
-        if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-            local Method = getnamecallmethod()
-            local Mode = Flags["SilentAim/Mode"]
-            
-            -- Validation check
-            if not SilentAim[3] or not SilentAim[3].Parent then
-                 return OldNamecall(Self, ...)
-            end
+        local Method = getnamecallmethod()
+        if SilentAimModeSet[Method] then
+            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+                local targetPart = SilentAim[3]
+                if targetPart and targetPart.Parent then
+                    -- Use predicted position from ClosestResult if available
+                    local targetPos = SilentAim[6] or targetPart.Position
 
-            if Self == Workspace then
-                if Method == "Raycast" and Mode and table.find(Mode, Method) then
-                    local args = {...}
-                    if args[1] then
-                        args[2] = SilentAim[3].Position - args[1]
-                        return OldNamecall(Self, unpack(args))
+                    if Self == Workspace then
+                        if Method == "Raycast" then
+                            local origin = ...
+                            if origin then
+                                return OldNamecall(Self, origin, targetPos - origin, select(3, ...))
+                            end
+                        elseif Method == "FindPartOnRayWithIgnoreList" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRay" then
+                            local oldRay = ...
+                            if oldRay then
+                                return OldNamecall(Self, Ray.new(oldRay.Origin, targetPos - oldRay.Origin), select(2, ...))
+                            end
+                        end
+                    elseif Self == Camera then
+                        if Method == "ScreenPointToRay" or Method == "ViewportPointToRay" then
+                            return Ray.new(targetPos, targetPos - Camera.CFrame.Position)
+                        elseif Method == "WorldToScreenPoint" or Method == "WorldToViewportPoint" then
+                            return OldNamecall(Self, targetPos, select(2, ...))
+                        end
                     end
-                elseif (Method == "FindPartOnRayWithIgnoreList" and table.find(Mode, Method))
-                or (Method == "FindPartOnRayWithWhitelist" and table.find(Mode, Method))
-                or (Method == "FindPartOnRay" and table.find(Mode, Method)) then
-                    local args = {...}
-                    if args[1] then
-                         -- Reconstruct ray safely
-                         args[1] = Ray.new(args[1].Origin, SilentAim[3].Position - args[1].Origin)
-                         return OldNamecall(Self, unpack(args))
-                    end
-                end
-            elseif Self == Camera then
-                if (Method == "ScreenPointToRay" and table.find(Mode, Method))
-                or (Method == "ViewportPointToRay" and table.find(Mode, Method)) then
-                    return Ray.new(SilentAim[3].Position, SilentAim[3].Position - Camera.CFrame.Position)
-                elseif (Method == "WorldToScreenPoint" and table.find(Mode, Method))
-                or (Method == "WorldToViewportPoint" and table.find(Mode, Method)) then
-                    local args = {...}
-                    args[1] = SilentAim[3].Position
-                    return OldNamecall(Self, unpack(args))
                 end
             end
         end
@@ -2110,8 +2159,7 @@ local cachedCameraData = {
 }
 local CAMERA_CACHE_DURATION = 0.016 -- Cache for 1 frame (~60fps)
 
-local function UpdateCameraCache()
-    local now = os.clock()
+local function UpdateCameraCache(now)
     if (now - cachedCameraData.cacheTime) < CAMERA_CACHE_DURATION then
         return true -- Cache is still valid
     end
@@ -2119,11 +2167,12 @@ local function UpdateCameraCache()
     if not Camera then Camera = Workspace.CurrentCamera end
     if not Camera then return false end
     
-    cachedCameraData.cFrame = Camera.CFrame
-    cachedCameraData.position = Camera.CFrame.Position
-    cachedCameraData.lookVector = Camera.CFrame.LookVector
-    cachedCameraData.rightVector = Camera.CFrame.RightVector
-    cachedCameraData.upVector = Camera.CFrame.UpVector
+    local cframe = Camera.CFrame
+    cachedCameraData.cFrame = cframe
+    cachedCameraData.position = cframe.Position
+    cachedCameraData.lookVector = cframe.LookVector
+    cachedCameraData.rightVector = cframe.RightVector
+    cachedCameraData.upVector = cframe.UpVector
     cachedCameraData.viewportSize = Camera.ViewportSize
     cachedCameraData.cacheTime = now
     return true
@@ -2132,9 +2181,9 @@ end
 -- Calculate screen edge position for off-screen indicator
 -- Returns the position clamped to screen edges and the angle toward the target
 -- PERFORMANCE: Uses cached camera data to avoid redundant property access
-local function GetEdgePosition(worldPosition)
+local function GetEdgePosition(now, worldPosition)
     -- Update camera cache (shared across all players per frame)
-    if not UpdateCameraCache() then return nil, nil, nil, false end
+    if not UpdateCameraCache(now) then return nil, nil, nil, false end
     
     local viewportSize = cachedCameraData.viewportSize
     
@@ -2537,26 +2586,38 @@ local function GetDirectionToPlayer(targetPosition)
     if not myRoot then return 0 end
     
     local myPos = myRoot.Position
-    local direction = (targetPosition - myPos)
+    local dx = targetPosition.X - myPos.X
+    local dz = targetPosition.Z - myPos.Z
+
+    local dirMag = sqrt(dx*dx + dz*dz)
+    if dirMag < 0.01 then return 0 end
+
+    local dirX = dx / dirMag
+    local dirZ = dz / dirMag
     
-    -- Get camera's forward direction (ignoring Y)
     local camLook = Camera.CFrame.LookVector
     local camRight = Camera.CFrame.RightVector
     
-    -- Calculate angle relative to camera
-    local forward2D = Vector2.new(camLook.X, camLook.Z).Unit
-    local right2D = Vector2.new(camRight.X, camRight.Z).Unit
-    local dir2D = Vector2.new(direction.X, direction.Z)
+    -- 2D components
+    local fwdX, fwdZ = camLook.X, camLook.Z
+    local fwdMag = sqrt(fwdX*fwdX + fwdZ*fwdZ)
+    if fwdMag > 0 then
+        fwdX = fwdX / fwdMag
+        fwdZ = fwdZ / fwdMag
+    end
     
-    if dir2D.Magnitude < 0.01 then return 0 end
-    dir2D = dir2D.Unit
+    local rgtX, rgtZ = camRight.X, camRight.Z
+    local rgtMag = sqrt(rgtX*rgtX + rgtZ*rgtZ)
+    if rgtMag > 0 then
+        rgtX = rgtX / rgtMag
+        rgtZ = rgtZ / rgtMag
+    end
     
-    -- Dot product gives us the angle components
-    local forwardDot = forward2D.X * dir2D.X + forward2D.Y * dir2D.Y
-    local rightDot = right2D.X * dir2D.X + right2D.Y * dir2D.Y
+    -- Dot products (scalar)
+    local forwardDot = fwdX * dirX + fwdZ * dirZ
+    local rightDot = rgtX * dirX + rgtZ * dirZ
     
-    local angle = atan2(rightDot, forwardDot)
-    return deg(angle)
+    return deg(atan2(rightDot, forwardDot))
 end
 
 -- Create the Player Panel UI
@@ -2827,9 +2888,7 @@ local function GetSortedPlayersByDistance()
     -- Sort by distance (closest first)
     -- We only sort the active portion of the list
     if insertIdx > 1 then
-        table.sort(cachedPlayerListForSort, function(a, b)
-            return a.distance < b.distance
-        end)
+        table.sort(cachedPlayerListForSort, DistanceSortFn)
     end
     
     -- Build result (reusing cached result table)
@@ -2928,6 +2987,17 @@ local function UpdatePlayerPanel()
             end
         end
     end
+end
+
+local PoolFolder = Instance.new("Folder")
+PoolFolder.Name = "Sp3arParvus_Pool"
+if gethui then
+    PoolFolder.Parent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(PoolFolder)
+    PoolFolder.Parent = game.CoreGui
+else
+    PoolFolder.Parent = game.CoreGui
 end
 
 -- Create ESP for a player
@@ -3042,41 +3112,29 @@ local function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
     while #pool > 0 do
         local obj = table.remove(pool)
-        -- FIX: Validate object is still usable (not destroyed)
-        local isValid = false
-        pcall(function()
-            -- Try to access a property - destroyed objects throw errors
-            local _ = obj.Name
-            isValid = true
-        end)
-        
-        if isValid then
-            if obj.Parent then obj.Parent = nil end -- Safety
+        -- PERFORMANCE FIX: O(1) validity check using PoolFolder
+        if obj and obj.Parent == PoolFolder then
+            obj.Parent = nil
             return obj
         end
-        -- Object was destroyed, skip it and try next
     end
     return Instance.new(className)
+end
+
+local function _resetPooledObject(obj)
+    obj.Adornee = nil
+    obj.Parent = PoolFolder
 end
 
 local function ReturnPooledObject(obj)
     if not obj then return end
     
-    -- FIX: Validate object is still valid before pooling
-    local isValid = false
-    pcall(function()
-        obj.Adornee = nil
-        obj.Parent = nil
-        isValid = true
-    end)
+    -- PERFORMANCE FIX: O(1) check with argument-passing pcall to avoid closures
+    local success = pcall(_resetPooledObject, obj)
     
-    if not isValid then
-        -- Object is already destroyed, nothing to do
-        return
-    end
+    if not success then return end
     
     if obj:IsA("Highlight") then
-        -- Enforce pool size limit to prevent memory bloat
         if #ObjectPool.Highlights < MAX_POOL_SIZE then
             table.insert(ObjectPool.Highlights, obj)
         else
@@ -3092,6 +3150,94 @@ local function ReturnPooledObject(obj)
         obj:Destroy()
     end
 end
+-- Helper to create/update Dot Indicator
+local function UpdateDot(player, character, storage, dotType, partName)
+    local part = character:FindFirstChild(partName)
+    if not part then
+        if storage[dotType] then
+            ReturnPooledObject(storage[dotType])
+            storage[dotType] = nil
+        end
+        return
+    end
+
+    local dot = storage[dotType]
+    if not dot then
+        -- Create BillboardGui
+        dot = GetPooledObject("Billboards", "BillboardGui")
+        dot.Name = dotType
+        dot.AlwaysOnTop = true
+        dot.Size = UDim2.fromOffset(6, 6)
+        dot.StudsOffset = Vector3.new(0, 0, 0)
+        dot.Adornee = part
+        dot.Parent = character
+
+        -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
+        local dotFrame = dot:FindFirstChild("Dot")
+        if not dotFrame then
+            dotFrame = Instance.new("Frame")
+            dotFrame.Name = "Dot"
+            dotFrame.Size = UDim2.new(1, 0, 1, 0)
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+            dotFrame.BorderSizePixel = 0
+            dotFrame.Parent = dot
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(1, 0)
+            corner.Parent = dotFrame
+        end
+
+        storage[dotType] = dot
+    else
+        -- PERFORMANCE FIX: Assume valid if matched in storage, or basic check
+        if not dot.Parent and dot ~= storage[dotType] then
+            storage[dotType] = nil
+            return UpdateDot(player, character, storage, dotType, partName)
+        end
+
+        -- Update adornee and parent
+        if dot.Adornee ~= part then
+            dot.Adornee = part
+        end
+        if dot.Parent ~= character then
+            dot.Parent = character
+        end
+
+        -- FIX: Ensure the dot frame child still exists
+        local dotFrame = dot:FindFirstChild("Dot")
+        if not dotFrame then
+            dotFrame = Instance.new("Frame")
+            dotFrame.Name = "Dot"
+            dotFrame.Size = UDim2.new(1, 0, 1, 0)
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            dotFrame.BorderSizePixel = 0
+            dotFrame.Parent = dot
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(1, 0)
+            corner.Parent = dotFrame
+        end
+    end
+
+    -- Update Color based on Locked Status
+    local dotFrame = dot:FindFirstChild("Dot")
+    if dotFrame then
+            local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
+
+            -- Check if this specific part is being locked onto
+            if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
+                local lockedPart = CachedTarget[3]
+                if lockedPart and lockedPart.Name == partName then
+                    dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
+                end
+            end
+
+            if dotFrame.BackgroundColor3 ~= dotColor then
+                dotFrame.BackgroundColor3 = dotColor
+            end
+    end
+end
+
 local function UpdatePlayerOutlines(player, character)
     if not character then return end
     
@@ -3162,16 +3308,8 @@ local function UpdatePlayerOutlines(player, character)
         end
     else
         local highlight = storage.Highlight
-        -- FIX: Validate highlight is still a valid object (not destroyed)
-        -- Check using pcall since destroyed objects throw errors on property access
-        local isValid = false
-        pcall(function()
-            -- Try to access a property - if object is destroyed this will error
-            local _ = highlight.Enabled
-            isValid = true
-        end)
-        
-        if not isValid then
+        -- PERFORMANCE FIX: Check Parent instead of pcall for validity
+        if not highlight.Parent and highlight ~= storage.Highlight then -- unlikely but safe
              storage.Highlight = nil
              return UpdatePlayerOutlines(player, character)
         end
@@ -3191,103 +3329,9 @@ local function UpdatePlayerOutlines(player, character)
         end
     end
 
-    -- Helper to create/update Dot Indicator
-    local function UpdateDot(dotType, partName)
-        local part = character:FindFirstChild(partName)
-        if not part then
-            if storage[dotType] then
-                ReturnPooledObject(storage[dotType])
-                storage[dotType] = nil
-            end
-            return
-        end
-
-        local dot = storage[dotType]
-        if not dot then
-            -- Create BillboardGui
-            dot = GetPooledObject("Billboards", "BillboardGui")
-            dot.Name = dotType
-            dot.AlwaysOnTop = true
-            dot.Size = UDim2.fromOffset(6, 6)
-            dot.StudsOffset = Vector3.new(0, 0, 0)
-            dot.Adornee = part
-            dot.Parent = character
-            
-            -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
-            local dotFrame = dot:FindFirstChild("Dot")
-            if not dotFrame then
-                dotFrame = Instance.new("Frame")
-                dotFrame.Name = "Dot"
-                dotFrame.Size = UDim2.new(1, 0, 1, 0)
-                dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
-                dotFrame.BorderSizePixel = 0
-                dotFrame.Parent = dot
-                
-                local corner = Instance.new("UICorner")
-                corner.CornerRadius = UDim.new(1, 0)
-                corner.Parent = dotFrame
-            end
-
-            storage[dotType] = dot
-        else
-            -- FIX: Validate dot is still valid before reusing
-            local isValid = false
-            pcall(function()
-                local _ = dot.Enabled
-                isValid = true
-            end)
-            
-            if not isValid then
-                storage[dotType] = nil
-                return UpdateDot(dotType, partName) -- Retry with clean state
-            end
-            
-            -- Update adornee and parent
-            if dot.Adornee ~= part then
-                dot.Adornee = part
-            end
-            if dot.Parent ~= character then
-                dot.Parent = character
-            end
-            
-            -- FIX: Ensure the dot frame child still exists
-            local dotFrame = dot:FindFirstChild("Dot")
-            if not dotFrame then
-                dotFrame = Instance.new("Frame")
-                dotFrame.Name = "Dot"
-                dotFrame.Size = UDim2.new(1, 0, 1, 0)
-                dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                dotFrame.BorderSizePixel = 0
-                dotFrame.Parent = dot
-                
-                local corner = Instance.new("UICorner")
-                corner.CornerRadius = UDim.new(1, 0)
-                corner.Parent = dotFrame
-            end
-        end
-
-        -- Update Color based on Locked Status
-        local dotFrame = dot:FindFirstChild("Dot")
-        if dotFrame then
-             local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
-             
-             -- Check if this specific part is being locked onto
-             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
-                 local lockedPart = CachedTarget[3]
-                 if lockedPart and lockedPart.Name == partName then
-                     dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
-                 end
-             end
-    
-             if dotFrame.BackgroundColor3 ~= dotColor then
-                 dotFrame.BackgroundColor3 = dotColor
-             end
-        end
-    end
-
     -- Update Head and Root dots
-    UpdateDot("HeadDot", "Head")
-    UpdateDot("RootDot", "HumanoidRootPart")
+    UpdateDot(player, character, storage, "HeadDot", "Head")
+    UpdateDot(player, character, storage, "RootDot", "HumanoidRootPart")
 end
 
 -- Remove all outlines for a player (Optimized: Return to pool)
@@ -3323,7 +3367,7 @@ local function RemovePlayerOutlines(player)
 end
 
 -- Update ESP for a player (optimized - uses cached closest player)
-local function UpdateESP(player, isClosest)
+local function UpdateESP(now, player, isClosest)
     if not Flags["ESP/Enabled"] then return end
 
     local espData = ESPObjects[player]
@@ -3332,13 +3376,10 @@ local function UpdateESP(player, isClosest)
     if espData then
         -- Check if nametag is valid
         local nametag = espData.Nametag
-        local isValid = false
-        if nametag then
-            isValid = pcall(function() return nametag.Parent and nametag.Name end)
-            -- Verify critical children still exist
-            if isValid and (not espData.NicknameLabel or not espData.NicknameLabel.Parent) then
-                isValid = false
-            end
+        local isValid = nametag and nametag.Parent ~= nil
+
+        if isValid and (not espData.NicknameLabel or not espData.NicknameLabel.Parent) then
+            isValid = false
         end
         
         if not isValid then
@@ -3346,12 +3387,12 @@ local function UpdateESP(player, isClosest)
              -- Fix: Capture connections to preserve them (prevents untracked CharacterAdded listeners)
              local savedConnections = espData.Connections
              
-             if nametag then pcall(function() nametag:Destroy() end) end
-             if espData.Tracer then pcall(function() espData.Tracer:Destroy() end) end 
+             if nametag then nametag:Destroy() end
+             if espData.Tracer then espData.Tracer:Destroy() end
              
              -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
              if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                 pcall(function() espData.OffscreenIndicator.Frame:Destroy() end)
+                 espData.OffscreenIndicator.Frame:Destroy()
              end
              
              ESPObjects[player] = nil
@@ -3469,10 +3510,10 @@ local function UpdateESP(player, isClosest)
             
             local diffX = targetX - originX
             local diffY = targetY - originY
-            local length = floor(sqrt(diffX*diffX + diffY*diffY))
-            local rotation = floor(deg(atan2(diffY, diffX)))
-            local midX = floor((originX + targetX)/2)
-            local midY = floor((originY + targetY)/2)
+            local length = floor(sqrt(diffX*diffX + diffY*diffY) + 0.5)
+            local rotation = floor(deg(atan2(diffY, diffX)) + 0.5)
+            local midX = floor((originX + targetX) / 2 + 0.5)
+            local midY = floor((originY + targetY) / 2 + 0.5)
             
             tracerLine.Visible = true
             
@@ -3506,8 +3547,14 @@ local function UpdateESP(player, isClosest)
     if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
         local indicator = espData.OffscreenIndicator
         -- MEMORY FIX: GetEdgePosition now returns raw numbers instead of Vector2
-        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(rootPart.Position)
+        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(now, rootPart.Position)
         
+        -- Logic Fix: WorldToViewportPoint/GetEdgePosition and/or ternary bug prevention
+        if edgeX == nil and isOnScreen == nil then
+            -- Failed to get position (likely camera not ready)
+            return
+        end
+
         if isOnScreen then
             if espData.lastOffscreenVisible then
                 indicator.Frame.Visible = false
@@ -4293,6 +4340,14 @@ local function Cleanup()
     end
     table.clear(Sp3arParvus.Connections)
 
+    -- Cleanup Waypoint Connections
+    for _, conn in ipairs(WaypointConnections) do
+        pcall(function()
+            if conn then conn:Disconnect() end
+        end)
+    end
+    table.clear(WaypointConnections)
+
     -- Cancel all tracked threads
     for _, thread in pairs(Sp3arParvus.Threads) do
         pcall(function()
@@ -4342,6 +4397,10 @@ local function Cleanup()
             pcall(function() obj:Destroy() end)
         end
         table.clear(pool)
+    end
+    if PoolFolder then
+        pcall(function() PoolFolder:Destroy() end)
+        PoolFolder = nil
     end
 
     -- Cleanup Waypoints
@@ -4595,7 +4654,7 @@ local function SetupPlayerESP(player)
                     EnsureScreenGui()
                     
                     -- Update immediately
-                    UpdateESP(player, player == NearestPlayerRef)
+                    UpdateESP(os.clock(), player, player == NearestPlayerRef)
                 end
             end
         end)
@@ -4739,7 +4798,7 @@ local function GetCachedTarget()
     
     -- Use broadest settings to find targets (Aimbot settings as primary)
     CachedTarget = GetClosest(
-        Flags["Aimbot/Enabled"] or Flags["SilentAim/Enabled"] or Flags["Trigger/Enabled"],
+        Flags["Aimbot/AimLock"] or Flags["SilentAim/Enabled"] or Flags["Aimbot/AutoFire"],
         Flags["Aimbot/TeamCheck"],
         Flags["Aimbot/VisibilityCheck"],
         false, -- Distance check disabled (no cap)
@@ -4927,7 +4986,7 @@ local function UnifiedHeartbeat(dt)
                 end
 
                 if not skip then
-                   UpdateESP(player, player == NearestPlayerRef)
+                   UpdateESP(now, player, player == NearestPlayerRef)
                 end
             end
         end
