@@ -7,12 +7,22 @@ print("[Sp3arParvus] Waiting for game to load...")
 repeat task.wait() until game:IsLoaded()
 print("[Sp3arParvus] Game loaded!")
 print("[Sp3arParvus] Waiting for LocalPlayer...")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local Services = {
+    Players = game:GetService("Players"),
+    Workspace = game:GetService("Workspace"),
+    RunService = game:GetService("RunService"),
+    UserInputService = game:GetService("UserInputService"),
+    Lighting = game:GetService("Lighting"),
+    TeleportService = game:GetService("TeleportService"),
+    Stats = game:GetService("Stats"),
+    GuiService = game:GetService("GuiService")
+}
+
+local LocalPlayer = Services.Players.LocalPlayer
 if not LocalPlayer then
     repeat 
         task.wait(0.1) 
-        LocalPlayer = Players.LocalPlayer
+        LocalPlayer = Services.Players.LocalPlayer
     until LocalPlayer or (tick() - initStartTime > MAX_INIT_WAIT)
 end
 if not LocalPlayer then
@@ -38,11 +48,10 @@ print("[Sp3arParvus] Character ready!")
 
 -- Wait for Camera
 print("[Sp3arParvus] Waiting for Camera...")
-local Workspace = game:GetService("Workspace")
 repeat 
     task.wait(0.1) 
-until Workspace.CurrentCamera or (tick() - initStartTime > MAX_INIT_WAIT)
-if not Workspace.CurrentCamera then
+until Services.Workspace.CurrentCamera or (tick() - initStartTime > MAX_INIT_WAIT)
+if not Services.Workspace.CurrentCamera then
     warn("[Sp3arParvus] Camera not found, continuing anyway...")
 end
 print("[Sp3arParvus] Camera ready!")
@@ -66,7 +75,7 @@ print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - i
 
 -- RESPAWN HANDLING
 local LocalCharReady = true
-local function OnLocalCharacterAdded(newChar)
+function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
     -- Invalidate caches
     _G.CharCache = {} 
@@ -103,18 +112,8 @@ globalEnv.Sp3arParvusV2 = {
 }
 local Sp3arParvus = globalEnv.Sp3arParvusV2
 
-
--- SERVICES (additional services not declared during init)
-
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local Lighting = game:GetService("Lighting")
-local TeleportService = game:GetService("TeleportService")
-local Stats = game:GetService("Stats")
-local GuiService = game:GetService("GuiService")
-
 -- resolve
-local function ResolveEnumItem(enumContainer, possibleNames)
+function ResolveEnumItem(enumContainer, possibleNames)
     for _, name in ipairs(possibleNames) do
         local success, enumItem = pcall(function()
             return enumContainer[name]
@@ -129,45 +128,47 @@ local function ResolveEnumItem(enumContainer, possibleNames)
     return nil
 end
 
-local Camera = Workspace.CurrentCamera
+local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
-local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
-local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
-local TWEEN_INSTANT = TweenInfo.new(0.05)
-local TWEEN_FAST = TweenInfo.new(0.1)
-local TWEEN_MEDIUM = TweenInfo.new(0.2)
-local TWEEN_SMOOTH = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-local TWEEN_BACK = TweenInfo.new(0.3, Enum.EasingStyle.Back)
-local TWEEN_DRAG = TweenInfo.new(0.05)
+local TWEENS = {
+    INSTANT = TweenInfo.new(0.05),
+    FAST = TweenInfo.new(0.1),
+    MEDIUM = TweenInfo.new(0.2),
+    SMOOTH = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    BACK = TweenInfo.new(0.3, Enum.EasingStyle.Back),
+    DRAG = TweenInfo.new(0.05)
+}
 
 -- Cached players list (Event-based caching prevents allocation per frame)
 local cachedPlayersList = {}
 
 -- Initialize cache immediately
-local function InitPlayerCache()
-    cachedPlayersList = Players:GetPlayers()
+function InitPlayerCache()
+    cachedPlayersList = Services.Players:GetPlayers()
 end
 InitPlayerCache()
 
-local function GetPlayersCache()
+function GetPlayersCache()
     return cachedPlayersList
 end
 
-local function UpdatePlayerCache()
-    cachedPlayersList = Players:GetPlayers()
+function UpdatePlayerCache()
+    cachedPlayersList = Services.Players:GetPlayers()
 end
 
-local function AddPlayerToCache(player)
+function AddPlayerToCache(player)
     if not table.find(cachedPlayersList, player) then
         table.insert(cachedPlayersList, player)
     end
 end
 
-local function RemovePlayerFromCache(player)
+function RemovePlayerFromCache(player)
     local idx = table.find(cachedPlayersList, player)
     if idx then
         table.remove(cachedPlayersList, idx)
@@ -175,23 +176,23 @@ local function RemovePlayerFromCache(player)
 end
 
 -- Cached sorted players for Player Panel (expensive sort operation)
-local cachedSortedPlayers = {}
-local cachedPlayerListForSort = {}
-local lastPlayerCountForSort = 0
-local lastSortTime = 0
+cachedSortedPlayers = {}
+cachedPlayerListForSort = {}
+lastPlayerCountForSort = 0
+lastSortTime = 0
 local SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
 
 -- CONNECTION TRACKING (for proper cleanup)
 
-local function TrackConnection(connection)
+function TrackConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
     end
     return connection
 end
 
-local function TrackThread(thread)
+function TrackThread(thread)
     if thread and type(thread) == "thread" then
         table.insert(Sp3arParvus.Threads, thread)
     end
@@ -203,10 +204,16 @@ end
 
 
 -- Aimbot state variables
-local Aimbot, SilentAim, Trigger = false, nil, false
-local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
-local LastAimbotTarget = nil
-local LastMouseMode = nil
+local AimState = {
+    Aimbot = false,
+    SilentAim = nil,
+    Trigger = false,
+    ProjectileSpeed = 3155,
+    ProjectileGravity = 196.2,
+    GravityCorrection = 2,
+    LastAimbotTarget = nil,
+    LastMouseMode = nil
+}
 
 -- Optimized Silent Aim Mode Lookup
 local SilentAimModeSet = {
@@ -223,8 +230,8 @@ local SilentAimModeSet = {
 }
 
 -- Shared Target Cache (Defined here for scope visibility)
-local CachedTarget = nil
-local CachedTargetTime = 0
+CachedTarget = nil
+CachedTargetTime = 0
 
 -- Known body parts for targeting
 local KnownBodyParts = {
@@ -337,7 +344,7 @@ if Br3ak3rFilterType then
 end
 
 -- Rebuild the broken parts ignore cache for raycasts
-local function RebuildBrokenIgnore()
+function RebuildBrokenIgnore()
     if not next(brokenSet) then
         table.clear(brokenIgnoreCache)
         brokenCacheDirty = false
@@ -355,9 +362,9 @@ local function RebuildBrokenIgnore()
 end
 
 -- Get ray from mouse cursor position
-local function GetMouseRay()
-    local mouseLocation = UserInputService:GetMouseLocation()
-    if not Camera then Camera = Workspace.CurrentCamera end
+function GetMouseRay()
+    local mouseLocation = Services.UserInputService:GetMouseLocation()
+    if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return nil end
     
     -- Normalize to Viewport space (ScreenPointToRay expects Screen space which includes TopBar)
@@ -369,9 +376,9 @@ end
 
 -- Raycast with broken parts filtering
 -- PERFORMANCE FIX: Removed nested closure function, use inline logic instead
-local MAX_IGNORE_COUNT = 200
+MAX_IGNORE_COUNT = 200
 
-local function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
+function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
     if brokenCacheDirty then
         RebuildBrokenIgnore()
     end
@@ -417,11 +424,11 @@ local function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgno
     -- FilterType already set at initialization
     br3akerRaycastParams.FilterDescendantsInstances = ignore
     
-    return Workspace:Raycast(origin, direction, br3akerRaycastParams)
+    return Services.Workspace:Raycast(origin, direction, br3akerRaycastParams)
 end
 
 -- Mark a part as broken (hide it)
-local function markBroken(part)
+function markBroken(part)
     if not part or not part:IsA("BasePart") then return end
     if brokenSet[part] then return end
     
@@ -448,7 +455,7 @@ local function markBroken(part)
 end
 
 -- Undo the last broken part
-local function unbreakLast()
+function unbreakLast()
     local entry = table.remove(undoStack)
     if not entry or not entry.part or not entry.part:IsDescendantOf(game) then
         if entry and entry.part then
@@ -468,8 +475,8 @@ local function unbreakLast()
 end
 
 -- Sweep undo stack (periodic cleanup of destroyed parts)
-local sweepAccum = 0
-local function sweepUndo(dt)
+sweepAccum = 0
+function sweepUndo(dt)
     sweepAccum = sweepAccum + dt
     if sweepAccum < 2 then return end
     sweepAccum = 0
@@ -499,10 +506,10 @@ local function sweepUndo(dt)
 end
 
 -- Prune broken set (remove parts that no longer exist)
-local function pruneBrokenSet()
+function pruneBrokenSet()
     local removed = false
     for part, _ in pairs(brokenSet) do
-        if not part or not part:IsDescendantOf(Workspace) then
+        if not part or not part:IsDescendantOf(Services.Workspace) then
             brokenSet[part] = nil
             removed = true
         end
@@ -513,7 +520,7 @@ local function pruneBrokenSet()
 end
 
 -- Create hover highlight for Br3ak3r preview
-local function createHoverHighlight()
+function createHoverHighlight()
     if hoverHL then return hoverHL end
     
     hoverHL = Instance.new("Highlight")
@@ -524,14 +531,14 @@ local function createHoverHighlight()
     hoverHL.OutlineTransparency = 0.2
     hoverHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hoverHL.Enabled = false
-    hoverHL.Parent = Workspace
+    hoverHL.Parent = Services.Workspace
     
     return hoverHL
 end
 
 -- Update hover highlight for Br3ak3r (called each frame)
 -- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
-local function UpdateBr3ak3rHover()
+function UpdateBr3ak3rHover()
     -- Early exit - don't do ANY work if feature disabled or Ctrl not held
     if not CLICKBREAK_ENABLED or not CTRL_HELD then
         if hoverHL and hoverHL.Enabled then
@@ -566,7 +573,7 @@ end
 
 -- WAYPOINTS SYSTEM LOGIC
 
-local function RefreshWaypointUI()
+function RefreshWaypointUI()
     if not WaypointsUIList then return end
     
     -- Disconnect old row-specific connections
@@ -662,7 +669,7 @@ local function RefreshWaypointUI()
     end
 end
 
-local function DestroyWaypoint(id)
+function DestroyWaypoint(id)
     local wpData = ActiveWaypoints[id]
     if wpData then
         if wpData.Billboard then
@@ -675,12 +682,12 @@ local function DestroyWaypoint(id)
         RefreshWaypointUI()
     end
 end
-local function SetDestroyWaypointFunc(func)
+function SetDestroyWaypointFunc(func)
     Sp3arParvus.DestroyWaypointFunc = func
 end
 SetDestroyWaypointFunc(DestroyWaypoint)
 
-local function CreateWaypoint(position)
+function CreateWaypoint(position)
     if not Flags["Waypoints/Enabled"] then return end
     
     WaypointCounter = WaypointCounter + 1
@@ -696,7 +703,7 @@ local function CreateWaypoint(position)
     part.Transparency = 1
     part.Size = Vector3.new(0.1, 0.1, 0.1)
     part.Position = position
-    part.Parent = Workspace
+    part.Parent = Services.Workspace
     
     -- Create Billboard
     local bg = Instance.new("BillboardGui")
@@ -778,7 +785,7 @@ local UI_THEME = {
 }
 
 -- Helper to ensure ScreenGui exists and is parented correctly
-local function EnsureScreenGui()
+function EnsureScreenGui()
     if ScreenGui and ScreenGui.Parent then
         return ScreenGui
     end
@@ -878,7 +885,7 @@ function UI.CreateWindow(title)
     TitleLabel.Parent = Sidebar
 
     -- Version
-    local VersionLabel = Instance.new("TextLabel")
+VersionLabel = Instance.new("TextLabel")
     VersionLabel.Size = UDim2.new(1, 0, 0, 20)
     VersionLabel.Position = UDim2.new(0, 15, 0, 28)
     VersionLabel.BackgroundTransparency = 1
@@ -890,7 +897,7 @@ function UI.CreateWindow(title)
     VersionLabel.Parent = Sidebar
 
     -- Tab Container
-    local TabContainer = Instance.new("ScrollingFrame")
+TabContainer = Instance.new("ScrollingFrame")
     TabContainer.Name = "Tabs"
     TabContainer.Size = UDim2.new(1, 0, 1, -60)
     TabContainer.Position = UDim2.new(0, 0, 0, 60)
@@ -899,14 +906,14 @@ function UI.CreateWindow(title)
     TabContainer.ScrollBarThickness = 2
     TabContainer.Parent = Sidebar
 
-    local uiLayout = Instance.new("UIListLayout")
+uiLayout = Instance.new("UIListLayout")
     uiLayout.Padding = UDim.new(0, 5)
     uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
     uiLayout.Parent = TabContainer
 
     -- Content Area
-    local ContentArea = Instance.new("Frame")
+ContentArea = Instance.new("Frame")
     ContentArea.Name = "Content"
     ContentArea.Size = UDim2.new(1, -170, 1, -20)
     ContentArea.Position = UDim2.new(0, 170, 0, 10)
@@ -947,7 +954,7 @@ function UI.CreateWindow(title)
         
         -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
         -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
-        TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        TrackConnection(Services.UserInputService.InputChanged:Connect(function(input)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
                 -- Direct position update - NO TWEEN CREATION
@@ -960,7 +967,7 @@ function UI.CreateWindow(title)
     MakeDraggable(MainFrame)
 
     -- Minimize Button (Main Window)
-    local MinButton = Instance.new("TextButton")
+MinButton = Instance.new("TextButton")
     MinButton.Name = "Minimize"
     MinButton.Size = UDim2.new(0, 30, 0, 30)
     MinButton.Position = UDim2.new(1, -30, 0, 0)
@@ -979,12 +986,12 @@ function UI.CreateWindow(title)
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
-            TweenService:Create(MainFrame, TWEEN_SMOOTH, {Size = UDim2.fromOffset(600, 30)}):Play()
+            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(600, 30)}):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
             MinButton.Text = "+"
         else
-            TweenService:Create(MainFrame, TWEEN_SMOOTH, {Size = OldSize}):Play()
+            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = OldSize}):Play()
             task.wait(0.1)
             ContentArea.Visible = true
             Sidebar.Visible = true
@@ -994,14 +1001,14 @@ function UI.CreateWindow(title)
 
     -- Toggle Logic (Right Shift)
     -- MEMORY LEAK FIX: Track this connection
-    TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.RightShift then
             UIState.Visible = not UIState.Visible
             MainFrame.Visible = UIState.Visible
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
                 MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TWEEN_BACK, {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
+                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
             end
         end
     end))
@@ -1010,7 +1017,7 @@ function UI.CreateWindow(title)
 end
 
 function UI.CreateTab(name, icon)
-    local TabButton = Instance.new("TextButton")
+TabButton = Instance.new("TextButton")
     TabButton.Name = name .. "Tab"
     TabButton.Size = UDim2.new(1, -20, 0, 32)
     TabButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1018,7 +1025,7 @@ function UI.CreateTab(name, icon)
     TabButton.Text = ""
     TabButton.Parent = UIState.TabContainer
 
-    local TabLabel = Instance.new("TextLabel")
+TabLabel = Instance.new("TextLabel")
     TabLabel.Size = UDim2.new(1, -20, 1, 0)
     TabLabel.Position = UDim2.new(0, 15, 0, 0)
     TabLabel.BackgroundTransparency = 1
@@ -1029,7 +1036,7 @@ function UI.CreateTab(name, icon)
     TabLabel.TextXAlignment = Enum.TextXAlignment.Left
     TabLabel.Parent = TabButton
     
-    local Indicator = Instance.new("Frame")
+Indicator = Instance.new("Frame")
     Indicator.Size = UDim2.new(0, 3, 0, 16)
     Indicator.Position = UDim2.new(0, 0, 0.5, -8)
     Indicator.BackgroundColor3 = UI_THEME.Accent
@@ -1039,7 +1046,7 @@ function UI.CreateTab(name, icon)
     local indCorner = Instance.new("UICorner"); indCorner.CornerRadius = UDim.new(1,0); indCorner.Parent = Indicator
 
     -- Page Frame
-    local Page = Instance.new("ScrollingFrame")
+Page = Instance.new("ScrollingFrame")
     Page.Name = name .. "Page"
     Page.Size = UDim2.new(1, 0, 1, 0)
     Page.BackgroundTransparency = 1
@@ -1048,13 +1055,13 @@ function UI.CreateTab(name, icon)
     Page.Visible = false
     Page.Parent = UIState.ContentArea
     
-    local layout = Instance.new("UIListLayout")
+layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = Page
     
-    local padding = Instance.new("UIPadding")
+padding = Instance.new("UIPadding")
     padding.PaddingRight = UDim.new(0, 5)
     padding.Parent = Page
 
@@ -1062,13 +1069,13 @@ function UI.CreateTab(name, icon)
     local function SelectTab()
         -- Deselect all
         for _, t in pairs(UIState.Tabs) do
-            TweenService:Create(t.Label, TWEEN_MEDIUM, {TextColor3 = UI_THEME.TextDark}):Play()
-            TweenService:Create(t.Indicator, TWEEN_MEDIUM, {BackgroundTransparency = 1}):Play()
+            TweenService:Create(t.Label, TWEENS.MEDIUM, {TextColor3 = UI_THEME.TextDark}):Play()
+            TweenService:Create(t.Indicator, TWEENS.MEDIUM, {BackgroundTransparency = 1}):Play()
             t.Page.Visible = false
         end
         -- Select current
-        TweenService:Create(TabLabel, TWEEN_MEDIUM, {TextColor3 = UI_THEME.Text}):Play()
-        TweenService:Create(Indicator, TWEEN_MEDIUM, {BackgroundTransparency = 0}):Play()
+        TweenService:Create(TabLabel, TWEENS.MEDIUM, {TextColor3 = UI_THEME.Text}):Play()
+        TweenService:Create(Indicator, TWEENS.MEDIUM, {BackgroundTransparency = 0}):Play()
         Page.Visible = true
         UIState.CurrentTab = name
     end
@@ -1088,12 +1095,12 @@ function UI.CreateTab(name, icon)
 end
 
 function UI.CreateSection(page, name)
-    local Container = Instance.new("Frame")
+Container = Instance.new("Frame")
     Container.Size = UDim2.new(1, 0, 0, 30)
     Container.BackgroundTransparency = 1
     Container.Parent = page
     
-    local Label = Instance.new("TextLabel")
+Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, 0, 1, 0)
     Label.Position = UDim2.new(0, 2, 0, 5)
     Label.BackgroundTransparency = 1
@@ -1106,13 +1113,13 @@ function UI.CreateSection(page, name)
 end
 
 function UI.CreateToggle(page, text, flag, default, callback)
-    local Frame = Instance.new("Frame")
+Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, 0, 0, 36)
     Frame.BackgroundColor3 = UI_THEME.Element
     Frame.BorderSizePixel = 0
     Frame.Parent = page
     
-    local corner = Instance.new("UICorner")
+corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = Frame
     
@@ -1127,7 +1134,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
     
-    local Switch = Instance.new("Frame")
+Switch = Instance.new("Frame")
     Switch.Size = UDim2.new(0, 44, 0, 22)
     Switch.AnchorPoint = Vector2.new(1, 0.5)
     Switch.Position = UDim2.new(1, -12, 0.5, 0)
@@ -1139,7 +1146,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
     swCorner.CornerRadius = UDim.new(1, 0)
     swCorner.Parent = Switch
     
-    local Knob = Instance.new("Frame")
+Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.AnchorPoint = Vector2.new(0, 0.5)
     Knob.Position = default and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
@@ -1151,7 +1158,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
     kbCorner.CornerRadius = UDim.new(1, 0)
     kbCorner.Parent = Knob
     
-    local Button = Instance.new("TextButton")
+Button = Instance.new("TextButton")
     Button.Size = UDim2.new(1, 0, 1, 0)
     Button.BackgroundTransparency = 1
     Button.Text = ""
@@ -1168,8 +1175,8 @@ function UI.CreateToggle(page, text, flag, default, callback)
         local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
         local targetPos = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
         
-        TweenService:Create(Switch, TWEEN_MEDIUM, {BackgroundColor3 = targetColor}):Play()
-        TweenService:Create(Knob, TWEEN_SMOOTH, {Position = targetPos}):Play()
+        TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(Knob, TWEENS.SMOOTH, {Position = targetPos}):Play()
         
         if callback then callback(state) end
     end))
@@ -1197,7 +1204,7 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
     
-    local ValueLabel = Instance.new("TextLabel")
+ValueLabel = Instance.new("TextLabel")
     ValueLabel.Size = UDim2.new(0, 60, 0, 24)
     ValueLabel.AnchorPoint = Vector2.new(1, 0)
     ValueLabel.Position = UDim2.new(1, -12, 0, 4)
@@ -1209,7 +1216,7 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
     ValueLabel.Parent = Frame
     
-    local Track = Instance.new("TextButton") -- Using TextButton for easier input handling area
+Track = Instance.new("TextButton") -- Using TextButton for easier input handling area
     Track.Text = ""
     Track.Size = UDim2.new(1, -24, 0, 4)
     Track.Position = UDim2.new(0, 12, 0, 36)
@@ -1222,7 +1229,7 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     tCorner.CornerRadius = UDim.new(1, 0)
     tCorner.Parent = Track
     
-    local Fill = Instance.new("Frame")
+Fill = Instance.new("Frame")
     Fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
     Fill.BackgroundColor3 = UI_THEME.Accent
     Fill.BorderSizePixel = 0
@@ -1232,7 +1239,7 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     fCorner.CornerRadius = UDim.new(1, 0)
     fCorner.Parent = Fill
     
-    local Circle = Instance.new("Frame")
+Circle = Instance.new("Frame")
     Circle.Size = UDim2.new(0, 12, 0, 12)
     Circle.AnchorPoint = Vector2.new(0.5, 0.5)
     Circle.Position = UDim2.new(1, 0, 0.5, 0)
@@ -1278,21 +1285,21 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
             end
             
             dragging = true
-            TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
+            TweenService:Create(Circle, TWEENS.FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
             Update(input)
             
             -- Handle dragging
-            activeSliderMoveConn = UserInputService.InputChanged:Connect(function(moveInput)
+            activeSliderMoveConn = Services.UserInputService.InputChanged:Connect(function(moveInput)
                 if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
                     Update(moveInput)
                 end
             end)
             
             -- Handle release
-            activeSliderEndConn = UserInputService.InputEnded:Connect(function(endInput)
+            activeSliderEndConn = Services.UserInputService.InputEnded:Connect(function(endInput)
                 if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
                     dragging = false
-                    TweenService:Create(Circle, TWEEN_FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
+                    TweenService:Create(Circle, TWEENS.FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
                     
                     -- Cleanup connections immediately
                     if activeSliderMoveConn then 
@@ -1334,22 +1341,22 @@ function UI.CreateButton(page, text, callback)
     -- MEMORY LEAK FIX: Track button connection
     TrackConnection(Button.MouseButton1Click:Connect(function()
         -- Click animation
-        TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        TweenService:Create(Button, TWEENS.INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
         task.wait(0.05)
-        TweenService:Create(Button, TWEEN_INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
+        TweenService:Create(Button, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
         if callback then callback() end
     end))
 end
 
 -- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
-local function GetPing()
+function GetPing()
     local success, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
     return success and ping * 1000 or 0
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
 -- FPS counter setup (RE-OPTIMIZED - uses proper frame counting via RenderStepped)
-local GetFPS
+GetFPS = nil
 do
     local frameCount = 0
     local lastTime = os.clock()
@@ -1373,19 +1380,19 @@ do
 end
 
 -- Rejoin current server
-local function Rejoin()
-    if #Players:GetPlayers() <= 1 then
+function Rejoin()
+    if #Services.Players:GetPlayers() <= 1 then
         LocalPlayer:Kick("\nSp3arParvus v2\nReconnecting...")
         task.wait(0.5)
-        TeleportService:Teleport(game.PlaceId)
+        Services.TeleportService:Teleport(game.PlaceId)
     else
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+        Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
     end
 end
 
 -- Track camera changes
-TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    local newCamera = Workspace.CurrentCamera
+TrackConnection(Services.Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    local newCamera = Services.Workspace.CurrentCamera
     if newCamera then
         Camera = newCamera
     end
@@ -1394,18 +1401,18 @@ end))
 
 -- FULLBRIGHT SYSTEM
 
-local function UpdateFullbright()
+function UpdateFullbright()
     if not Flags["Visuals/Fullbright"] then return end
     
-    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-    Lighting.Brightness = 2
-    Lighting.ClockTime = 12
-    Lighting.FogEnd = 1e5
-    Lighting.GlobalShadows = false
+    Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Services.Lighting.Brightness = 2
+    Services.Lighting.ClockTime = 12
+    Services.Lighting.FogEnd = 1e5
+    Services.Lighting.GlobalShadows = false
     
     -- Option: Also disable Atmosphere/Bloom if present for maximum clarity
-    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+    local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
     if atmosphere then
         atmosphere.Density = 0
     end
@@ -1491,7 +1498,7 @@ function GetCharacter(player)
 
     return character, rootPart
 end
-local function InEnemyTeam(Enabled, Player)
+function InEnemyTeam(Enabled, Player)
     if not Enabled then return true end
 
     -- Standard team check
@@ -1539,10 +1546,10 @@ local function InEnemyTeam(Enabled, Player)
 end
 
 -- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
-local lastCharCachePrune = 0
+lastCharCachePrune = 0
 local CHAR_CACHE_PRUNE_INTERVAL = 5.0 -- Prune every 5 seconds
 
-local function PruneCharCache()
+function PruneCharCache()
     local now = os.clock()
     if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
     lastCharCachePrune = now
@@ -1570,13 +1577,13 @@ local function PruneCharCache()
 end
 
 -- Forward declarations for cleanup functions (implemented after variable declarations)
-local ClearCandidateReferences
-local ClearSortCacheReferences
+ClearCandidateReferences = nil
+ClearSortCacheReferences = nil
 
 -- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
 -- This is a safety net in case PlayerRemoving didn't fire properly
 -- Note: ESPObjects is declared later in file, so we need nil check
-local function ValidateESPObjects()
+function ValidateESPObjects()
     if not ESPObjects then return end -- Safety: ESPObjects declared later in file
     for player, espData in pairs(ESPObjects) do
         -- Check if player is gone or orphaned
@@ -1609,7 +1616,7 @@ end
 local MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
 
 -- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
-local function SolveTrajectory(origin, velocity, time, gravity)
+function SolveTrajectory(origin, velocity, time, gravity)
     -- Safety check for NaN in time
     if time ~= time then return origin end
 
@@ -1630,7 +1637,7 @@ local function SolveTrajectory(origin, velocity, time, gravity)
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / GravityCorrection, 0)
+    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
     -- Sanity check: if predicted position is too far from origin, return original
@@ -1683,7 +1690,7 @@ end)()
 local SharedRaycastParams = RaycastParams.new()
 SharedRaycastParams.IgnoreWater = true
 
-local function Raycast(Origin, Direction, Filter)
+function Raycast(Origin, Direction, Filter)
     SharedRaycastParams.FilterDescendantsInstances = Filter
 
     -- Only set FilterType if we successfully cached a valid enum
@@ -1691,10 +1698,10 @@ local function Raycast(Origin, Direction, Filter)
         SharedRaycastParams.FilterType = CachedFilterType
     end
 
-    return Workspace:Raycast(Origin, Direction, SharedRaycastParams)
+    return Services.Workspace:Raycast(Origin, Direction, SharedRaycastParams)
 end
 
-local function WithinReach(Enabled, Distance, Limit)
+function WithinReach(Enabled, Distance, Limit)
     if not Enabled then return true end
     return Distance < Limit
 end
@@ -1702,7 +1709,7 @@ end
 -- PERFORMANCE FIX: Reusable filter table for visibility raycasts
 local OcclusionFilter = {nil, nil}
 
-local function ObjectOccluded(Enabled, Origin, Position, Object)
+function ObjectOccluded(Enabled, Origin, Position, Object)
     if not Enabled then return false end
     -- Safety check: Ensure Position is a valid Vector3 to prevent arithmetic errors
     if typeof(Position) ~= "Vector3" then return false end
@@ -1718,12 +1725,12 @@ end
 local ClosestResult = {nil, nil, nil, 0, 0, nil} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY, [6]=pos
 
 -- Hoisted comparator for candidate sorting
-local function CandidateSortFn(a, b)
+function CandidateSortFn(a, b)
     return a.mag < b.mag
 end
 
 -- Hoisted comparator for distance sorting
-local function DistanceSortFn(a, b)
+function DistanceSortFn(a, b)
     return a.distance < b.distance
 end
 
@@ -1780,19 +1787,19 @@ ClearSortCacheReferences = function()
 end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
-local function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, PredictionEnabled, StickyTarget)
+function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, PredictionEnabled, StickyTarget)
     if not Enabled then return nil end
     
     local CameraPosition = Camera.CFrame.Position
     
     -- Calculate crosshair/origin in Viewport space
     local crosshairX, crosshairY
-    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+    if Services.UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
         local viewportSize = Camera.ViewportSize
         crosshairX, crosshairY = viewportSize.X / 2, viewportSize.Y / 2
     else
-        local mouseLoc = UserInputService:GetMouseLocation()
-        local guiInset = GuiService:GetGuiInset()
+        local mouseLoc = Services.UserInputService:GetMouseLocation()
+        local guiInset = Services.GuiService:GetGuiInset()
         crosshairX, crosshairY = mouseLoc.X, mouseLoc.Y - guiInset.Y
     end
     
@@ -1828,7 +1835,7 @@ local function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Di
                      -- Prediction
                      if PredictionEnabled then
                          BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                            BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                            BodyPart.AssemblyLinearVelocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
                      end
 
                      local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
@@ -1881,7 +1888,7 @@ local function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Di
                 -- Prediction
                 if PredictionEnabled then
                     BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                       BodyPart.AssemblyLinearVelocity, Distance / ProjectileSpeed, ProjectileGravity)
+                       BodyPart.AssemblyLinearVelocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
                 end
 
                  local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
@@ -1990,32 +1997,32 @@ local function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Di
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
-local function AimAt(Hitbox, Sensitivity)
+function AimAt(Hitbox, Sensitivity)
     if not Hitbox then 
-        LastAimbotTarget = nil
+        AimState.LastAimbotTarget = nil
         return 
     end
     if not mousemoverel then return end
 
     local targetPart = Hitbox[3]
     if not targetPart or not targetPart.Parent then 
-        LastAimbotTarget = nil
+        AimState.LastAimbotTarget = nil
         return 
     end
 
     -- Stability Optimization: Mode-Switch Validation
     -- Prevent snaps when entering/exiting mouse-locked mode (e.g. scoping)
-    local currentMode = UserInputService.MouseBehavior
-    if currentMode ~= LastMouseMode then
-        LastMouseMode = currentMode
+    local currentMode = Services.UserInputService.MouseBehavior
+    if currentMode ~= AimState.LastMouseMode then
+        AimState.LastMouseMode = currentMode
         return
     end
 
     -- Stability Optimization: First-Frame Validation
     -- If the target changed this frame, skip movement to allow coordinate stabilization
     local currentTarget = Hitbox[1]
-    if currentTarget ~= LastAimbotTarget then
-        LastAimbotTarget = currentTarget
+    if currentTarget ~= AimState.LastAimbotTarget then
+        AimState.LastAimbotTarget = currentTarget
         return
     end
 
@@ -2029,7 +2036,7 @@ local function AimAt(Hitbox, Sensitivity)
     if dist < 1 then return end
 
     if Flags["Aimbot/Prediction"] then
-        targetPos = SolveTrajectory(targetPos, targetPart.AssemblyLinearVelocity, dist / ProjectileSpeed, ProjectileGravity)
+        targetPos = SolveTrajectory(targetPos, targetPart.AssemblyLinearVelocity, dist / AimState.ProjectileSpeed, AimState.ProjectileGravity)
     end
 
     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
@@ -2044,8 +2051,8 @@ local function AimAt(Hitbox, Sensitivity)
     if currentMode == Enum.MouseBehavior.LockCenter then
         originX, originY = viewportSize.X / 2, viewportSize.Y / 2
     else
-        local mouseLoc = UserInputService:GetMouseLocation()
-        local guiInset = GuiService:GetGuiInset()
+        local mouseLoc = Services.UserInputService:GetMouseLocation()
+        local guiInset = Services.GuiService:GetGuiInset()
         originX, originY = mouseLoc.X, mouseLoc.Y - guiInset.Y
     end
     
@@ -2101,15 +2108,15 @@ if hookmetamethod and checkcaller then
 
         -- Fast path: Check if we are indexing Mouse and if the index is handled
         if Self == Mouse and (Index == "Target" or Index == "Hit") then
-            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+            if AimState.SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
                 if SilentAimModeSet[Index] then
-                    local targetPart = SilentAim[3]
+                    local targetPart = AimState.SilentAim[3]
                     if targetPart and targetPart.Parent then
                         if Index == "Target" then
                             return targetPart
                         else
                             -- For "Hit", use predicted position if available
-                            local targetPos = SilentAim[6] or targetPart.Position
+                            local targetPos = AimState.SilentAim[6] or targetPart.Position
                             return CFrame.new(targetPos)
                         end
                     end
@@ -2133,11 +2140,11 @@ if hookmetamethod and checkcaller and getnamecallmethod then
 
         local Method = getnamecallmethod()
         if SilentAimModeSet[Method] then
-            if SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-                local targetPart = SilentAim[3]
+            if AimState.SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
+                local targetPart = AimState.SilentAim[3]
                 if targetPart and targetPart.Parent then
                     -- Use predicted position from ClosestResult if available
-                    local targetPos = SilentAim[6] or targetPart.Position
+                    local targetPos = AimState.SilentAim[6] or targetPart.Position
 
                     if Self == Workspace then
                         if Method == "Raycast" then
@@ -2173,17 +2180,19 @@ end
 local ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
 local PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
 
-local CLOSEST_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (always for closest)
-local NORMAL_COLOR = Color3.fromRGB(255, 255, 255)  -- White
-local TRACER_COLOR = Color3.fromRGB(0, 255, 255)    -- Cyan
-local OUTLINE_COLOR = Color3.fromRGB(255, 105, 180) -- Pink (same as closest player indicator)
+local COLORS = {
+    CLOSEST = Color3.fromRGB(255, 105, 180),
+    NORMAL = Color3.fromRGB(255, 255, 255),
+    TRACER = Color3.fromRGB(0, 255, 255),
+    OUTLINE = Color3.fromRGB(255, 105, 180),
+    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50)
+}
 
 -- Off-screen indicator settings
 local OFFSCREEN_EDGE_PADDING = 50  -- Pixels from screen edge
 local OFFSCREEN_ARROW_SIZE = 20    -- Size of the direction arrow
 -- PERFORMANCE: Max highlights to use (Roblox hard limit is 31, shared with other scripts)
 local MAX_OUTLINE_HIGHLIGHTS = 15 
-local OFFSCREEN_INDICATOR_COLOR = Color3.fromRGB(255, 200, 50) -- Yellow/gold for visibility
 
 -- Distance-based color zones (for tracker, but closest overrides to pink)
 local COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-2000 studs)
@@ -2199,9 +2208,9 @@ local CurrentTargetDistance = 0 -- Track distance for color coding
 local TrackerStrokeRef = nil -- Cached stroke reference to avoid repeated lookups
 
 -- Get color based on distance (Pink=Closest, Red≤2000, Yellow≤4000, Green>4000)
-local function GetDistanceColor(distance, isClosest)
+function GetDistanceColor(distance, isClosest)
     if isClosest then
-        return CLOSEST_COLOR -- Pink always overrides for closest player
+        return COLORS.CLOSEST -- Pink always overrides for closest player
     end
 
     if distance <= 2000 then
@@ -2216,15 +2225,15 @@ end
 -- Get a player's team color (returns white if no team)
 -- Wrapped in pcall to prevent errors if Team property access fails
 -- Get a player's team color (returns white if no team)
-local function GetTeamColor(player)
-    if not player then return NORMAL_COLOR end
+function GetTeamColor(player)
+    if not player then return COLORS.NORMAL end
     
     -- Optimized: No pcall needed for standard property access
     if player.Team then
         return player.TeamColor.Color
     end
     
-    return NORMAL_COLOR
+    return COLORS.NORMAL
 end
 
 -- PERFORMANCE: Cache camera data per-frame for off-screen calculations
@@ -2239,12 +2248,12 @@ local cachedCameraData = {
 }
 local CAMERA_CACHE_DURATION = 0.016 -- Cache for 1 frame (~60fps)
 
-local function UpdateCameraCache(now)
+function UpdateCameraCache(now)
     if (now - cachedCameraData.cacheTime) < CAMERA_CACHE_DURATION then
         return true -- Cache is still valid
     end
     
-    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return false end
     
     local cframe = Camera.CFrame
@@ -2261,7 +2270,7 @@ end
 -- Calculate screen edge position for off-screen indicator
 -- Returns the position clamped to screen edges and the angle toward the target
 -- PERFORMANCE: Uses cached camera data to avoid redundant property access
-local function GetEdgePosition(now, worldPosition)
+function GetEdgePosition(now, worldPosition)
     -- Update camera cache (shared across all players per frame)
     if not UpdateCameraCache(now) then return nil, nil, nil, false end
     
@@ -2353,7 +2362,7 @@ local function GetEdgePosition(now, worldPosition)
 end
 
 -- Create off-screen indicator UI element
-local function CreateOffscreenIndicator()
+function CreateOffscreenIndicator()
     local indicator = Instance.new("Frame")
     indicator.Name = "OffscreenIndicator"
     indicator.Size = UDim2.fromOffset(120, 50)
@@ -2370,7 +2379,7 @@ local function CreateOffscreenIndicator()
     corner.Parent = indicator
     
     local stroke = Instance.new("UIStroke")
-    stroke.Color = OFFSCREEN_INDICATOR_COLOR
+    stroke.Color = COLORS.OFFSCREEN_INDICATOR
     stroke.Thickness = 2
     stroke.Transparency = 0.3
     stroke.Parent = indicator
@@ -2382,7 +2391,7 @@ local function CreateOffscreenIndicator()
     arrow.Position = UDim2.new(0, 5, 0.5, -OFFSCREEN_ARROW_SIZE/2)
     arrow.BackgroundTransparency = 1
     arrow.Image = "rbxassetid://6034818372" -- Arrow/chevron icon
-    arrow.ImageColor3 = OFFSCREEN_INDICATOR_COLOR
+    arrow.ImageColor3 = COLORS.OFFSCREEN_INDICATOR
     arrow.ImageTransparency = 0
     arrow.ZIndex = 101
     arrow.Parent = indicator
@@ -2409,7 +2418,7 @@ local function CreateOffscreenIndicator()
     distLabel.Size = UDim2.new(1, -30, 0, 18)
     distLabel.Position = UDim2.fromOffset(28, 26)
     distLabel.BackgroundTransparency = 1
-    distLabel.TextColor3 = OFFSCREEN_INDICATOR_COLOR
+    distLabel.TextColor3 = COLORS.OFFSCREEN_INDICATOR
     distLabel.TextStrokeTransparency = 0
     distLabel.Font = Enum.Font.Gotham
     distLabel.TextSize = 11
@@ -2447,7 +2456,7 @@ local function CreateClosestPlayerTracker()
     corner.Parent = ClosestPlayerTrackerLabel
 
     local stroke = Instance.new("UIStroke")
-    stroke.Color = CLOSEST_COLOR
+    stroke.Color = COLORS.CLOSEST
     stroke.Thickness = 2
     stroke.Transparency = 0.5
     stroke.Parent = ClosestPlayerTrackerLabel
@@ -2473,7 +2482,7 @@ local function CreateClosestPlayerTracker()
     TrackerHeaderLabel.Name = "HeaderLabel"
     TrackerHeaderLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerHeaderLabel.BackgroundTransparency = 1
-    TrackerHeaderLabel.TextColor3 = CLOSEST_COLOR
+    TrackerHeaderLabel.TextColor3 = COLORS.CLOSEST
     TrackerHeaderLabel.Font = Enum.Font.GothamBold
     TrackerHeaderLabel.TextSize = 14
     TrackerHeaderLabel.Text = "Closest Player"
@@ -2485,7 +2494,7 @@ local function CreateClosestPlayerTracker()
     TrackerNameLabel.Name = "NameLabel"
     TrackerNameLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerNameLabel.BackgroundTransparency = 1
-    TrackerNameLabel.TextColor3 = NORMAL_COLOR
+    TrackerNameLabel.TextColor3 = COLORS.NORMAL
     TrackerNameLabel.Font = Enum.Font.GothamBold
     TrackerNameLabel.TextSize = 14
     TrackerNameLabel.Text = "Searching..."
@@ -2497,7 +2506,7 @@ local function CreateClosestPlayerTracker()
     TrackerDistanceLabel.Name = "DistanceLabel"
     TrackerDistanceLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerDistanceLabel.BackgroundTransparency = 1
-    TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+    TrackerDistanceLabel.TextColor3 = COLORS.CLOSEST
     TrackerDistanceLabel.Font = Enum.Font.GothamBold
     TrackerDistanceLabel.TextSize = 14
     TrackerDistanceLabel.Text = ""
@@ -2515,7 +2524,7 @@ local function CreateClosestPlayerTracker()
     minimizeBtn.Text = "−"
     minimizeBtn.Font = Enum.Font.GothamBold
     minimizeBtn.TextSize = 14
-    minimizeBtn.TextColor3 = CLOSEST_COLOR
+    minimizeBtn.TextColor3 = COLORS.CLOSEST
     minimizeBtn.Parent = ClosestPlayerTrackerLabel
 
     local btnCorner = Instance.new("UICorner")
@@ -2628,21 +2637,21 @@ local function UpdateClosestPlayerTracker()
             else
                 if TrackerNameLabel then
                     TrackerNameLabel.Text = "---"
-                    TrackerNameLabel.TextColor3 = NORMAL_COLOR
+                    TrackerNameLabel.TextColor3 = COLORS.NORMAL
                 end
                 if TrackerDistanceLabel then
                     TrackerDistanceLabel.Text = ""
-                    TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+                    TrackerDistanceLabel.TextColor3 = COLORS.CLOSEST
                 end
             end
         else
             if TrackerNameLabel then
                 TrackerNameLabel.Text = "No players nearby"
-                TrackerNameLabel.TextColor3 = NORMAL_COLOR
+                TrackerNameLabel.TextColor3 = COLORS.NORMAL
             end
             if TrackerDistanceLabel then
                 TrackerDistanceLabel.Text = ""
-                TrackerDistanceLabel.TextColor3 = CLOSEST_COLOR
+                TrackerDistanceLabel.TextColor3 = COLORS.CLOSEST
             end
             NearestPlayerRef = nil
         end
@@ -2658,7 +2667,7 @@ local PLAYER_PANEL_MAX_ROWS = 10
 
 -- Calculate direction angle for arrow (returns rotation in degrees)
 local function GetDirectionToPlayer(targetPosition)
-    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return 0 end
     
     local myChar = LocalPlayer.Character
@@ -3123,7 +3132,7 @@ local function CreateESP(player)
     nicknameLabel.Name = "NicknameLabel"
     nicknameLabel.Size = UDim2.new(1, 0, 0, 18)
     nicknameLabel.BackgroundTransparency = 1
-    nicknameLabel.TextColor3 = NORMAL_COLOR
+    nicknameLabel.TextColor3 = COLORS.NORMAL
     nicknameLabel.TextStrokeTransparency = 0
     nicknameLabel.Font = Enum.Font.GothamBold
     nicknameLabel.TextSize = 14
@@ -3135,7 +3144,7 @@ local function CreateESP(player)
     usernameLabel.Name = "UsernameLabel"
     usernameLabel.Size = UDim2.new(1, 0, 0, 18)
     usernameLabel.BackgroundTransparency = 1
-    usernameLabel.TextColor3 = NORMAL_COLOR
+    usernameLabel.TextColor3 = COLORS.NORMAL
     usernameLabel.TextStrokeTransparency = 0
     usernameLabel.Font = Enum.Font.GothamBold
     usernameLabel.TextSize = 14
@@ -3147,7 +3156,7 @@ local function CreateESP(player)
     distanceLabel.Name = "DistanceLabel"
     distanceLabel.Size = UDim2.new(1, 0, 0, 18)
     distanceLabel.BackgroundTransparency = 1
-    distanceLabel.TextColor3 = NORMAL_COLOR
+    distanceLabel.TextColor3 = COLORS.NORMAL
     distanceLabel.TextStrokeTransparency = 0
     distanceLabel.Font = Enum.Font.GothamBold
     distanceLabel.TextSize = 14
@@ -3164,7 +3173,7 @@ local function CreateESP(player)
     local tracer = Instance.new("Frame")
     tracer.Name = "Tracer"
     tracer.Visible = false
-    tracer.BackgroundColor3 = TRACER_COLOR
+    tracer.BackgroundColor3 = COLORS.TRACER
     tracer.BorderSizePixel = 0
     tracer.AnchorPoint = Vector2.new(0.5, 0.5) -- Center anchor for rotation
     EnsureScreenGui()
@@ -3188,7 +3197,7 @@ local ObjectPool = {
 local MAX_POOL_SIZE = 50 -- Prevent unbounded pool growth
 local ActiveHighlightCount = 0 -- Performance: Keep track of count instead of iterating
 
-local function GetPooledObject(poolName, className)
+function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
     while #pool > 0 do
         local obj = table.remove(pool)
@@ -3201,12 +3210,12 @@ local function GetPooledObject(poolName, className)
     return Instance.new(className)
 end
 
-local function _resetPooledObject(obj)
+function _resetPooledObject(obj)
     obj.Adornee = nil
     obj.Parent = PoolFolder
 end
 
-local function ReturnPooledObject(obj)
+function ReturnPooledObject(obj)
     if not obj then return end
     
     -- PERFORMANCE FIX: O(1) check with argument-passing pcall to avoid closures
@@ -3231,7 +3240,7 @@ local function ReturnPooledObject(obj)
     end
 end
 -- Helper to create/update Dot Indicator
-local function UpdateDot(player, character, storage, dotType, partName)
+function UpdateDot(player, character, storage, dotType, partName)
     local part = character:FindFirstChild(partName)
     if not part then
         if storage[dotType] then
@@ -3318,7 +3327,7 @@ local function UpdateDot(player, character, storage, dotType, partName)
     end
 end
 
-local function UpdatePlayerOutlines(player, character)
+function UpdatePlayerOutlines(player, character)
     if not character then return end
     
     -- Initialize outline storage for this player if needed
@@ -3375,9 +3384,9 @@ local function UpdatePlayerOutlines(player, character)
             local highlight = GetPooledObject("Highlights", "Highlight")
             highlight.Name = "PlayerOutlineHighlight"
             highlight.Adornee = character
-            highlight.FillColor = OUTLINE_COLOR
+            highlight.FillColor = COLORS.OUTLINE
             highlight.FillTransparency = 1 -- Invisible fill (Wireframe only)
-            highlight.OutlineColor = OUTLINE_COLOR
+            highlight.OutlineColor = COLORS.OUTLINE
             highlight.OutlineTransparency = 0 -- Fully visible outline
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Visible through walls
             highlight.Enabled = true
@@ -3401,8 +3410,8 @@ local function UpdatePlayerOutlines(player, character)
         if highlight.Parent ~= character then
             highlight.Parent = character
         end
-        if highlight.OutlineColor ~= OUTLINE_COLOR then
-            highlight.OutlineColor = OUTLINE_COLOR
+        if highlight.OutlineColor ~= COLORS.OUTLINE then
+            highlight.OutlineColor = COLORS.OUTLINE
         end
         if not highlight.Enabled then
             highlight.Enabled = true
@@ -3415,7 +3424,7 @@ local function UpdatePlayerOutlines(player, character)
 end
 
 -- Remove all outlines for a player (Optimized: Return to pool)
-local function RemovePlayerOutlines(player)
+function RemovePlayerOutlines(player)
     local storage = PlayerOutlineObjects[player]
     if not storage then return end
     
@@ -3447,7 +3456,7 @@ local function RemovePlayerOutlines(player)
 end
 
 -- Update ESP for a player (optimized - uses cached closest player)
-local function UpdateESP(now, player, isClosest)
+function UpdateESP(now, player, isClosest)
     if not Flags["ESP/Enabled"] then return end
 
     local espData = ESPObjects[player]
@@ -3710,7 +3719,7 @@ end
 
 
 -- Remove ESP for a player
-local function RemoveESP(player)
+function RemoveESP(player)
     -- Also remove player outlines
     RemovePlayerOutlines(player)
     
@@ -3749,7 +3758,7 @@ local PerfOriginalSize = UDim2.fromOffset(180, 115)
 
 local PerformanceRows = {}
 
-local function CreatePerformanceDisplay(parent)
+function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
@@ -3870,7 +3879,7 @@ local function CreatePerformanceDisplay(parent)
     end
 end
 
-local function UpdatePerformanceDisplay()
+function UpdatePerformanceDisplay()
     if not Flags["Performance/Enabled"] or not PerformanceLabel or PerfMinimized then return end
 
     -- Only update if visible (performance optimization)
@@ -3879,7 +3888,7 @@ local function UpdatePerformanceDisplay()
     local fps = floor(GetFPS())
     local ping = floor(GetPing())
     local playerCount = #GetPlayersCache()
-    local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
+    local memoryUsed = floor(Services.Stats:GetTotalMemoryUsageMb())
     local activeTargets = max(0, playerCount - 1)
 
     -- FPS color coding
@@ -3914,7 +3923,7 @@ local function UpdatePerformanceDisplay()
         PerformanceRows.Players.Text = tostring(playerCount)
     end
     if PerformanceRows.Aimbot then
-        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot)
+        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
         PerformanceRows.Aimbot.Text = aimbotActive and "LOCKED 🔒" or "IDLE ─"
         PerformanceRows.Aimbot.TextColor3 = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
     end
@@ -3939,10 +3948,10 @@ local sqrt  = math.sqrt
 local tan   = math.tan
 
 local ContextActionService = game:GetService("ContextActionService")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Players = Services.Players
+local RunService = Services.RunService
 local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
+local UserInputService = Services.UserInputService
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -4031,7 +4040,7 @@ local function fCurve(x)
 return (exp(K_CURVATURE*x) - 1)/(exp(K_CURVATURE) - 1)
 end
 
-local function fDeadzone(x)
+function fDeadzone(x)
 return fCurve((x - K_DEADZONE)/(1 - K_DEADZONE))
 end
 
@@ -4101,7 +4110,7 @@ keyboard.E - keyboard.Q + keyboard.I - keyboard.Y,
 keyboard.S - keyboard.W + keyboard.J - keyboard.U
 )*NAV_KEYBOARD_SPEED
 
-local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+local shift = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 
 return (kGamepad + kKeyboard)*(navSpeed*(shift and NAV_SHIFT_MUL or 1))
 end
@@ -4124,38 +4133,38 @@ return kGamepad + kMouse
 end
 
 do
-local function Keypress(action, state, input)
+function Keypress(action, state, input)
 keyboard[input.KeyCode.Name] = state == Enum.UserInputState.Begin and 1 or 0
 return Enum.ContextActionResult.Sink
 end
 
-local function GpButton(action, state, input)
+function GpButton(action, state, input)
 gamepad[input.KeyCode.Name] = state == Enum.UserInputState.Begin and 1 or 0
 return Enum.ContextActionResult.Sink
 end
 
-local function MousePan(action, state, input)
+function MousePan(action, state, input)
 local delta = input.Delta
 mouse.Delta = Vector2.new(-delta.y, -delta.x)
 return Enum.ContextActionResult.Sink
 end
 
-local function Thumb(action, state, input)
+function Thumb(action, state, input)
 gamepad[input.KeyCode.Name] = input.Position
 return Enum.ContextActionResult.Sink
 end
 
-local function Trigger(action, state, input)
+function Trigger(action, state, input)
 gamepad[input.KeyCode.Name] = input.Position.z
 return Enum.ContextActionResult.Sink
 end
 
-local function MouseWheel(action, state, input)
+function MouseWheel(action, state, input)
 mouse[input.UserInputType.Name] = -input.Position.z
 return Enum.ContextActionResult.Sink
 end
 
-local function Zero(t)
+function Zero(t)
 for k, v in pairs(t) do
 t[k] = v*0
 end
@@ -4193,7 +4202,7 @@ end
 end
 end
 
-local function GetFocusDistance(cameraFrame)
+function GetFocusDistance(cameraFrame)
 local znear = 0.1
 local viewport = Camera.ViewportSize
 local projy = 2*tan(cameraFov/2)
@@ -4225,7 +4234,7 @@ end
 
 ------------------------------------------------------------------------
 
-local function StepFreecam(dt)
+function StepFreecam(dt)
 local vel = velSpring:Update(dt, Input.Vel(dt))
 local pan = panSpring:Update(dt, Input.Pan(dt))
 local fov = fovSpring:Update(dt, Input.Fov(dt))
@@ -4341,7 +4350,7 @@ mouseBehavior = nil
 end
 end
 
-local function StartFreecam()
+function StartFreecam()
 local cameraCFrame = Camera.CFrame
 cameraRot = Vector2.new(cameraCFrame:toEulerAnglesYXZ())
 cameraPos = cameraCFrame.p
@@ -4356,7 +4365,7 @@ RunService:BindToRenderStep("Freecam", Enum.RenderPriority.Camera.Value, StepFre
 Input.StartCapture()
 end
 
-local function StopFreecam()
+function StopFreecam()
 Input.StopCapture()
 RunService:UnbindFromRenderStep("Freecam")
 PlayerState.Pop()
@@ -4367,7 +4376,7 @@ end
 do
 local enabled = false
 
-local function ToggleFreecam()
+function ToggleFreecam()
 if enabled then
 StopFreecam()
 else
@@ -4383,7 +4392,7 @@ _G.StopFreecamFunc = function()
     end
 end
 
-local function CheckMacro(macro)
+function CheckMacro(macro)
 for i = 1, #macro - 1 do
 if not UserInputService:IsKeyDown(macro[i]) then
 return
@@ -4392,7 +4401,7 @@ end
 if Flags["Settings/Freecam Toggle"] then ToggleFreecam() end
 end
 
-local function HandleActivationInput(action, state, input)
+function HandleActivationInput(action, state, input)
 if state == Enum.UserInputState.Begin then
 if input.KeyCode == FREECAM_MACRO_KB[#FREECAM_MACRO_KB] then
 CheckMacro(FREECAM_MACRO_KB)
@@ -4409,7 +4418,7 @@ ___InitializeFreecam()
 -- MAIN INITIALIZATION & CLEANUP
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
-local function Cleanup()
+function Cleanup()
     Sp3arParvus.Active = false
 
     -- Disconnect all tracked connections
@@ -4512,6 +4521,7 @@ local function Cleanup()
     table.clear(brokenIgnoreCache)
     brokenCacheDirty = true
     CTRL_HELD = false
+    LEFT_CTRL_HELD = false
     
     -- Cleanup hover highlight
     if hoverHL then
@@ -4520,9 +4530,9 @@ local function Cleanup()
     end
 
     -- Reset module-level state
-    SilentAim = nil
-    Aimbot = false
-    Trigger = false
+    AimState.SilentAim = nil
+    AimState.Aimbot = false
+    AimState.Trigger = false
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
@@ -4595,8 +4605,8 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) AimState.ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Silent Aim")
 UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", Flags["SilentAim/Enabled"])
@@ -4686,7 +4696,7 @@ UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", Fl
 end)
 
 -- Helper to setup player ESP and connections
-local function SetupPlayerESP(player)
+function SetupPlayerESP(player)
     if player == LocalPlayer then return end
     
     CreateESP(player)
@@ -4743,17 +4753,17 @@ local function SetupPlayerESP(player)
 end
 
 -- Initialize ESP for existing players
-for _, player in ipairs(Players:GetPlayers()) do
+for _, player in ipairs(Services.Players:GetPlayers()) do
     SetupPlayerESP(player)
 end
 
 -- Event Listeners
 -- Handle new players joining
-TrackConnection(Players.PlayerAdded:Connect(function(player)
+TrackConnection(Services.Players.PlayerAdded:Connect(function(player)
     AddPlayerToCache(player)
     SetupPlayerESP(player)
 end))
-TrackConnection(Players.PlayerRemoving:Connect(function(player) 
+TrackConnection(Services.Players.PlayerRemoving:Connect(function(player) 
     RemovePlayerFromCache(player)
     CharCache[player] = nil -- Clear character cache
     RemoveESP(player) 
@@ -4773,8 +4783,8 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
     
     -- Handle RMB for Aimbot/Trigger (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Aimbot = Flags["Aimbot/AimLock"]
-        Trigger = Flags["Aimbot/AutoFire"]
+        AimState.Aimbot = Flags["Aimbot/AimLock"]
+        AimState.Trigger = Flags["Aimbot/AutoFire"]
     end
     
     -- Br3ak3r: Ctrl+Click to break object
@@ -4880,8 +4890,8 @@ TrackConnection(UserInputService.InputEnded:Connect(function(input)
     end
     
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        Aimbot = false
-        Trigger = false
+        AimState.Aimbot = false
+        AimState.Trigger = false
     end
 end))
 
@@ -4889,7 +4899,7 @@ end))
 -- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
 local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
 
-local function GetCachedTarget()
+function GetCachedTarget()
     local now = os.clock()
     if CachedTarget and (now - CachedTargetTime) < TARGET_CACHE_DURATION then
         return CachedTarget
@@ -4906,29 +4916,29 @@ local function GetCachedTarget()
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
         Flags["Aimbot/Prediction"],
-        LastAimbotTarget -- Sticky target support
+        AimState.LastAimbotTarget -- Sticky target support
     )
     CachedTargetTime = now
     return CachedTarget
 end
 
 -- Aimbot & Silent Aim update loop (OPTIMIZED - uses cached target)
-local function UpdateAimAndSilent()
+function UpdateAimAndSilent()
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- Aimbot Clutch (Left Ctrl)
     if LEFT_CTRL_HELD then
-        SilentAim = nil
+        AimState.SilentAim = nil
         return
     end
 
     -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
     -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
-    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot) -- Aimbot global var acts as keybind state
+    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot) -- Aimbot global var acts as keybind state
     local silentActive = Flags["SilentAim/Enabled"]
     
     if not aimbotActive and not silentActive then
-        SilentAim = nil
+        AimState.SilentAim = nil
         return
     end
 
@@ -4936,7 +4946,7 @@ local function UpdateAimAndSilent()
     local target = GetCachedTarget()
     
     -- Silent Aim uses cached target
-    SilentAim = silentActive and target or nil
+    AimState.SilentAim = silentActive and target or nil
 
     -- Aimbot uses cached target
     if aimbotActive and target then
@@ -4949,11 +4959,11 @@ TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
 --   1. Trigger/AlwaysEnabled is true (always auto-fire when target in FOV), OR
---   2. RMB is held (Trigger=true) AND AutoFire is enabled
+--   2. RMB is held (AimState.Trigger=true) AND AutoFire is enabled
 local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
-        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (Trigger and Flags["Aimbot/AutoFire"])
+        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
         if triggerActive and not LEFT_CTRL_HELD then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
                 -- Get initial target
@@ -4985,13 +4995,13 @@ local triggerThread = task.spawn(function()
                             end
 
                             -- Break if target died, player left, trigger released, or clutch pressed
-                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or Trigger) and not LEFT_CTRL_HELD
+                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not LEFT_CTRL_HELD
                             if not targetStillValid or not shouldContinue then break end
                         end
 
                         if iterations >= MAX_TRIGGER_ITERATIONS then
                             warn("Trigger loop reached max iterations, resetting state")
-                            Trigger = false
+                            AimState.Trigger = false
                         end
                     end
 
@@ -5010,18 +5020,20 @@ end)
 TrackThread(triggerThread)
 
 -- ESP update loop (OPTIMIZED - throttled updates, no per-frame player iteration)
-local lastEspUpdate = 0
-local espUpdateRate = 0.2 -- ~5 FPS for ESP (reduced from 10fps - big perf gain on low-end devices)
-local lastTrackerUpdate = 0
-local trackerUpdateRate = 0.5 -- Tracker updates at ~2 FPS (reduced from 3fps)
-local lastBr3ak3rCleanup = 0
-local br3ak3rCleanupRate = 2.0 
-local lastHoverUpdate = 0
-local hoverUpdateRate = 0.033 -- Hover at 30fps
+local RATES = {
+    ESP_UPDATE = 0.2,
+    TRACKER_UPDATE = 0.5,
+    BR3AK3R_CLEANUP = 2.0,
+    HOVER_UPDATE = 0.033
+}
+lastEspUpdate = 0
+lastTrackerUpdate = 0
+lastBr3ak3rCleanup = 0
+lastHoverUpdate = 0
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
-local function UnifiedHeartbeat(dt)
+function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     UpdateFullbright()
@@ -5050,8 +5062,8 @@ local function UnifiedHeartbeat(dt)
     
     -- 1. ESP & Tracker Updates
     -- Check throttle FIRST before anything else to save perf
-    local shouldUpdateEsp = (now - lastEspUpdate) > espUpdateRate
-    local shouldUpdateTracker = (now - lastTrackerUpdate) > trackerUpdateRate
+    local shouldUpdateEsp = (now - lastEspUpdate) > RATES.ESP_UPDATE
+    local shouldUpdateTracker = (now - lastTrackerUpdate) > RATES.TRACKER_UPDATE
     
     -- Also force update the LOCKED target every frame for instant dot color feedback
     local forceUpdateTarget = nil
@@ -5108,13 +5120,13 @@ local function UnifiedHeartbeat(dt)
     
     -- 2. Br3ak3r Updates
     -- Update hover highlight (throttled to 30fps)
-    if (now - lastHoverUpdate) > hoverUpdateRate then
+    if (now - lastHoverUpdate) > RATES.HOVER_UPDATE then
         lastHoverUpdate = now
         UpdateBr3ak3rHover()
     end
     
     -- Periodic cleanup (throttled)
-    if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
+    if (now - lastBr3ak3rCleanup) > RATES.BR3AK3R_CLEANUP then
         lastBr3ak3rCleanup = now
         pruneBrokenSet()
         
