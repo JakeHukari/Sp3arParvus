@@ -317,6 +317,7 @@ local brokenCacheDirty = true
 local undoStack = {}        -- LIFO of {part, cc, ltm, t} for undo functionality
 local hoverHL = nil         -- Highlight for hover preview
 local CTRL_HELD = false     -- Track if Ctrl key is held
+local LEFT_CTRL_HELD = false -- Track if Left Ctrl is held (Clutch)
 
 -- Br3ak3r reusable RaycastParams (performance optimization)
 local br3akerRaycastParams = RaycastParams.new()
@@ -4763,7 +4764,10 @@ end))
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     -- Track Ctrl key state
-    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        LEFT_CTRL_HELD = true
+        CTRL_HELD = true
+    elseif input.KeyCode == Enum.KeyCode.RightControl then
         CTRL_HELD = true
     end
     
@@ -4848,6 +4852,15 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcesse
         elseif input.KeyCode == Enum.KeyCode.E then
             -- Ctrl+E: Load Any-Item-ESP
             loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
+        elseif input.KeyCode == Enum.KeyCode.R then
+            -- Ctrl+R: Rejoin
+            Rejoin()
+        elseif input.KeyCode == Enum.KeyCode.U then
+            -- Ctrl+U: Unload Script
+            Cleanup()
+        elseif input.KeyCode == Enum.KeyCode.F then
+            -- Ctrl+F: Toggle Fullbright
+            Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
         end
     end
 end))
@@ -4855,8 +4868,15 @@ end))
 -- CONSOLIDATED InputEnded Handler (includes Ctrl key tracking)
 TrackConnection(UserInputService.InputEnded:Connect(function(input)
     -- Track Ctrl key release
-    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
-        CTRL_HELD = false
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        LEFT_CTRL_HELD = false
+        if not UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+            CTRL_HELD = false
+        end
+    elseif input.KeyCode == Enum.KeyCode.RightControl then
+        if not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            CTRL_HELD = false
+        end
     end
     
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -4896,6 +4916,12 @@ end
 local function UpdateAimAndSilent()
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
+    -- Aimbot Clutch (Left Ctrl)
+    if LEFT_CTRL_HELD then
+        SilentAim = nil
+        return
+    end
+
     -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
     -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
     local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot) -- Aimbot global var acts as keybind state
@@ -4928,7 +4954,7 @@ local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
         local triggerActive = Flags["Trigger/AlwaysEnabled"] or (Trigger and Flags["Aimbot/AutoFire"])
-        if triggerActive then
+        if triggerActive and not LEFT_CTRL_HELD then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -4958,8 +4984,8 @@ local triggerThread = task.spawn(function()
                                 end
                             end
 
-                            -- Break if target died, player left, or trigger released (unless AlwaysEnabled)
-                            local shouldContinue = Flags["Trigger/AlwaysEnabled"] or Trigger
+                            -- Break if target died, player left, trigger released, or clutch pressed
+                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or Trigger) and not LEFT_CTRL_HELD
                             if not targetStillValid or not shouldContinue then break end
                         end
 
