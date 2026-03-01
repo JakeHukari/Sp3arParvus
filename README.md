@@ -47,14 +47,29 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Player ESP**: Full hitbox, nametag, distance tracking, team tracking, and tracer support.
 *   **Offscreen Indicators**: Never get snuck again.
 *   **Fullbright**: Complete control over workspace lighting and sky hues.
-*   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace (`Ctrl + E`).
+*   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
 
 ### Developer Utilities
-*   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls (`Ctrl + Left Click` to break, `Ctrl + Z` to undo).
-*   **Waypoint System**: Create and manage custom map markers (`Ctrl + Middle Mouse Button`).
-*   **Free-cam**: Cinematic exploration for creators or tactical scouting (`Ctrl + P`).
+*   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls
+*   **Waypoint System**: Create and manage custom map markers, visible from anywhere.
+*   **Free-cam**: Cinematic exploration for creators or tactical scouting.
 *   **Performance Monitor**: Real-time FPS, ping, and resource usage monitoring.
 
+## Shortcut Keys
+
+### Combat & Accuracy
+*   **Aimbot Clutch**: Aimbot is **ON** by default, holding `Ctrl` will disable any aim-lock, auto-shoot, or silent aim for the duration that `Ctrl` is being held   
+
+### Visuals & ESP
+*   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
+*   **Fullbright**: `Ctrl + F`
+*   **Free-cam**: `Ctrl + P`
+*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` again to **Destroy**  
+
+### Developer Utilities
+*   **Br3ak3r**: `Ctrl + Left Click` to **Break** local objects, `Ctrl + Z` to **Undo** recent object breaks
+*   **Rejoin Server**: `Ctrl + R`
+*   **Unload Sp3arParvus**: `Ctrl + U`  
 
 ## Community & Contributing
 
