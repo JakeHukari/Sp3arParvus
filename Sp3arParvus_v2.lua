@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.0.3" -- Updated Preformance Monitor, fps and ping now use more accurate values
+local VERSION = "3.1.3" -- Entirely erradicated the 'snapping' or 'bounce' issue in aimbot, plus a huge preformance overhaul.
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 local MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 local initStartTime = tick()
@@ -111,6 +111,7 @@ local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local TeleportService = game:GetService("TeleportService")
 local Stats = game:GetService("Stats")
+local GuiService = game:GetService("GuiService")
 
 -- resolve
 local function ResolveEnumItem(enumContainer, possibleNames)
@@ -204,6 +205,8 @@ end
 -- Aimbot state variables
 local Aimbot, SilentAim, Trigger = false, nil, false
 local ProjectileSpeed, ProjectileGravity, GravityCorrection = 3155, 196.2, 2
+local LastAimbotTarget = nil
+local LastMouseMode = nil
 
 -- Optimized Silent Aim Mode Lookup
 local SilentAimModeSet = {
@@ -356,6 +359,7 @@ local function GetMouseRay()
     if not Camera then Camera = Workspace.CurrentCamera end
     if not Camera then return nil end
     
+    -- Normalize to Viewport space (ScreenPointToRay expects Screen space which includes TopBar)
     local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
     if not ray then return nil end
     
@@ -1414,7 +1418,7 @@ end
 -- Get character and check health (Heavily Optimized with Cache)
 local CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst, Squad}
 
-local function GetCharacter(player)
+function GetCharacter(player)
     if not player then return nil end
     
     -- Fast path: Check cache
@@ -1486,8 +1490,6 @@ local function GetCharacter(player)
 
     return character, rootPart
 end
-
--- Check if player is on enemy team
 local function InEnemyTeam(Enabled, Player)
     if not Enabled then return true end
 
@@ -1777,16 +1779,21 @@ ClearSortCacheReferences = function()
 end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
-local function GetClosest(Enabled,
-    TeamCheck, VisibilityCheck, DistanceCheck,
-    DistanceLimit, FieldOfView, Priority, BodyParts,
-    PredictionEnabled
-)
+local function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, PredictionEnabled, StickyTarget)
     if not Enabled then return nil end
     
     local CameraPosition = Camera.CFrame.Position
-    local MouseLocation = UserInputService:GetMouseLocation()
-    local mouseX, mouseY = MouseLocation.X, MouseLocation.Y
+    
+    -- Calculate crosshair/origin in Viewport space
+    local crosshairX, crosshairY
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        local viewportSize = Camera.ViewportSize
+        crosshairX, crosshairY = viewportSize.X / 2, viewportSize.Y / 2
+    else
+        local mouseLoc = UserInputService:GetMouseLocation()
+        local guiInset = GuiService:GetGuiInset()
+        crosshairX, crosshairY = mouseLoc.X, mouseLoc.Y - guiInset.Y
+    end
     
     -- Reset candidate list
     CandidateCount = 0
@@ -1826,7 +1833,7 @@ local function GetClosest(Enabled,
                      local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
                      if OnScreen then
                          local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                         local dx, dy = screenX - mouseX, screenY - mouseY
+                         local dx, dy = screenX - crosshairX, screenY - crosshairY
                          local Magnitude = sqrt(dx*dx + dy*dy)
                          
                          if Magnitude < FieldOfView then
@@ -1879,7 +1886,7 @@ local function GetClosest(Enabled,
                  local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
                  if OnScreen then
                      local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                     local dx, dy = screenX - mouseX, screenY - mouseY
+                     local dx, dy = screenX - crosshairX, screenY - crosshairY
                      local Magnitude = sqrt(dx*dx + dy*dy)
                      
                      if Magnitude < FieldOfView then
@@ -1934,6 +1941,26 @@ local function GetClosest(Enabled,
         table.sort(CandidateList, CandidateSortFn)
     end
     
+    -- Stability Optimization: Target Stickiness
+    -- If we have a sticky target, check if it's still valid/visible/within FOV
+    if StickyTarget then
+        for i = 1, CandidateCount do
+            local entry = CandidateList[i]
+            if entry.ply == StickyTarget then
+                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+                    ClosestResult[1] = entry.ply
+                    ClosestResult[2] = entry.char
+                    ClosestResult[3] = entry.part
+                    ClosestResult[4] = entry.sx
+                    ClosestResult[5] = entry.sy
+                    ClosestResult[6] = entry.pos
+                    return ClosestResult
+                end
+                break -- Sticky target blocked or no longer valid
+            end
+        end
+    end
+
     -- Iterate sorted candidates and perform Raycast on the closest ones
     -- Stop at the FIRST visible candidate
     local limit = min(CandidateCount, MAX_CANDIDATES)
@@ -1963,34 +1990,86 @@ end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
 local function AimAt(Hitbox, Sensitivity)
-    if not Hitbox then return end
+    if not Hitbox then 
+        LastAimbotTarget = nil
+        return 
+    end
     if not mousemoverel then return end
+
+    local targetPart = Hitbox[3]
+    if not targetPart or not targetPart.Parent then 
+        LastAimbotTarget = nil
+        return 
+    end
+
+    -- Stability Optimization: Mode-Switch Validation
+    -- Prevent snaps when entering/exiting mouse-locked mode (e.g. scoping)
+    local currentMode = UserInputService.MouseBehavior
+    if currentMode ~= LastMouseMode then
+        LastMouseMode = currentMode
+        return
+    end
+
+    -- Stability Optimization: First-Frame Validation
+    -- If the target changed this frame, skip movement to allow coordinate stabilization
+    local currentTarget = Hitbox[1]
+    if currentTarget ~= LastAimbotTarget then
+        LastAimbotTarget = currentTarget
+        return
+    end
+
+    -- CRITICAL FIX: Re-calculate screen position from world-stable part
+    local targetPos = targetPart.Position
+    local cameraCFrame = Camera.CFrame
+    local cameraPos = cameraCFrame.Position
+    local dist = (targetPos - cameraPos).Magnitude
+
+    -- Safety: Don't aim at targets extremely close or behind
+    if dist < 1 then return end
+
+    if Flags["Aimbot/Prediction"] then
+        targetPos = SolveTrajectory(targetPos, targetPart.AssemblyLinearVelocity, dist / ProjectileSpeed, ProjectileGravity)
+    end
+
+    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
+    -- Depth check (Z > 0) is implicitly handled by OnScreen but made explicit for safety
+    if not OnScreen or ScreenPosition.Z <= 0 then return end
     
-    -- Optimization: Use cached screen position from Hitbox (ClosestResult)
-    -- This eliminates redundant WorldToViewportPoint and SolveTrajectory calls
-    local screenX, screenY = Hitbox[4], Hitbox[5]
+    local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
     
-    -- Determine mouse/crosshair location based on mouse behavior
-    local mouseX, mouseY
-    local mouseBehavior = UserInputService.MouseBehavior
-    
-    -- In LockCenter mode (shift-lock/first-person), use viewport center directly
-    -- This avoids stale GetMouseLocation() during mode transitions
-    if mouseBehavior == Enum.MouseBehavior.LockCenter then
-        local viewportSize = Camera.ViewportSize
-        mouseX = viewportSize.X / 2
-        mouseY = viewportSize.Y / 2
+    -- Determine current crosshair location in Viewport space
+    local originX, originY
+    local viewportSize = Camera.ViewportSize
+    if currentMode == Enum.MouseBehavior.LockCenter then
+        originX, originY = viewportSize.X / 2, viewportSize.Y / 2
     else
-        local MouseLocation = UserInputService:GetMouseLocation()
-        mouseX = MouseLocation.X
-        mouseY = MouseLocation.Y
+        local mouseLoc = UserInputService:GetMouseLocation()
+        local guiInset = GuiService:GetGuiInset()
+        originX, originY = mouseLoc.X, mouseLoc.Y - guiInset.Y
     end
     
     -- Calculate delta movement
-    local deltaX = (screenX - mouseX) * Sensitivity
-    local deltaY = (screenY - mouseY) * Sensitivity
+    local dx, dy = targetX - originX, targetY - originY
     
-    -- NaN Safety Check: If delta is invalid, abort immediately
+    -- Stability Optimization: FOV Re-Validation
+    -- Ensure target is still within the specific Aimbot FOV radius
+    local mag = sqrt(dx*dx + dy*dy)
+    if mag > Flags["Aimbot/FOV/Radius"] then return end
+
+    -- Apply Sensitivity/Smoothing
+    local deltaX = dx * Sensitivity
+    local deltaY = dy * Sensitivity
+    
+    -- Stability Optimization: Magnitude Clamping
+    -- Discard movements that exceed 15% of the viewport size in a single frame
+    local maxDeltaX = viewportSize.X * 0.15
+    local maxDeltaY = viewportSize.Y * 0.15
+
+    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
+        return
+    end
+
+    -- NaN Safety Check
     if deltaX ~= deltaX or deltaY ~= deltaY then
         return
     end
@@ -4806,7 +4885,8 @@ local function GetCachedTarget()
         max(Flags["Aimbot/FOV/Radius"], Flags["SilentAim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
-        Flags["Aimbot/Prediction"]
+        Flags["Aimbot/Prediction"],
+        LastAimbotTarget -- Sticky target support
     )
     CachedTargetTime = now
     return CachedTarget
