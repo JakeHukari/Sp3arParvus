@@ -336,7 +336,7 @@ Br3ak3rState = {
     LEFT_CTRL_HELD = false,
     br3akerRaycastParams = RaycastParams.new()
 }
-br3akerRaycastParams.IgnoreWater = true
+Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
 
 -- PERFORMANCE FIX: Cache filter type ONCE at startup
 Br3ak3rFilterType = (function()
@@ -348,7 +348,7 @@ Br3ak3rFilterType = (function()
 end)()
 
 if Br3ak3rFilterType then
-    br3akerRaycastParams.FilterType = Br3ak3rFilterType
+    Br3ak3rState.br3akerRaycastParams.FilterType = Br3ak3rFilterType
 end
 
 -- Rebuild the broken parts ignore cache for raycasts
