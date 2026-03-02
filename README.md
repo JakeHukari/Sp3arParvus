@@ -77,7 +77,7 @@ Any contributions are welcome! If you have ideas for new features or have found 
 - [Contributing Guidelines](.github\CONTRIBUTING.md)
 - [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md)
 - [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md)
-- [Licensed under MIT](LICENSE)
+- [Licensed under MIT](.github\LICENSE)
 
 
 ## Disclaimer
