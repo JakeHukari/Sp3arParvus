@@ -1,5 +1,5 @@
 -- Sp3arParvus
-VERSION = "3.1.3" -- Entirely erradicated the 'snapping' or 'bounce' issue in aimbot, plus a huge preformance overhaul.
+VERSION = "3.1.5" -- erradicated initial target acquisition "bounce" issue in aimlock, optimized register usage and added new shortcut keys (check readme)  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
