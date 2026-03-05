@@ -1,5 +1,5 @@
 -- Sp3arParvus
-VERSION = "3.1.5" -- erradicated initial target acquisition "bounce" issue in aimlock, optimized register usage and added new shortcut keys (check readme)  
+VERSION = "3.1.6" -- Preformance Update, Better load handling, ui color change   
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
