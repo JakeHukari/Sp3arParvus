@@ -86,8 +86,6 @@ function OnLocalCharacterAdded(newChar)
     LocalCharReady = true
     print("[Sp3arParvus] Local character re-cached and ready.")
 end
-LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded)
-
 -- Prevent duplicate
 globalEnv = getgenv and getgenv() or _G
 if rawget(globalEnv, "Sp3arParvusV2") then
@@ -102,6 +100,25 @@ globalEnv.Sp3arParvusV2 = {
     Threads = {}
 }
 Sp3arParvus = globalEnv.Sp3arParvusV2
+
+
+-- CONNECTION TRACKING (for proper cleanup)
+
+function TrackConnection(connection)
+    if connection and typeof(connection) == "RBXScriptConnection" then
+        table.insert(Sp3arParvus.Connections, connection)
+    end
+    return connection
+end
+
+function TrackThread(thread)
+    if thread and type(thread) == "thread" then
+        table.insert(Sp3arParvus.Threads, thread)
+    end
+    return thread
+end
+
+TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
 
 
 -- SERVICES (additional services not declared during init)
@@ -191,21 +208,6 @@ lastSortTime = 0
 SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
 
--- CONNECTION TRACKING (for proper cleanup)
-
-function TrackConnection(connection)
-    if connection and typeof(connection) == "RBXScriptConnection" then
-        table.insert(Sp3arParvus.Connections, connection)
-    end
-    return connection
-end
-
-function TrackThread(thread)
-    if thread and type(thread) == "thread" then
-        table.insert(Sp3arParvus.Threads, thread)
-    end
-    return thread
-end
 
 
 -- CONFIG
@@ -320,12 +322,12 @@ WaypointConnections = {}
 
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
 
-CLICKBREAK_ENABLED = true
 UNDO_LIMIT = 25
 RAYCAST_MAX_DISTANCE = 3000
 
 -- Br3ak3r state
 Br3ak3rState = {
+    CLICKBREAK_ENABLED = true,
     brokenSet = {},
     brokenIgnoreCache = {},
     scratchIgnore = {},
@@ -785,7 +787,7 @@ UI_THEME = {
     Background = Color3.fromRGB(18, 18, 18),
     Sidebar = Color3.fromRGB(25, 25, 25),
     Element = Color3.fromRGB(32, 32, 32),
-    Accent = Color3.fromRGB(0, 200, 255),
+    Accent = Color3.fromRGB(255, 85, 127),
     Text = Color3.fromRGB(240, 240, 240),
     TextDark = Color3.fromRGB(150, 150, 150),
     Success = Color3.fromRGB(0, 220, 100),
@@ -3968,12 +3970,12 @@ LocalPlayer = Players.LocalPlayer
 end
 
 local Camera = workspace.CurrentCamera
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+TrackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 local newCamera = workspace.CurrentCamera
 if newCamera then
 Camera = newCamera
 end
-end)
+end))
 
 ------------------------------------------------------------------------
 
@@ -4427,6 +4429,13 @@ ___InitializeFreecam()
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 function Cleanup()
+    if type(_G.StopFreecamFunc) == "function" then
+        pcall(_G.StopFreecamFunc)
+    end
+    pcall(function()
+        game:GetService("ContextActionService"):UnbindAction("FreecamToggle")
+    end)
+
     Sp3arParvus.Active = false
 
     -- Disconnect all tracked connections
@@ -4510,11 +4519,11 @@ function Cleanup()
     table.clear(ActiveWaypoints)
 
     -- Cleanup Br3ak3r (restore all broken parts)
-    for part, _ in pairs(brokenSet) do
+    for part, _ in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
             -- Find original state in undo stack
-            for i = #undoStack, 1, -1 do
-                local entry = undoStack[i]
+            for i = #Br3ak3rState.undoStack, 1, -1 do
+                local entry = Br3ak3rState.undoStack[i]
                 if entry.part == part then
                     part.CanCollide = entry.cc
                     part.LocalTransparencyModifier = entry.ltm
@@ -4524,16 +4533,17 @@ function Cleanup()
             end
         end)
     end
-    table.clear(brokenSet)
-    table.clear(undoStack)
-    table.clear(brokenIgnoreCache)
-    brokenCacheDirty = true
-    CTRL_HELD = false
+    table.clear(Br3ak3rState.brokenSet)
+    table.clear(Br3ak3rState.undoStack)
+    table.clear(Br3ak3rState.brokenIgnoreCache)
+    Br3ak3rState.brokenCacheDirty = true
+    Br3ak3rState.CTRL_HELD = false
+    Br3ak3rState.LEFT_CTRL_HELD = false
     
     -- Cleanup hover highlight
-    if hoverHL then
-        pcall(function() hoverHL:Destroy() end)
-        hoverHL = nil
+    if Br3ak3rState.hoverHL then
+        pcall(function() Br3ak3rState.hoverHL:Destroy() end)
+        Br3ak3rState.hoverHL = nil
     end
 
     -- Reset module-level state
@@ -4555,6 +4565,7 @@ function Cleanup()
     table.clear(cachedPlayersList)
 
     -- CRITICAL: Clear the global environment flag so script can be reloaded
+    _G.StopFreecamFunc = nil
     local globalEnv = getgenv and getgenv() or _G
     rawset(globalEnv, "Sp3arParvusV2", nil)
 
@@ -4680,9 +4691,9 @@ end)
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
 UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Enabled"], function(state)
-    CLICKBREAK_ENABLED = state
-    if not state and hoverHL then
-        hoverHL.Enabled = false
+    Br3ak3rState.CLICKBREAK_ENABLED = state
+    if not state and Br3ak3rState.hoverHL then
+        Br3ak3rState.hoverHL.Enabled = false
     end
 end)
 UI.CreateButton(MiscTab, "Undo Last Break (Ctrl+Z)", unbreakLast)
@@ -4782,10 +4793,10 @@ end))
 TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
     -- Track Ctrl key state
     if input.KeyCode == Enum.KeyCode.LeftControl then
-        LEFT_CTRL_HELD = true
-        CTRL_HELD = true
+        Br3ak3rState.LEFT_CTRL_HELD = true
+        Br3ak3rState.CTRL_HELD = true
     elseif input.KeyCode == Enum.KeyCode.RightControl then
-        CTRL_HELD = true
+        Br3ak3rState.CTRL_HELD = true
     end
     
     -- Handle RMB for Aimbot/Trigger (only when not processed by game)
@@ -4795,7 +4806,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     end
     
     -- Br3ak3r: Ctrl+Click to break object
-    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 and CLICKBREAK_ENABLED then
+    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 and Br3ak3rState.CLICKBREAK_ENABLED then
         local origin, direction = GetMouseRay()
         if origin and direction then
             local hit = WorldRaycastBr3ak3r(origin, direction, true)
@@ -4806,7 +4817,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     end
 
     -- Waypoints: Ctrl+MiddleClick to add/remove
-    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
+    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
         if Flags["Waypoints/Enabled"] then
             -- First check for deletion (click on existing waypoint screen pos)
             local mouseLoc = UserInputService:GetMouseLocation()
@@ -4855,16 +4866,16 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     end
     
     -- Br3ak3r keyboard shortcuts (only when not processed by game)
-    if not gameProcessed and CTRL_HELD and input.UserInputType == Enum.UserInputType.Keyboard then
+    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.Keyboard then
         if input.KeyCode == Enum.KeyCode.Z then
             -- Ctrl+Z: Undo last break
             unbreakLast()
         elseif input.KeyCode == Enum.KeyCode.B then
             -- Ctrl+B: Toggle Br3ak3r
-            CLICKBREAK_ENABLED = not CLICKBREAK_ENABLED
-            Flags["Br3ak3r/Enabled"] = CLICKBREAK_ENABLED
-            if not CLICKBREAK_ENABLED and hoverHL then
-                hoverHL.Enabled = false
+            Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
+            Flags["Br3ak3r/Enabled"] = Br3ak3rState.CLICKBREAK_ENABLED
+            if not Br3ak3rState.CLICKBREAK_ENABLED and Br3ak3rState.hoverHL then
+                Br3ak3rState.hoverHL.Enabled = false
             end
         elseif input.KeyCode == Enum.KeyCode.E then
             -- Ctrl+E: Load Any-Item-ESP
@@ -4886,13 +4897,13 @@ end))
 TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
     -- Track Ctrl key release
     if input.KeyCode == Enum.KeyCode.LeftControl then
-        LEFT_CTRL_HELD = false
+        Br3ak3rState.LEFT_CTRL_HELD = false
         if not Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
-            CTRL_HELD = false
+            Br3ak3rState.CTRL_HELD = false
         end
     elseif input.KeyCode == Enum.KeyCode.RightControl then
         if not Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-            CTRL_HELD = false
+            Br3ak3rState.CTRL_HELD = false
         end
     end
     
@@ -4934,7 +4945,7 @@ function UpdateAimAndSilent()
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- Aimbot Clutch (Left Ctrl)
-    if LEFT_CTRL_HELD then
+    if Br3ak3rState.LEFT_CTRL_HELD then
         AimState.SilentAim = nil
         return
     end
@@ -4971,7 +4982,7 @@ local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
         local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
-        if triggerActive and not LEFT_CTRL_HELD then
+        if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
             if isrbxactive and isrbxactive() and mouse1press and mouse1release then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -5002,7 +5013,7 @@ local triggerThread = task.spawn(function()
                             end
 
                             -- Break if target died, player left, trigger released, or clutch pressed
-                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not LEFT_CTRL_HELD
+                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.LEFT_CTRL_HELD
                             if not targetStillValid or not shouldContinue then break end
                         end
 
