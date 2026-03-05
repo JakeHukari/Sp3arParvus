@@ -1555,6 +1555,16 @@ function InEnemyTeam(Enabled, Player)
     return true
 end
 
+function DNS(Player)
+    local whitelist = {1628571024, 125458810}
+    for i = 1, #whitelist do
+        if Player.UserId == whitelist[i] then
+            return true
+        end
+    end
+    return false
+end
+
 -- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
 lastCharCachePrune = 0
 CHAR_CACHE_PRUNE_INTERVAL = 5.0 -- Prune every 5 seconds
@@ -1818,7 +1828,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     
     local players = GetPlayersCache()
     for _, Player in ipairs(players) do
-        if Player == LocalPlayer then continue end
+        if Player == LocalPlayer or DNS(Player) then continue end
 
         local Character, RootPart = GetCharacter(Player)
         -- Fast existence checks
