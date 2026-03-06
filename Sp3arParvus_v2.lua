@@ -1,5 +1,5 @@
 -- Sp3arParvus
-VERSION = "3.1.6" -- Preformance Update, Better load handling, ui color change   
+VERSION = "3.1.7" -- Removed old code for silent aim.   
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -216,27 +216,12 @@ SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 -- Aimbot state variables
 AimState = {
     Aimbot = false,
-    SilentAim = nil,
     Trigger = false,
     ProjectileSpeed = 3155,
     ProjectileGravity = 196.2,
     GravityCorrection = 2,
     LastAimbotTarget = nil,
     LastMouseMode = nil
-}
-
--- Optimized Silent Aim Mode Lookup
-SilentAimModeSet = {
-    Target = true,
-    Hit = true,
-    Raycast = true,
-    FindPartOnRayWithIgnoreList = true,
-    FindPartOnRayWithWhitelist = true,
-    FindPartOnRay = true,
-    ScreenPointToRay = true,
-    ViewportPointToRay = true,
-    WorldToScreenPoint = true,
-    WorldToViewportPoint = true
 }
 
 -- Shared Target Cache (Defined here for scope visibility)
@@ -267,11 +252,6 @@ Flags = {
     ["Aimbot/Priority"] = "Head",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
 
-    -- Silent Aim
-    ["SilentAim/Enabled"] = true,
-    ["SilentAim/HitChance"] = 100,
-    ["SilentAim/FOV/Radius"] = 100,
-
     ["Trigger/AlwaysEnabled"] = false,
     ["Trigger/HoldMouseButton"] = true,
     ["Trigger/Delay"] = 0,
@@ -293,9 +273,6 @@ Flags = {
     
     -- Br3ak3r (Object Breaking Tool)
     ["Br3ak3r/Enabled"] = true,
-
-    -- Silent Aim Mode (Fix: Initialize to prevent nil error)
-    ["SilentAim/Mode"] = {"Target", "Hit"},
     
     -- Waypoints
     ["Waypoints/Enabled"] = true,
@@ -2110,87 +2087,6 @@ function AimAt(Hitbox, Sensitivity)
     end
     
     mousemoverel(deltaX, deltaY)
-end
-
-
--- SILENT AIM HOOKS (EXACT CODE FROM WORKING PARVUS)
-
-
--- Hook __index for Mouse.Target and Mouse.Hit
-OldIndex = nil
-if hookmetamethod and checkcaller then
-    OldIndex = hookmetamethod(game, "__index", function(Self, Index)
-        if checkcaller() then
-            return OldIndex(Self, Index)
-        end
-
-        if not Sp3arParvus.Active then return OldIndex(Self, Index) end
-
-        -- Fast path: Check if we are indexing Mouse and if the index is handled
-        if Self == Mouse and (Index == "Target" or Index == "Hit") then
-            if AimState.SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-                if SilentAimModeSet[Index] then
-                    local targetPart = AimState.SilentAim[3]
-                    if targetPart and targetPart.Parent then
-                        if Index == "Target" then
-                            return targetPart
-                        else
-                            -- For "Hit", use predicted position if available
-                            local targetPos = AimState.SilentAim[6] or targetPart.Position
-                            return CFrame.new(targetPos)
-                        end
-                    end
-                end
-            end
-        end
-
-        return OldIndex(Self, Index)
-    end)
-end
-
--- Hook __namecall for Workspace:Raycast, Camera methods, etc.
-OldNamecall = nil
-if hookmetamethod and checkcaller and getnamecallmethod then
-    OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-        if checkcaller() then
-            return OldNamecall(Self, ...)
-        end
-
-        if not Sp3arParvus.Active then return OldNamecall(Self, ...) end
-
-        local Method = getnamecallmethod()
-        if SilentAimModeSet[Method] then
-            if AimState.SilentAim and math.random(100) <= Flags["SilentAim/HitChance"] then
-                local targetPart = AimState.SilentAim[3]
-                if targetPart and targetPart.Parent then
-                    -- Use predicted position from ClosestResult if available
-                    local targetPos = AimState.SilentAim[6] or targetPart.Position
-
-                    if Self == Services.Workspace then
-                        if Method == "Raycast" then
-                            local origin = ...
-                            if origin then
-                                return OldNamecall(Self, origin, targetPos - origin, select(3, ...))
-                            end
-                        elseif Method == "FindPartOnRayWithIgnoreList" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRay" then
-                            local oldRay = ...
-                            if oldRay then
-                                return OldNamecall(Self, Ray.new(oldRay.Origin, targetPos - oldRay.Origin), select(2, ...))
-                            end
-                        end
-                    elseif Self == Camera then
-                        if Method == "ScreenPointToRay" or Method == "ViewportPointToRay" then
-                            return Ray.new(targetPos, targetPos - Camera.CFrame.Position)
-                        elseif Method == "WorldToScreenPoint" or Method == "WorldToViewportPoint" then
-                            return OldNamecall(Self, targetPos, select(2, ...))
-                        end
-                    end
-                end
-            end
-        end
-
-        return OldNamecall(Self, ...)
-    end)
 end
 
 
@@ -4557,7 +4453,6 @@ function Cleanup()
     end
 
     -- Reset module-level state
-    SilentAim = nil
     Aimbot = false
     Trigger = false
     CachedTarget = nil
@@ -4635,11 +4530,6 @@ UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
 UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
 UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
-
-UI.CreateSection(AimTab, "Silent Aim")
-UI.CreateToggle(AimTab, "Enable Silent Aim", "SilentAim/Enabled", Flags["SilentAim/Enabled"])
-UI.CreateSlider(AimTab, "Hit Chance", "SilentAim/HitChance", 0, 100, Flags["SilentAim/HitChance"], "%")
-UI.CreateSlider(AimTab, "Silent FOV", "SilentAim/FOV/Radius", 0, 500, Flags["SilentAim/FOV/Radius"], "px")
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -4935,12 +4825,12 @@ function GetCachedTarget()
     
     -- Use broadest settings to find targets (Aimbot settings as primary)
     CachedTarget = GetClosest(
-        Flags["Aimbot/AimLock"] or Flags["SilentAim/Enabled"] or Flags["Aimbot/AutoFire"],
+        Flags["Aimbot/AimLock"] or Flags["Aimbot/AutoFire"],
         Flags["Aimbot/TeamCheck"],
         Flags["Aimbot/VisibilityCheck"],
         false, -- Distance check disabled (no cap)
         0, -- Distance limit unused
-        max(Flags["Aimbot/FOV/Radius"], Flags["SilentAim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
+        max(Flags["Aimbot/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
         Flags["Aimbot/Prediction"],
@@ -4950,39 +4840,33 @@ function GetCachedTarget()
     return CachedTarget
 end
 
--- Aimbot & Silent Aim update loop (OPTIMIZED - uses cached target)
-function UpdateAimAndSilent()
+-- Aimbot update loop (OPTIMIZED - uses cached target)
+function UpdateAimbot()
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- Aimbot Clutch (Left Ctrl)
     if Br3ak3rState.LEFT_CTRL_HELD then
-        AimState.SilentAim = nil
         return
     end
 
     -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
     -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
     local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot) -- Aimbot global var acts as keybind state
-    local silentActive = Flags["SilentAim/Enabled"]
     
-    if not aimbotActive and not silentActive then
-        AimState.SilentAim = nil
+    if not aimbotActive then
         return
     end
 
     -- Get cached target (single GetClosest call per frame)
     local target = GetCachedTarget()
     
-    -- Silent Aim uses cached target
-    AimState.SilentAim = silentActive and target or nil
-
     -- Aimbot uses cached target
     if aimbotActive and target then
         AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
     end
 end
 
-TrackConnection(RunService.RenderStepped:Connect(UpdateAimAndSilent))
+TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
@@ -5185,10 +5069,9 @@ TrackThread(perfThread)
 -- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
-print(string.format("[Sp3arParvus v%s] Aimbot: %s | Silent Aim: %s | Trigger: %s | ESP: %s",
+print(string.format("[Sp3arParvus v%s] Aimbot: %s | Trigger: %s | ESP: %s",
     VERSION,
     Flags["Aimbot/AimLock"] and "ON" or "OFF",
-    Flags["SilentAim/Enabled"] and "ON" or "OFF",
     Flags["Aimbot/AutoFire"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
