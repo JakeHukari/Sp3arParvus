@@ -84,6 +84,9 @@ function OnLocalCharacterAdded(newChar)
     until root or attempts > 15
     
     LocalCharReady = true
+    if typeof(RebuildBrokenIgnore) == "function" then
+        RebuildBrokenIgnore()
+    end
     print("[Sp3arParvus] Local character re-cached and ready.")
 end
 -- Prevent duplicate
@@ -176,6 +179,43 @@ local Mouse = LocalPlayer:GetMouse()
 abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
+local pi = math.pi
+local exp = math.exp
+
+local Spring = {} do
+    Spring.__index = Spring
+
+    function Spring.new(freq, pos)
+        local self = setmetatable({}, Spring)
+        self.f = freq
+        self.p = pos
+        self.v = pos * 0
+        return self
+    end
+
+    function Spring:Update(dt, goal)
+        local f = self.f * 2 * pi
+        local p0 = self.p
+        local v0 = self.v
+
+        local offset = goal - p0
+        local decay = exp(-f * dt)
+
+        local p1 = goal + (v0 * dt - offset * (f * dt + 1)) * decay
+        local v1 = (f * dt * (offset * f - v0) + v0) * decay
+
+        self.p = p1
+        self.v = v1
+
+        return p1
+    end
+
+    function Spring:Reset(pos)
+        self.p = pos
+        self.v = pos * 0
+    end
+end
+
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
     INSTANT = TweenInfo.new(0.05),
@@ -237,7 +277,8 @@ local AimState = {
     ProjectileGravity = 196.2,
     GravityCorrection = 2,
     LastAimbotTarget = nil,
-    LastMouseMode = nil
+    LastMouseMode = nil,
+    AimSpring = Spring.new(15, Vector2.new(0, 0))
 }
 
 -- Shared Target Cache (Defined here for scope visibility)
@@ -324,6 +365,7 @@ local Br3ak3rState = {
     brokenSet = {},
     brokenIgnoreCache = {},
     scratchIgnore = {},
+    persistentIgnore = {},
     brokenCacheDirty = true,
     undoStack = {},
     hoverHL = nil,
@@ -349,17 +391,25 @@ end
 
 -- Rebuild the broken parts ignore cache for raycasts
 function RebuildBrokenIgnore()
-    if not next(Br3ak3rState.brokenSet) then
-        table.clear(Br3ak3rState.brokenIgnoreCache)
-        Br3ak3rState.brokenCacheDirty = false
-        return
-    end
     table.clear(Br3ak3rState.brokenIgnoreCache)
+    table.clear(Br3ak3rState.persistentIgnore)
+
+    local pIndex = 1
+
+    -- Always prioritize ignoring the local character
+    local ch = LocalPlayer.Character
+    if ch then
+        Br3ak3rState.persistentIgnore[pIndex] = ch
+        pIndex = pIndex + 1
+    end
+
     local cacheIndex = 1
     for part, _ in pairs(Br3ak3rState.brokenSet) do
         if part and part:IsDescendantOf(Services.Workspace) then
             Br3ak3rState.brokenIgnoreCache[cacheIndex] = part
+            Br3ak3rState.persistentIgnore[pIndex] = part
             cacheIndex = cacheIndex + 1
+            pIndex = pIndex + 1
         end
     end
     Br3ak3rState.brokenCacheDirty = false
@@ -387,41 +437,22 @@ function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
         RebuildBrokenIgnore()
     end
     
-    local ignore = Br3ak3rState.scratchIgnore
-    -- Optimization: Instead of clearing and repopulating every frame, 
-    -- we manage the table indices directly if possible, or use table.clear
-    table.clear(ignore)
+    local ignore = Br3ak3rState.persistentIgnore
     
-    local ignoreCount = 0
-    
-    -- Always prioritize ignoring the local character
-    if ignoreLocalChar then
-        local ch = LocalPlayer.Character
-        if ch then
-            ignoreCount = ignoreCount + 1
-            ignore[ignoreCount] = ch
-        end
-    end
-    
-    -- Add extra ignore items
+    -- If extraIgnore is provided, we must merge (performance cost, but rare)
     if extraIgnore then
-        for i = 1, #extraIgnore do
-            local item = extraIgnore[i]
-            if item then
-                ignoreCount = ignoreCount + 1
-                ignore[ignoreCount] = item
-            end
+        ignore = Br3ak3rState.scratchIgnore
+        table.clear(ignore)
+
+        local count = 0
+        for i = 1, #Br3ak3rState.persistentIgnore do
+            count = count + 1
+            ignore[count] = Br3ak3rState.persistentIgnore[i]
         end
-    end
-    
-    -- Add broken parts to ignore list
-    -- Use cached length to avoid repeated table length lookups
-    local brokenCacheLen = #Br3ak3rState.brokenIgnoreCache
-    for i = 1, brokenCacheLen do
-        local item = Br3ak3rState.brokenIgnoreCache[i]
-        if item then
-            ignoreCount = ignoreCount + 1
-            ignore[ignoreCount] = item
+
+        for i = 1, #extraIgnore do
+            count = count + 1
+            ignore[count] = extraIgnore[i]
         end
     end
     
@@ -821,7 +852,7 @@ function UI.CreateWindow(title)
     EnsureScreenGui()
 
     -- Main Container
-    local MainFrame = Instance.new("Frame")
+    local MainFrame = Instance.new("CanvasGroup")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.fromOffset(600, 400)
     MainFrame.Position = UDim2.fromScale(0.5, 0.5)
@@ -829,6 +860,7 @@ function UI.CreateWindow(title)
     MainFrame.BackgroundColor3 = UI_THEME.Background
     MainFrame.BorderSizePixel = 0
     MainFrame.Visible = UIState.Visible
+    MainFrame.GroupTransparency = UIState.Visible and 0 or 1
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
 
@@ -929,6 +961,22 @@ function UI.CreateWindow(title)
     UIState.ContentArea = ContentArea
     UIState.TabContainer = TabContainer
 
+    -- UI Fading Helper
+    local function FadeUI(visible)
+        if visible then
+            MainFrame.Visible = true
+            TweenService:Create(MainFrame, TWEENS.MEDIUM, {GroupTransparency = 0}):Play()
+        else
+            local tween = TweenService:Create(MainFrame, TWEENS.MEDIUM, {GroupTransparency = 1})
+            TrackConnection(tween.Completed:Connect(function()
+                if not UIState.Visible then
+                    MainFrame.Visible = false
+                end
+            end))
+            tween:Play()
+        end
+    end
+
     -- Dragging Logic Helper
     -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
     -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
@@ -962,7 +1010,18 @@ function UI.CreateWindow(title)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
                 -- Direct position update - NO TWEEN CREATION
-                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                local newX = startPos.X.Offset + delta.X
+                local newY = startPos.Y.Offset + delta.Y
+
+                -- Clamp to screen bounds
+                local viewportSize = Camera.ViewportSize
+                local anchorX = Frame.AnchorPoint.X * Frame.AbsoluteSize.X
+                local anchorY = Frame.AnchorPoint.Y * Frame.AbsoluteSize.Y
+
+                newX = math.clamp(newX, anchorX, viewportSize.X - (Frame.AbsoluteSize.X - anchorX))
+                newY = math.clamp(newY, anchorY, viewportSize.Y - (Frame.AbsoluteSize.Y - anchorY))
+
+                Frame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
             end
         end))
     end
@@ -1008,10 +1067,9 @@ function UI.CreateWindow(title)
     TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.RightShift then
             UIState.Visible = not UIState.Visible
-            MainFrame.Visible = UIState.Visible
+            FadeUI(UIState.Visible)
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
-                MainFrame.Visible = true 
                 TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
             end
         end
@@ -1168,6 +1226,14 @@ function UI.CreateToggle(page, text, flag, default, callback)
     Button.Text = ""
     Button.Parent = Frame
     
+    -- Hover effect
+    TrackConnection(Button.MouseEnter:Connect(function()
+        TweenService:Create(Frame, TWEENS.FAST, {BackgroundColor3 = UI_THEME.Element:Lerp(Color3.new(1, 1, 1), 0.05)}):Play()
+    end))
+    TrackConnection(Button.MouseLeave:Connect(function()
+        TweenService:Create(Frame, TWEENS.FAST, {BackgroundColor3 = UI_THEME.Element}):Play()
+    end))
+
     Flags[flag] = default
     
     -- MEMORY LEAK FIX: Track button connection
@@ -1342,6 +1408,14 @@ function UI.CreateButton(page, text, callback)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = Button
     
+    -- Hover effect
+    TrackConnection(Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, TWEENS.FAST, {BackgroundColor3 = UI_THEME.Accent:Lerp(Color3.new(1, 1, 1), 0.1)}):Play()
+    end))
+    TrackConnection(Button.MouseLeave:Connect(function()
+        TweenService:Create(Button, TWEENS.FAST, {BackgroundColor3 = UI_THEME.Accent}):Play()
+    end))
+
     -- MEMORY LEAK FIX: Track button connection
     TrackConnection(Button.MouseButton1Click:Connect(function()
         -- Click animation
@@ -1731,15 +1805,35 @@ end
 -- PERFORMANCE FIX: Reusable filter table for visibility raycasts
 OcclusionFilter = {nil, nil}
 
-function ObjectOccluded(Enabled, Origin, Position, Object)
+function ObjectOccluded(Enabled, Origin, Position, Object, Player)
     if not Enabled then return false end
     -- Safety check: Ensure Position is a valid Vector3 to prevent arithmetic errors
     if typeof(Position) ~= "Vector3" then return false end
     
+    -- Staggered Raycasting: Cache visibility results for ~0.1s (~6 frames)
+    if Player then
+        local cache = CharCache[Player]
+        if cache then
+            local now = os.clock()
+            if cache.LastVisCheck and (now - cache.LastVisCheck) < 0.1 then
+                return cache.LastVisResult
+            end
+
+            -- Reuse filter table instead of creating new one every call
+            OcclusionFilter[1] = Object
+            OcclusionFilter[2] = LocalPlayer.Character
+            local result = Raycast(Origin, Position - Origin, OcclusionFilter) ~= nil
+
+            cache.LastVisCheck = now
+            cache.LastVisResult = result
+            return result
+        end
+    end
+
     -- Reuse filter table instead of creating new one every call
     OcclusionFilter[1] = Object
     OcclusionFilter[2] = LocalPlayer.Character
-    return Raycast(Origin, Position - Origin, OcclusionFilter)
+    return Raycast(Origin, Position - Origin, OcclusionFilter) ~= nil
 end
 
 -- OPTIMIZED: Reusable result table to avoid allocations per frame
@@ -1981,7 +2075,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
-                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char, entry.ply) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
                     ClosestResult[3] = entry.part
@@ -2004,7 +2098,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         if not entry then continue end
         
         -- Lazy Visibility Check
-        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char, entry.ply) then
             continue -- Blocked, try next closest
         end
         
@@ -2023,9 +2117,10 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
-function AimAt(Hitbox, Sensitivity)
+function AimAt(Hitbox, Sensitivity, dt)
     if not Hitbox then 
         AimState.LastAimbotTarget = nil
+        AimState.AimSpring:Reset(Vector2.new(0, 0))
         return 
     end
     if not mousemoverel then return end
@@ -2049,6 +2144,7 @@ function AimAt(Hitbox, Sensitivity)
     local currentTarget = Hitbox[1]
     if currentTarget ~= AimState.LastAimbotTarget then
         AimState.LastAimbotTarget = currentTarget
+        AimState.AimSpring:Reset(Vector2.new(0, 0))
         return
     end
 
@@ -2093,8 +2189,13 @@ function AimAt(Hitbox, Sensitivity)
     if mag > Flags["Aimbot/FOV/Radius"] then return end
 
     -- Apply Sensitivity/Smoothing
-    local deltaX = dx * Sensitivity
-    local deltaY = dy * Sensitivity
+    -- Humanization: Use dynamic smoothing with Spring
+    local smoothing = math.clamp(Sensitivity, 0.01, 1)
+    AimState.AimSpring.f = smoothing * 25 -- Map 0-1 sensitivity to 0-25 frequency
+
+    local smoothedDelta = AimState.AimSpring:Update(dt, Vector2.new(dx, dy))
+    local deltaX = smoothedDelta.X
+    local deltaY = smoothedDelta.Y
     
     -- Stability Optimization: Magnitude Clamping
     -- Discard movements that exceed 15% of the viewport size in a single frame
@@ -3932,39 +4033,6 @@ local FOV_STIFFNESS = 4.0
 
 ------------------------------------------------------------------------
 
-local Spring = {} do
-Spring.__index = Spring
-
-function Spring.new(freq, pos)
-local self = setmetatable({}, Spring)
-self.f = freq
-self.p = pos
-self.v = pos*0
-return self
-end
-
-function Spring:Update(dt, goal)
-local f = self.f*2*pi
-local p0 = self.p
-local v0 = self.v
-
-local offset = goal - p0
-local decay = exp(-f*dt)
-
-local p1 = goal + (v0*dt - offset*(f*dt + 1))*decay
-local v1 = (f*dt*(offset*f - v0) + v0)*decay
-
-self.p = p1
-self.v = v1
-
-return p1
-end
-
-function Spring:Reset(pos)
-self.p = pos
-self.v = pos*0
-end
-end
 
 ------------------------------------------------------------------------
 
@@ -4875,7 +4943,7 @@ function GetCachedTarget()
 end
 
 -- Aimbot update loop (OPTIMIZED - uses cached target)
-function UpdateAimbot()
+function UpdateAimbot(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- Aimbot Clutch (Left Ctrl)
@@ -4896,11 +4964,15 @@ function UpdateAimbot()
     
     -- Aimbot uses cached target
     if aimbotActive and target then
-        AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+        AimAt(target, Flags["Aimbot/Sensitivity"] / 100, dt)
+    else
+        AimState.AimSpring:Reset(Vector2.new(0, 0))
     end
 end
 
-TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
+TrackConnection(RunService.RenderStepped:Connect(function(dt)
+    UpdateAimbot(dt)
+end))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
