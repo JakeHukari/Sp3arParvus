@@ -1,5 +1,5 @@
 -- Sp3arParvus
-VERSION = "3.1.7" -- Removed old code for silent aim.   
+local VERSION = "3.1.7" -- Removed old code for silent aim.
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -22,7 +22,7 @@ print("[Sp3arParvus] LocalPlayer ready: " .. LocalPlayer.Name)
 
 -- (with timeout)
 print("[Sp3arParvus] Waiting for Character...")
-character = LocalPlayer.Character
+local character = LocalPlayer.Character
 if not character then
     character = LocalPlayer.CharacterAdded:Wait()
 end
@@ -49,7 +49,7 @@ print("[Sp3arParvus] Camera ready!")
 
 -- (critical for avoiding CameraSettings errors)
 print("[Sp3arParvus] Waiting for PlayerScripts to initialize...")
-playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
 if not playerScripts then
     repeat 
         task.wait(0.1) 
@@ -65,7 +65,7 @@ task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
 -- RESPAWN HANDLING
-LocalCharReady = true
+local LocalCharReady = true
 function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
     -- Invalidate caches
@@ -105,6 +105,14 @@ Sp3arParvus = globalEnv.Sp3arParvusV2
 -- CONNECTION TRACKING (for proper cleanup)
 
 function TrackConnection(connection)
+    -- Routine cleanup of dead connections to prevent memory leak
+    for i = #Sp3arParvus.Connections, 1, -1 do
+        local conn = Sp3arParvus.Connections[i]
+        if not conn or not conn.Connected then
+            table.remove(Sp3arParvus.Connections, i)
+        end
+    end
+
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
     end
@@ -112,6 +120,14 @@ function TrackConnection(connection)
 end
 
 function TrackThread(thread)
+    -- Routine cleanup of dead threads to prevent memory leak
+    for i = #Sp3arParvus.Threads, 1, -1 do
+        local t = Sp3arParvus.Threads[i]
+        if not t or coroutine.status(t) == "dead" then
+            table.remove(Sp3arParvus.Threads, i)
+        end
+    end
+
     if thread and type(thread) == "thread" then
         table.insert(Sp3arParvus.Threads, thread)
     end
@@ -134,7 +150,7 @@ local Services = {
     Workspace = game:GetService("Workspace"),
     Players = game:GetService("Players")
 }
-RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players = 
+local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players =
     Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players
 
 -- resolve
@@ -153,15 +169,15 @@ function ResolveEnumItem(enumContainer, possibleNames)
     return nil
 end
 
-Camera = Services.Workspace.CurrentCamera
-Mouse = LocalPlayer:GetMouse()
+local Camera = Services.Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
 abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
-TWEENS = {
+local TWEENS = {
     INSTANT = TweenInfo.new(0.05),
     FAST = TweenInfo.new(0.1),
     MEDIUM = TweenInfo.new(0.2),
@@ -171,7 +187,7 @@ TWEENS = {
 }
 
 -- Cached players list (Event-based caching prevents allocation per frame)
-cachedPlayersList = {}
+local cachedPlayersList = {}
 
 -- Initialize cache immediately
 function InitPlayerCache()
@@ -214,7 +230,7 @@ SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
 
 -- Aimbot state variables
-AimState = {
+local AimState = {
     Aimbot = false,
     Trigger = false,
     ProjectileSpeed = 3155,
@@ -225,8 +241,8 @@ AimState = {
 }
 
 -- Shared Target Cache (Defined here for scope visibility)
-CachedTarget = nil
-CachedTargetTime = 0
+local CachedTarget = nil
+local CachedTargetTime = 0
 
 -- Known body parts for targeting
 KnownBodyParts = {
@@ -234,7 +250,7 @@ KnownBodyParts = {
 }
 
 -- Settings/Flags storage
-Flags = {
+local Flags = {
     -- Ballistics
     ["Prediction/Velocity"] = 3155,
     ["Prediction/GravityForce"] = 196.2,
@@ -303,7 +319,7 @@ UNDO_LIMIT = 25
 RAYCAST_MAX_DISTANCE = 3000
 
 -- Br3ak3r state
-Br3ak3rState = {
+local Br3ak3rState = {
     CLICKBREAK_ENABLED = true,
     brokenSet = {},
     brokenIgnoreCache = {},
@@ -313,6 +329,7 @@ Br3ak3rState = {
     hoverHL = nil,
     CTRL_HELD = false,
     LEFT_CTRL_HELD = false,
+    RIGHT_CTRL_HELD = false,
     br3akerRaycastParams = RaycastParams.new()
 }
 Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
@@ -750,9 +767,9 @@ end
 
 
 TweenService = Services.TweenService
-ScreenGui = nil -- Define at top level to be accessible to all functions
-UI = {}
-UIState = {
+local ScreenGui = nil -- Define at top level to be accessible to all functions
+local UI = {}
+local UIState = {
     MainFrame = nil,
     Tabs = {},
     CurrentTab = nil,
@@ -1369,7 +1386,6 @@ end
 -- Rejoin current server
 function Rejoin()
     if #Services.Players:GetPlayers() <= 1 then
-        LocalPlayer:Kick("\nSp3arParvus v2\nReconnecting...")
         task.wait(0.5)
         TeleportService:Teleport(game.PlaceId)
     else
@@ -1558,14 +1574,23 @@ function PruneCharCache()
     for player, cache in pairs(CharCache) do
         -- Remove if player left the game
         if not playerMap[player] or not player.Parent then
+            if AimState.LastAimbotTarget == player then
+                AimState.LastAimbotTarget = nil
+            end
             CharCache[player] = nil
         -- Clear character-linked fields if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
+            if AimState.LastAimbotTarget == player then
+                AimState.LastAimbotTarget = nil
+            end
             cache.Char = nil
             cache.Root = nil
             cache.Humanoid = nil
             cache.HealthInst = nil
         elseif cache.Root and not cache.Root.Parent then
+            if AimState.LastAimbotTarget == player then
+                AimState.LastAimbotTarget = nil
+            end
             cache.Root = nil
             cache.Humanoid = nil
             cache.HealthInst = nil
@@ -1831,8 +1856,10 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                  if not DistanceCheck or Distance < DistanceLimit then
                      -- Prediction
                      if PredictionEnabled then
+                         local velocity = BodyPart.AssemblyLinearVelocity
+                         if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
                          BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                            BodyPart.AssemblyLinearVelocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+                            velocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
                      end
 
                      local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
@@ -1884,8 +1911,10 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
                 -- Prediction
                 if PredictionEnabled then
+                    local velocity = BodyPart.AssemblyLinearVelocity
+                    if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
                     BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                       BodyPart.AssemblyLinearVelocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+                       velocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
                 end
 
                  local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
@@ -2033,7 +2062,9 @@ function AimAt(Hitbox, Sensitivity)
     if dist < 1 then return end
 
     if Flags["Aimbot/Prediction"] then
-        targetPos = SolveTrajectory(targetPos, targetPart.AssemblyLinearVelocity, dist / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+        local velocity = targetPart.AssemblyLinearVelocity
+        if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
+        targetPos = SolveTrajectory(targetPos, velocity, dist / AimState.ProjectileSpeed, AimState.ProjectileGravity)
     end
 
     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
@@ -4453,8 +4484,9 @@ function Cleanup()
     end
 
     -- Reset module-level state
-    Aimbot = false
-    Trigger = false
+    AimState.Aimbot = false
+    AimState.Trigger = false
+    AimState.LastAimbotTarget = nil
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
@@ -4696,6 +4728,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         Br3ak3rState.LEFT_CTRL_HELD = true
         Br3ak3rState.CTRL_HELD = true
     elseif input.KeyCode == Enum.KeyCode.RightControl then
+        Br3ak3rState.RIGHT_CTRL_HELD = true
         Br3ak3rState.CTRL_HELD = true
     end
     
@@ -4798,11 +4831,12 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
     -- Track Ctrl key release
     if input.KeyCode == Enum.KeyCode.LeftControl then
         Br3ak3rState.LEFT_CTRL_HELD = false
-        if not Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+        if not UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
             Br3ak3rState.CTRL_HELD = false
         end
     elseif input.KeyCode == Enum.KeyCode.RightControl then
-        if not Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        Br3ak3rState.RIGHT_CTRL_HELD = false
+        if not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
             Br3ak3rState.CTRL_HELD = false
         end
     end
@@ -4834,7 +4868,7 @@ function GetCachedTarget()
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
         Flags["Aimbot/Prediction"],
-        LastAimbotTarget -- Sticky target support
+        AimState.LastAimbotTarget -- Sticky target support
     )
     CachedTargetTime = now
     return CachedTarget
@@ -4877,7 +4911,7 @@ local triggerThread = task.spawn(function()
     while Sp3arParvus.Active do
         local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
         if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
-            if isrbxactive and isrbxactive() and mouse1press and mouse1release then
+            if type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
 
