@@ -136,7 +136,7 @@ end
 
 TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
 
-
+-- ANTI-AFK (Prevents idle kick)
 -- SERVICES (additional services not declared during init)
 
 local Services = {
@@ -148,10 +148,17 @@ local Services = {
     GuiService = game:GetService("GuiService"),
     TweenService = game:GetService("TweenService"),
     Workspace = game:GetService("Workspace"),
-    Players = game:GetService("Players")
+    Players = game:GetService("Players"),
+    VirtualUser = game:GetService("VirtualUser")
 }
-local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players = 
-    Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players
+local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players, VirtualUser =
+    Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players, Services.VirtualUser
+
+-- ANTI-AFK (Prevents idle kick)
+TrackConnection(LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end))
 
 -- resolve
 function ResolveEnumItem(enumContainer, possibleNames)
