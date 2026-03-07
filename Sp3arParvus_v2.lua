@@ -153,6 +153,44 @@ local Services = {
 local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players = 
     Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players
 
+-- Spring Module
+local pi = math.pi
+local exp = math.exp
+
+local Spring = {} do
+    Spring.__index = Spring
+
+    function Spring.new(freq, pos)
+        local self = setmetatable({}, Spring)
+        self.f = freq
+        self.p = pos
+        self.v = pos * 0
+        return self
+    end
+
+    function Spring:Update(dt, goal)
+        local f = self.f * 2 * pi
+        local p0 = self.p
+        local v0 = self.v
+
+        local offset = goal - p0
+        local decay = exp(-f * dt)
+
+        local p1 = goal + (v0 * dt - offset * (f * dt + 1)) * decay
+        local v1 = (f * dt * (offset * f - v0) + v0) * decay
+
+        self.p = p1
+        self.v = v1
+
+        return p1
+    end
+
+    function Spring:Reset(pos)
+        self.p = pos
+        self.v = pos * 0
+    end
+end
+
 -- resolve
 function ResolveEnumItem(enumContainer, possibleNames)
     for _, name in ipairs(possibleNames) do
@@ -173,8 +211,9 @@ local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
-abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
-deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+local huge = math.huge
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
@@ -237,7 +276,8 @@ local AimState = {
     ProjectileGravity = 196.2,
     GravityCorrection = 2,
     LastAimbotTarget = nil,
-    LastMouseMode = nil
+    LastMouseMode = nil,
+    AimSpring = Spring.new(15, Vector2.new())
 }
 
 -- Shared Target Cache (Defined here for scope visibility)
@@ -1261,7 +1301,7 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
         local sizeX = Track.AbsoluteSize.X
         local posX = Track.AbsolutePosition.X
         local percent = math.clamp((input.Position.X - posX) / sizeX, 0, 1)
-        local value = math.floor(min + (max - min) * percent)
+        local value = floor(min + (max - min) * percent)
         
         Flags[flag] = value
         ValueLabel.Text = tostring(value) .. (unit or "")
@@ -1638,35 +1678,38 @@ end
 MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
 
 -- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
+-- Solve projectile trajectory with gravity (FIXED - premium tracking with ping)
 function SolveTrajectory(origin, velocity, time, gravity)
-    -- Safety check for NaN in time
-    if time ~= time then return origin end
+    -- Include Latency in prediction time
+    local ping = GetPing() / 1000
+    time = time + ping
+
+    -- Safety check for NaN/Inf in time
+    if time ~= time or time == huge or time < 0 then return origin end
 
     -- Safety check for NaN or zero velocity
     local velocityMagnitude = velocity.Magnitude
-    if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 then
-        -- NaN check (NaN ~= NaN is true) or zero velocity - just return origin
+    if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 or velocityMagnitude == huge then
         return origin
     end
     
     -- Clamp time to reasonable values (prevents extreme predictions at long range)
-    time = min(time, 1.0) -- Max 1 second of prediction
+    time = min(time, 1.2) -- Max 1.2 seconds of prediction
     
-    -- Clamp velocity magnitude to prevent extreme predictions
+    -- Clamp velocity magnitude to prevent extreme predictions (ghost velocity)
     if velocityMagnitude > MAX_TARGET_VELOCITY then
-        -- Scale down to max velocity while keeping direction
         velocity = velocity.Unit * MAX_TARGET_VELOCITY
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
+    -- gravity is typically 196.2 (Roblox default). Formula: P = P0 + V0*t + 0.5*g*t^2
+    local gravityVector = Vector3.new(0, -gravity * 0.5 * time * time, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
-    -- Sanity check: if predicted position is too far from origin, return original
+    -- Sanity check: if predicted position is invalid or too far, return original
     local predictionOffset = (predictedPosition - origin).Magnitude
-    -- Fix: NaN check (NaN > 200 is false in Lua, so we must explicitly check for NaN)
-    if predictionOffset ~= predictionOffset or predictionOffset > 200 then 
-        return origin -- Fall back to actual position
+    if predictedPosition.X ~= predictedPosition.X or predictionOffset > 250 then
+        return origin
     end
     
     return predictedPosition
@@ -2023,18 +2066,54 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
-function AimAt(Hitbox, Sensitivity)
+function AimAt(Hitbox, dt)
+    -- 1. Strict Target Validation & Ghost-Lock Prevention
     if not Hitbox then 
         AimState.LastAimbotTarget = nil
         return 
     end
-    if not mousemoverel then return end
 
+    local targetPlayer = Hitbox[1]
     local targetPart = Hitbox[3]
-    if not targetPart or not targetPart.Parent then 
+
+    -- Verify target player, character, and part are still valid and alive
+    if not targetPlayer or not targetPlayer.Parent then
         AimState.LastAimbotTarget = nil
-        return 
+        return
     end
+
+    local char, root = GetCharacter(targetPlayer)
+    if not char or not targetPart or not targetPart.Parent then
+        AimState.LastAimbotTarget = nil
+        return
+    end
+
+    -- Robust Health Check (Humanoid or Custom)
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        if humanoid.Health <= 0 then
+            AimState.LastAimbotTarget = nil
+            return
+        end
+    else
+        -- Fallback for non-humanoid systems (e.g. AR2)
+        local stats = targetPlayer:FindFirstChild("Stats")
+        local health = stats and stats:FindFirstChild("Health")
+        if health and health.Value <= 0 then
+            AimState.LastAimbotTarget = nil
+            return
+        end
+    end
+
+    -- Visibility Check Re-validation
+    if Flags["Aimbot/VisibilityCheck"] then
+        if ObjectOccluded(true, Camera.CFrame.Position, targetPart.Position, char) then
+            AimState.LastAimbotTarget = nil
+            return
+        end
+    end
+
+    if not mousemoverel then return end
 
     -- Stability Optimization: Mode-Switch Validation
     -- Prevent snaps when entering/exiting mouse-locked mode (e.g. scoping)
@@ -2064,15 +2143,20 @@ function AimAt(Hitbox, Sensitivity)
     if Flags["Aimbot/Prediction"] then
         local velocity = targetPart.AssemblyLinearVelocity
         if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
-        targetPos = SolveTrajectory(targetPos, velocity, dist / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+        targetPos = SolveTrajectory(targetPos, velocity, dist / Flags["Prediction/Velocity"], Flags["Prediction/GravityForce"] * Flags["Prediction/GravityMultiplier"])
     end
 
     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
-    -- Depth check (Z > 0) is implicitly handled by OnScreen but made explicit for safety
+    -- 2. Eliminate Random Cursor Snapping & Mathematical Safeguards
     if not OnScreen or ScreenPosition.Z <= 0 then return end
     
     local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
     
+    -- NaN/Infinity Safeguard
+    if targetX ~= targetX or targetY ~= targetY or abs(targetX) == huge or abs(targetY) == huge then
+        return
+    end
+
     -- Determine current crosshair location in Viewport space
     local originX, originY
     local viewportSize = Camera.ViewportSize
@@ -2090,34 +2174,40 @@ function AimAt(Hitbox, Sensitivity)
     -- Stability Optimization: FOV Re-Validation
     -- Ensure target is still within the specific Aimbot FOV radius
     local mag = sqrt(dx*dx + dy*dy)
-    if mag > Flags["Aimbot/FOV/Radius"] then return end
+    if mag > Flags["Aimbot/FOV/Radius"] then
+        AimState.LastAimbotTarget = nil
+        return
+    end
 
-    -- Apply Sensitivity/Smoothing
-    local deltaX = dx * Sensitivity
-    local deltaY = dy * Sensitivity
+    -- 3. Premium Tracking & Movement Interpolation (Spring-based)
+    local spring = AimState.AimSpring
+    spring.f = Flags["Aimbot/Sensitivity"] -- Update frequency from flags
     
-    -- Stability Optimization: Magnitude Clamping
-    -- Discard movements that exceed 15% of the viewport size in a single frame
-    local maxDeltaX = viewportSize.X * 0.15
-    local maxDeltaY = viewportSize.Y * 0.15
+    -- Calculate target goal relative to current "position" (we use relative movement)
+    -- We want the spring to move TOWARDS the delta.
+    local springPos = spring:Update(dt, Vector2.new(dx, dy))
 
-    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
+    -- The spring returns a smoothed position. Since we use mousemoverel (relative),
+    -- we move a fraction of the smoothed position to achieve fluid tracking.
+    local moveX = springPos.X * 0.5
+    local moveY = springPos.Y * 0.5
+
+    -- Stability Optimization: Magnitude Clamping
+    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.2
+    if abs(moveX) > maxDelta or abs(moveY) > maxDelta then
         return
     end
 
     -- NaN Safety Check
-    if deltaX ~= deltaX or deltaY ~= deltaY then
+    if moveX ~= moveX or moveY ~= moveY then
         return
     end
     
-    -- Sanity check - prevent extreme movements (likely error or edge case)
-    -- 180-degree spin would require moving roughly half the screen width
-    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.3 -- 30% of screen
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return -- Skip this frame, let aim catch up naturally
-    end
+    mousemoverel(moveX, moveY)
     
-    mousemoverel(deltaX, deltaY)
+    -- Adjust spring internal state to account for the physical mouse movement we just made
+    -- This prevents the spring from "accumulating" tension for movement already performed
+    spring.p = spring.p - Vector2.new(moveX, moveY)
 end
 
 
@@ -3885,13 +3975,8 @@ local function ___InitializeFreecam()
 -- Cinematic free camera for spectating and video production.
 ------------------------------------------------------------------------
 
-local pi    = math.pi
-local abs   = math.abs
 local clamp = math.clamp
-local exp   = math.exp
-local rad   = math.rad
 local sign  = math.sign
-local sqrt  = math.sqrt
 local tan   = math.tan
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -3932,39 +4017,6 @@ local FOV_STIFFNESS = 4.0
 
 ------------------------------------------------------------------------
 
-local Spring = {} do
-Spring.__index = Spring
-
-function Spring.new(freq, pos)
-local self = setmetatable({}, Spring)
-self.f = freq
-self.p = pos
-self.v = pos*0
-return self
-end
-
-function Spring:Update(dt, goal)
-local f = self.f*2*pi
-local p0 = self.p
-local v0 = self.v
-
-local offset = goal - p0
-local decay = exp(-f*dt)
-
-local p1 = goal + (v0*dt - offset*(f*dt + 1))*decay
-local v1 = (f*dt*(offset*f - v0) + v0)*decay
-
-self.p = p1
-self.v = v1
-
-return p1
-end
-
-function Spring:Reset(pos)
-self.p = pos
-self.v = pos*0
-end
-end
 
 ------------------------------------------------------------------------
 
@@ -4560,8 +4612,8 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) Flags["Prediction/Velocity"] = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) Flags["Prediction/GravityMultiplier"] = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -4875,7 +4927,7 @@ function GetCachedTarget()
 end
 
 -- Aimbot update loop (OPTIMIZED - uses cached target)
-function UpdateAimbot()
+function UpdateAimbot(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     -- Aimbot Clutch (Left Ctrl)
@@ -4896,7 +4948,16 @@ function UpdateAimbot()
     
     -- Aimbot uses cached target
     if aimbotActive and target then
-        AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+        -- Reset spring if target changed to prevent snapping
+        if target[1] ~= AimState.LastAimbotTarget then
+            AimState.AimSpring:Reset(Vector2.new(0, 0))
+            AimState.LastAimbotTarget = target[1]
+        end
+
+        AimAt(target, dt)
+    else
+        -- Clear target if none found
+        AimState.LastAimbotTarget = nil
     end
 end
 
