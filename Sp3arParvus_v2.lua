@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.1.1" -- Br3ak3r Highlights now will always remain non-clippable (before they would remain invisible but re-gain clippability if user unloaded chunk)  
+local VERSION = "3.1.1" -- Br3ak3r breaks now will have 50% transparency and will always remain non-clippable (before they would remain invisible but re-gain clippability if user unloaded chunk)  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -459,10 +459,10 @@ function markBroken(part)
         table.remove(Br3ak3rState.undoStack, 1)
     end
     
-    -- Hide the part
+    -- Hide the part (semi-transparent)
     part.CanCollide = false
-    part.LocalTransparencyModifier = 1
-    part.Transparency = 1
+    part.LocalTransparencyModifier = 0.5
+    part.Transparency = 0.5
 end
 
 -- Undo the last broken part
@@ -5094,12 +5094,12 @@ function UnifiedHeartbeat(dt)
                 part.CanCollide = false 
                 enforcementMadeChange = true
             end
-            if part.Transparency ~= 1 then 
-                part.Transparency = 1 
+            if part.Transparency ~= 0.5 then 
+                part.Transparency = 0.5 
                 enforcementMadeChange = true
             end
-            if part.LocalTransparencyModifier ~= 1 then 
-                part.LocalTransparencyModifier = 1 
+            if part.LocalTransparencyModifier ~= 0.5 then 
+                part.LocalTransparencyModifier = 0.5 
                 enforcementMadeChange = true
             end
         end
