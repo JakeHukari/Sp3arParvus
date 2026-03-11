@@ -498,16 +498,11 @@ function sweepUndo(dt)
     local j = 1
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
-        if entry.part and entry.part:IsDescendantOf(game) then
+        if entry.part then
             if i ~= j then
                 Br3ak3rState.undoStack[j] = entry
             end
             j = j + 1
-        else
-            if entry.part then
-                Br3ak3rState.brokenSet[entry.part] = nil
-                Br3ak3rState.brokenCacheDirty = true
-            end
         end
     end
 
@@ -520,7 +515,7 @@ end
 function pruneBrokenSet()
     local removed = false
     for part, _ in pairs(Br3ak3rState.brokenSet) do
-        if not part or not part:IsDescendantOf(Services.Workspace) then
+        if not part then
             Br3ak3rState.brokenSet[part] = nil
             removed = true
         end
@@ -5090,6 +5085,28 @@ function UnifiedHeartbeat(dt)
     
     -- Sweep undo stack (very cheap)
     sweepUndo(dt)
+
+    -- Continuous state enforcement for broken parts (StreamingEnabled fix)
+    local enforcementMadeChange = false
+    for part, _ in pairs(Br3ak3rState.brokenSet) do
+        if part.Parent then
+            if part.CanCollide ~= false then
+                part.CanCollide = false
+                enforcementMadeChange = true
+            end
+            if part.Transparency ~= 1 then
+                part.Transparency = 1
+                enforcementMadeChange = true
+            end
+            if part.LocalTransparencyModifier ~= 1 then
+                part.LocalTransparencyModifier = 1
+                enforcementMadeChange = true
+            end
+        end
+    end
+    if enforcementMadeChange then
+        Br3ak3rState.brokenCacheDirty = true
+    end
 end
 
 -- Single Heartbeat connection
