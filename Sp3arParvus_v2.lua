@@ -4692,7 +4692,7 @@ UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/Aut
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock onto enemies)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
-UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
+UI.CreateSlider(AimTab, "Sensitivity", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
 UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
 
 UI.CreateSection(AimTab, "Ballistics")
