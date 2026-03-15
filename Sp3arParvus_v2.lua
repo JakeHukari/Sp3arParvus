@@ -3603,9 +3603,6 @@ function UpdateESP(now, player, isClosest)
         local isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
         local healthVisible = not isOccluded
         
-        if espData.HealthNumericalLabel.Visible ~= healthVisible then
-            espData.HealthNumericalLabel.Visible = healthVisible
-        end
         if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
             espData.HealthBarContainer.Visible = healthVisible
         end
