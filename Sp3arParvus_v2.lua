@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.1.2" -- Added health tracker for all players including local player  
+local VERSION = "3.1.3" -- Health tracker only visible if player is in L-O-S  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -3182,6 +3182,7 @@ local function CreateESP(player)
     espData.UsernameLabel = usernameLabel
     espData.DistanceLabel = distanceLabel
     espData.HealthNumericalLabel = healthNumLabel
+    espData.HealthBarContainer = healthBarBG
     espData.HealthBarFill = healthBarFill
 
     -- Create tracer (Frame based for AlwaysOnTop)
@@ -3596,6 +3597,17 @@ function UpdateESP(now, player, isClosest)
             espData.DistanceLabel.TextColor3 = distanceColor
             espData.UsernameLabel.TextColor3 = distanceColor
             espData.lastDistanceColor = distanceColor
+        end
+
+        -- Update Health indicators visibility based on line-of-sight
+        local isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
+        local healthVisible = not isOccluded
+        
+        if espData.HealthNumericalLabel.Visible ~= healthVisible then
+            espData.HealthNumericalLabel.Visible = healthVisible
+        end
+        if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
+            espData.HealthBarContainer.Visible = healthVisible
         end
 
         -- Update Health visuals
@@ -4692,7 +4704,7 @@ UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/Aut
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock onto enemies)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
-UI.CreateSlider(AimTab, "Sensitivity", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
+UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
 UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
 
 UI.CreateSection(AimTab, "Ballistics")
