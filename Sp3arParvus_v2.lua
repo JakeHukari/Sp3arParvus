@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.1.1" -- Br3ak3r breaks now will have 50% transparency and will always remain non-clippable (before they would remain invisible but re-gain clippability if user unloaded chunk)  
+local VERSION = "3.1.2" -- Added health tracker for all players including local player  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -1503,6 +1503,40 @@ function GetCharacter(player)
 
     return character, rootPart
 end
+
+function GetHealth(player)
+    if not player then return 0, 100 end
+    
+    local cache = CharCache[player]
+    if cache then
+        if cache.Humanoid then
+            return cache.Humanoid.Health, cache.Humanoid.MaxHealth
+        elseif cache.HealthInst then
+            return cache.HealthInst.Value, 100 -- AR2 style health usually defaults to 100 max
+        end
+    end
+    
+    -- Fallback: Slow search
+    local char = player.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            return humanoid.Health, humanoid.MaxHealth
+        end
+        
+        -- AR2 Fallback
+        local stats = player:FindFirstChild("Stats")
+        if stats and stats:IsA("Folder") then
+            local health = stats:FindFirstChild("Health")
+            if health and health:IsA("ValueBase") then
+                return health.Value, 100
+            end
+        end
+    end
+    
+    return 0, 100
+end
+
 function InEnemyTeam(Enabled, Player)
     if not Enabled then return true end
 
@@ -3057,7 +3091,7 @@ local function CreateESP(player)
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 200, 0, 60) -- Increased height for 3 lines
+    billboard.Size = UDim2.new(0, 200, 0, 90) -- Increased height for 5 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     EnsureScreenGui() -- Ensure parent exists
     billboard.Parent = ScreenGui
@@ -3100,7 +3134,7 @@ local function CreateESP(player)
     usernameLabel.LayoutOrder = 2
     usernameLabel.Parent = container
 
-    -- Distance label - Bottom line (colored by distance heat-map)
+    -- Distance label - Third line (colored by distance heat-map)
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Name = "DistanceLabel"
     distanceLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -3112,10 +3146,43 @@ local function CreateESP(player)
     distanceLabel.LayoutOrder = 3
     distanceLabel.Parent = container
 
+    -- Numerical Health label - Fourth line
+    local healthNumLabel = Instance.new("TextLabel")
+    healthNumLabel.Name = "HealthNumericalLabel"
+    healthNumLabel.Size = UDim2.new(1, 0, 0, 18)
+    healthNumLabel.BackgroundTransparency = 1
+    healthNumLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    healthNumLabel.TextStrokeTransparency = 0
+    healthNumLabel.Font = Enum.Font.GothamBold
+    healthNumLabel.TextSize = 14
+    healthNumLabel.LayoutOrder = 4
+    healthNumLabel.Text = "100/100"
+    healthNumLabel.Parent = container
+
+    -- Health Bar Container - Fifth line
+    local healthBarBG = Instance.new("Frame")
+    healthBarBG.Name = "HealthBarContainer"
+    healthBarBG.Size = UDim2.new(0.8, 0, 0, 6)
+    healthBarBG.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Red for lost health
+    healthBarBG.BorderSizePixel = 0
+    healthBarBG.LayoutOrder = 5
+    healthBarBG.Parent = container
+    local hbCorner = Instance.new("UICorner"); hbCorner.CornerRadius = UDim.new(1,0); hbCorner.Parent = healthBarBG
+
+    local healthBarFill = Instance.new("Frame")
+    healthBarFill.Name = "HealthBarFill"
+    healthBarFill.Size = UDim2.fromScale(1, 1)
+    healthBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 100) -- Green for current health
+    healthBarFill.BorderSizePixel = 0
+    healthBarFill.Parent = healthBarBG
+    local hbfCorner = Instance.new("UICorner"); hbfCorner.CornerRadius = UDim.new(1,0); hbfCorner.Parent = healthBarFill
+
     espData.Nametag = billboard
     espData.NicknameLabel = nicknameLabel
     espData.UsernameLabel = usernameLabel
     espData.DistanceLabel = distanceLabel
+    espData.HealthNumericalLabel = healthNumLabel
+    espData.HealthBarFill = healthBarFill
 
     -- Create tracer (Frame based for AlwaysOnTop)
     -- Using a Frame instead of Drawing ensures it renders through walls
@@ -3530,6 +3597,22 @@ function UpdateESP(now, player, isClosest)
             espData.UsernameLabel.TextColor3 = distanceColor
             espData.lastDistanceColor = distanceColor
         end
+
+        -- Update Health visuals
+        local health, maxHealth = GetHealth(player)
+        if espData.lastHealth ~= health or espData.lastMaxHealth ~= maxHealth then
+            espData.HealthNumericalLabel.Text = string.format("%d/%d", math.floor(health), math.floor(maxHealth))
+            
+            local healthPercent = math.clamp(health / maxHealth, 0, 1)
+            espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
+            
+            -- Optional: adjust color based on health? Requirements say green fill, red BG.
+            -- Requirement also says "turns red to indicate any lost health"
+            -- The BG is red, fill is green. So if health is 50%, 50% green is shown over red.
+            
+            espData.lastHealth = health
+            espData.lastMaxHealth = maxHealth
+        end
     elseif espData.Nametag then
         if espData.Nametag.Enabled then espData.Nametag.Enabled = false end
     end
@@ -3825,6 +3908,55 @@ function CreatePerformanceDisplay(parent)
 
     if UI.MakeDraggable then
         UI.MakeDraggable(PerformanceLabel)
+    end
+end
+
+local LocalHealthHUD = nil
+local LocalHealthValueLabel = nil
+
+function CreateLocalHealthHUD(parent)
+    LocalHealthHUD = Instance.new("Frame")
+    LocalHealthHUD.Name = "LocalHealthHUD"
+    LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
+    LocalHealthHUD.Position = UDim2.new(1, -150, 1, -50)
+    LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    LocalHealthHUD.BackgroundTransparency = 0.2
+    LocalHealthHUD.BorderSizePixel = 0
+    LocalHealthHUD.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = LocalHealthHUD
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = UI_THEME.Accent
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = LocalHealthHUD
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "100/100"
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 16
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Parent = LocalHealthHUD
+    LocalHealthValueLabel = label
+
+    if UI.MakeDraggable then
+        UI.MakeDraggable(LocalHealthHUD)
+    end
+end
+
+local lastLocalH, lastLocalMH = -1, -1
+function UpdateLocalHealthHUD()
+    if not LocalHealthValueLabel then return end
+    
+    local h, mh = GetHealth(LocalPlayer)
+    if h ~= lastLocalH or mh ~= lastLocalMH then
+        LocalHealthValueLabel.Text = string.format("%d/%d", math.floor(h), math.floor(mh))
+        lastLocalH, lastLocalMH = h, mh
     end
 end
 
@@ -4493,6 +4625,8 @@ function Cleanup()
     NearestPlayerRef = nil
     PerformanceLabel = nil
     ClosestPlayerTrackerLabel = nil
+    LocalHealthHUD = nil
+    LocalHealthValueLabel = nil
     PlayerPanelFrame = nil
     table.clear(PlayerPanelRows)
     
@@ -4516,6 +4650,7 @@ local Window = UI.CreateWindow("Sp3arParvusV2")
 
 -- Initialize HUD Elements
 CreatePerformanceDisplay(ScreenGui)
+CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
 
 -- Create Tabs
@@ -4983,6 +5118,7 @@ function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
     UpdateFullbright()
+    UpdateLocalHealthHUD()
     
     -- Update Waypoint Distances
     if Flags["Waypoints/Enabled"] then
