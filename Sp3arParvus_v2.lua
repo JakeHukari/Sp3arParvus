@@ -3182,6 +3182,7 @@ local function CreateESP(player)
     espData.UsernameLabel = usernameLabel
     espData.DistanceLabel = distanceLabel
     espData.HealthNumericalLabel = healthNumLabel
+    espData.HealthBarContainer = healthBarBG
     espData.HealthBarFill = healthBarFill
 
     -- Create tracer (Frame based for AlwaysOnTop)
@@ -3596,6 +3597,17 @@ function UpdateESP(now, player, isClosest)
             espData.DistanceLabel.TextColor3 = distanceColor
             espData.UsernameLabel.TextColor3 = distanceColor
             espData.lastDistanceColor = distanceColor
+        end
+
+        -- Update Health indicators visibility based on line-of-sight
+        local isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
+        local healthVisible = not isOccluded
+
+        if espData.HealthNumericalLabel.Visible ~= healthVisible then
+            espData.HealthNumericalLabel.Visible = healthVisible
+        end
+        if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
+            espData.HealthBarContainer.Visible = healthVisible
         end
 
         -- Update Health visuals
