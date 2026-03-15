@@ -3803,7 +3803,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
-    PerformanceLabel.Position = UDim2.new(1, -190, 0, 10)
+    PerformanceLabel.Position = UDim2.new(1, -430, 0, 45)
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     PerformanceLabel.BackgroundTransparency = 0
     PerformanceLabel.BorderSizePixel = 0
