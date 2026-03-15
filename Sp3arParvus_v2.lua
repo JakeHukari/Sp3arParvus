@@ -3927,7 +3927,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
-    LocalHealthHUD.Position = UDim2.new(1, -150, 1, -50)
+    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 160)
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     LocalHealthHUD.BackgroundTransparency = 0.2
     LocalHealthHUD.BorderSizePixel = 0
