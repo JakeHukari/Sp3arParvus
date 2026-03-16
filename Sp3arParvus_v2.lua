@@ -270,7 +270,6 @@ local Flags = {
     ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 15,
     ["Aimbot/FOV/Radius"] = 100,
     ["Aimbot/Priority"] = "Head",
     ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
@@ -2059,7 +2058,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
-function AimAt(Hitbox, Sensitivity)
+function AimAt(Hitbox)
     if not Hitbox then 
         AimState.LastAimbotTarget = nil
         return 
@@ -2072,21 +2071,9 @@ function AimAt(Hitbox, Sensitivity)
         return 
     end
 
-    -- Stability Optimization: Mode-Switch Validation
-    -- Prevent snaps when entering/exiting mouse-locked mode (e.g. scoping)
     local currentMode = Services.UserInputService.MouseBehavior
-    if currentMode ~= AimState.LastMouseMode then
-        AimState.LastMouseMode = currentMode
-        return
-    end
-
-    -- Stability Optimization: First-Frame Validation
-    -- If the target changed this frame, skip movement to allow coordinate stabilization
-    local currentTarget = Hitbox[1]
-    if currentTarget ~= AimState.LastAimbotTarget then
-        AimState.LastAimbotTarget = currentTarget
-        return
-    end
+    AimState.LastMouseMode = currentMode
+    AimState.LastAimbotTarget = Hitbox[1]
 
     -- CRITICAL FIX: Re-calculate screen position from world-stable part
     local targetPos = targetPart.Position
@@ -2128,29 +2115,12 @@ function AimAt(Hitbox, Sensitivity)
     local mag = sqrt(dx*dx + dy*dy)
     if mag > Flags["Aimbot/FOV/Radius"] then return end
 
-    -- Apply Sensitivity/Smoothing
-    local deltaX = dx * Sensitivity
-    local deltaY = dy * Sensitivity
+    local deltaX = dx
+    local deltaY = dy
     
-    -- Stability Optimization: Magnitude Clamping
-    -- Discard movements that exceed 15% of the viewport size in a single frame
-    local maxDeltaX = viewportSize.X * 0.15
-    local maxDeltaY = viewportSize.Y * 0.15
-
-    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
-        return
-    end
-
     -- NaN Safety Check
     if deltaX ~= deltaX or deltaY ~= deltaY then
         return
-    end
-    
-    -- Sanity check - prevent extreme movements (likely error or edge case)
-    -- 180-degree spin would require moving roughly half the screen width
-    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.3 -- 30% of screen
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return -- Skip this frame, let aim catch up naturally
     end
     
     mousemoverel(deltaX, deltaY)
@@ -4701,7 +4671,6 @@ UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/Aut
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock onto enemies)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
-UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
 UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
 
 UI.CreateSection(AimTab, "Ballistics")
@@ -5042,7 +5011,7 @@ function UpdateAimbot()
     
     -- Aimbot uses cached target
     if aimbotActive and target then
-        AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+        AimAt(target)
     end
 end
 
