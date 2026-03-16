@@ -2153,7 +2153,8 @@ function AimAt(Hitbox, Sensitivity)
         return -- Skip this frame, let aim catch up naturally
     end
     
-    mousemoverel(deltaX, deltaY)
+    -- Improve precision by rounding to nearest pixel
+    mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
 
 
