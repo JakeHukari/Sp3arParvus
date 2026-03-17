@@ -322,7 +322,7 @@ WaypointConnections = {}
 
 -- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
 
-UNDO_LIMIT = 25
+UNDO_LIMIT = 50
 RAYCAST_MAX_DISTANCE = 3000
 
 -- Br3ak3r state
