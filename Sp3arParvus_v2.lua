@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.1.3" -- Health tracker only visible if player is in L-O-S  
+local VERSION = "3.2.3" -- Attempt to solve initial target acquisition
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -244,8 +244,56 @@ local AimState = {
     ProjectileGravity = 196.2,
     GravityCorrection = 2,
     LastAimbotTarget = nil,
-    LastMouseMode = nil
+    LastMouseMode = nil,
+    LastOriginX = nil,
+    LastOriginY = nil,
+    AcquiringFrames = 0
 }
+
+local AIM_ACQUIRE_STABILIZE_FRAMES = 2
+local AIM_ORIGIN_JUMP_RATIO = 0.25
+
+function ClearAimLockState(resetMouseMode)
+    AimState.LastAimbotTarget = nil
+    AimState.LastOriginX = nil
+    AimState.LastOriginY = nil
+    AimState.AcquiringFrames = 0
+
+    if resetMouseMode then
+        AimState.LastMouseMode = nil
+    end
+end
+
+function GetCrosshairViewportPosition(mouseBehavior)
+    if not Camera then
+        Camera = Services.Workspace.CurrentCamera
+    end
+    if not Camera then
+        return nil, nil, false
+    end
+
+    local viewportSize = Camera.ViewportSize
+
+    if mouseBehavior == Enum.MouseBehavior.LockCenter then
+        return viewportSize.X * 0.5, viewportSize.Y * 0.5, true
+    end
+
+    local mouseLoc = Services.UserInputService:GetMouseLocation()
+    local guiInset = GuiService:GetGuiInset()
+
+    local crosshairX = mouseLoc.X - guiInset.X
+    local crosshairY = mouseLoc.Y - guiInset.Y
+
+    if crosshairX ~= crosshairX or crosshairY ~= crosshairY then
+        return nil, nil, false
+    end
+
+    if crosshairX < 0 or crosshairY < 0 or crosshairX > viewportSize.X or crosshairY > viewportSize.Y then
+        return nil, nil, false
+    end
+
+    return crosshairX, crosshairY, true
+end
 
 -- Shared Target Cache (Defined here for scope visibility)
 local CachedTarget = nil
@@ -1846,153 +1894,160 @@ end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, PredictionEnabled, StickyTarget)
-    if not Enabled then return nil end
-    
-    local CameraPosition = Camera.CFrame.Position
-    
-    -- Calculate crosshair/origin in Viewport space
-    local crosshairX, crosshairY
-    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-        local viewportSize = Camera.ViewportSize
-        crosshairX, crosshairY = viewportSize.X / 2, viewportSize.Y / 2
-    else
-        local mouseLoc = UserInputService:GetMouseLocation()
-        local guiInset = GuiService:GetGuiInset()
-        crosshairX, crosshairY = mouseLoc.X, mouseLoc.Y - guiInset.Y
+    if not Enabled then
+        return nil
     end
-    
+
+    local CameraPosition = Camera.CFrame.Position
+    local mouseBehavior = UserInputService.MouseBehavior
+
+    -- Calculate crosshair/origin in Viewport space
+    local crosshairX, crosshairY, crosshairValid = GetCrosshairViewportPosition(mouseBehavior)
+    if not crosshairValid then
+        return nil
+    end
+
     -- Reset candidate list
     CandidateCount = 0
-    
+
     local players = GetPlayersCache()
     for _, Player in ipairs(players) do
-        if Player == LocalPlayer or DNS(Player) then continue end
+        if Player == LocalPlayer or DNS(Player) then
+            continue
+        end
 
         local Character, RootPart = GetCharacter(Player)
-        -- Fast existence checks
-        if not Character or not RootPart then continue end
-        if not InEnemyTeam(TeamCheck, Player) then continue end
+        if not Character or not RootPart then
+            continue
+        end
+        if not InEnemyTeam(TeamCheck, Player) then
+            continue
+        end
 
-        -- Quick distance pre-check using RootPart
         local rootDist = (RootPart.Position - CameraPosition).Magnitude
-        if DistanceCheck and rootDist > (DistanceLimit + 50) then continue end
-        
-        -- Optimization: Start with just RootPart for screen check before iterating all body parts
-        local _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
-        if not rootOnScreen then continue end
+        if DistanceCheck and rootDist > (DistanceLimit + 50) then
+            continue
+        end
 
-        -- Gather valid body parts
+        local _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        if not rootOnScreen then
+            continue
+        end
+
         if Priority == "Random" then
-            -- For Random, just pick one valid part and check it
             local BodyPart = Character:FindFirstChild(BodyParts[math.random(#BodyParts)])
             if BodyPart then
-                 local BodyPartPosition = BodyPart.Position
-                 local Distance = (BodyPartPosition - CameraPosition).Magnitude
-                 
-                 if not DistanceCheck or Distance < DistanceLimit then
-                     -- Prediction
-                     if PredictionEnabled then
-                         local velocity = BodyPart.AssemblyLinearVelocity
-                         if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
-                         BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                            velocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
-                     end
+                local BodyPartPosition = BodyPart.Position
+                local Distance = (BodyPartPosition - CameraPosition).Magnitude
 
-                     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-                     if OnScreen then
-                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                         local dx, dy = screenX - crosshairX, screenY - crosshairY
-                         local Magnitude = sqrt(dx*dx + dy*dy)
-                         
-                         if Magnitude < FieldOfView then
-                             CandidateCount = CandidateCount + 1
-                             -- Cap candidate insertion to prevent table bloat
-                             if CandidateCount <= MAX_CANDIDATES * 3 then
-                                 local entry = CandidateList[CandidateCount]
-                                 if not entry then 
-                                     entry = {}
-                                     CandidateList[CandidateCount] = entry
-                                 end
-                                 entry.mag = Magnitude
-                                 entry.ply = Player
-                                 entry.char = Character
-                                 entry.part = BodyPart
-                                 entry.sx = screenX
-                                 entry.sy = screenY
-                                 entry.pos = BodyPartPosition -- Predicted position
-                             else
-                                 CandidateCount = MAX_CANDIDATES * 3 -- keep at cap
-                             end
-                         end
-                     end
-                 end
+                if not DistanceCheck or Distance < DistanceLimit then
+                    if PredictionEnabled then
+                        local velocity = BodyPart.AssemblyLinearVelocity
+                        if typeof(velocity) ~= "Vector3" then
+                            velocity = Vector3.new(0, 0, 0)
+                        end
+                        BodyPartPosition = SolveTrajectory(
+                            BodyPartPosition,
+                            velocity,
+                            Distance / AimState.ProjectileSpeed,
+                            AimState.ProjectileGravity
+                        )
+                    end
+
+                    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                    if OnScreen then
+                        local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+                        local dx, dy = screenX - crosshairX, screenY - crosshairY
+                        local Magnitude = sqrt(dx * dx + dy * dy)
+
+                        if Magnitude < FieldOfView then
+                            CandidateCount = CandidateCount + 1
+                            if CandidateCount <= MAX_CANDIDATES * 3 then
+                                local entry = CandidateList[CandidateCount]
+                                if not entry then
+                                    entry = {}
+                                    CandidateList[CandidateCount] = entry
+                                end
+                                entry.mag = Magnitude
+                                entry.ply = Player
+                                entry.char = Character
+                                entry.part = BodyPart
+                                entry.sx = screenX
+                                entry.sy = screenY
+                                entry.pos = BodyPartPosition
+                            else
+                                CandidateCount = MAX_CANDIDATES * 3
+                            end
+                        end
+                    end
+                end
             end
         else
-            -- Check specified body parts
-            -- Optimization: If Priority is specific part (e.g. Head), only check that. 
-            -- If Priority is "Closest", check all parts in list
             local checkParts = BodyParts
             if Priority ~= "Closest" and Priority ~= "Random" then
                 checkParts = {Priority}
             end
-            
+
             for _, PartName in ipairs(checkParts) do
                 local BodyPart = Character:FindFirstChild(PartName)
-                if not BodyPart then continue end
-                
-                local BodyPartPosition = BodyPart.Position
-                local Distance = (BodyPartPosition - CameraPosition).Magnitude
-                 
-                if DistanceCheck and Distance >= DistanceLimit then continue end
-
-                -- Prediction
-                if PredictionEnabled then
-                    local velocity = BodyPart.AssemblyLinearVelocity
-                    if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
-                    BodyPartPosition = SolveTrajectory(BodyPartPosition, 
-                       velocity, Distance / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+                if not BodyPart then
+                    continue
                 end
 
-                 local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
-                 if OnScreen then
-                     local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                     local dx, dy = screenX - crosshairX, screenY - crosshairY
-                     local Magnitude = sqrt(dx*dx + dy*dy)
-                     
-                     if Magnitude < FieldOfView then
-                         CandidateCount = CandidateCount + 1
-                         -- Cap candidate insertion to prevent table bloat
-                         if CandidateCount <= MAX_CANDIDATES * 3 then
-                             local entry = CandidateList[CandidateCount]
-                             if not entry then 
-                                 entry = {}
-                                 CandidateList[CandidateCount] = entry
-                             end
-                             entry.mag = Magnitude
-                             entry.ply = Player
-                             entry.char = Character
-                             entry.part = BodyPart
-                             entry.sx = screenX
-                             entry.sy = screenY
-                             entry.pos = BodyPartPosition
-                         else
-                             CandidateCount = MAX_CANDIDATES * 3 -- keep at cap
-                         end
-                     end
-                 end
+                local BodyPartPosition = BodyPart.Position
+                local Distance = (BodyPartPosition - CameraPosition).Magnitude
+
+                if DistanceCheck and Distance >= DistanceLimit then
+                    continue
+                end
+
+                if PredictionEnabled then
+                    local velocity = BodyPart.AssemblyLinearVelocity
+                    if typeof(velocity) ~= "Vector3" then
+                        velocity = Vector3.new(0, 0, 0)
+                    end
+                    BodyPartPosition = SolveTrajectory(
+                        BodyPartPosition,
+                        velocity,
+                        Distance / AimState.ProjectileSpeed,
+                        AimState.ProjectileGravity
+                    )
+                end
+
+                local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                if OnScreen then
+                    local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+                    local dx, dy = screenX - crosshairX, screenY - crosshairY
+                    local Magnitude = sqrt(dx * dx + dy * dy)
+
+                    if Magnitude < FieldOfView then
+                        CandidateCount = CandidateCount + 1
+                        if CandidateCount <= MAX_CANDIDATES * 3 then
+                            local entry = CandidateList[CandidateCount]
+                            if not entry then
+                                entry = {}
+                                CandidateList[CandidateCount] = entry
+                            end
+                            entry.mag = Magnitude
+                            entry.ply = Player
+                            entry.char = Character
+                            entry.part = BodyPart
+                            entry.sx = screenX
+                            entry.sy = screenY
+                            entry.pos = BodyPartPosition
+                        else
+                            CandidateCount = MAX_CANDIDATES * 3
+                        end
+                    end
+                end
             end
         end
     end
-    
-    -- Optimization: Reuse existing entries in CandidateList instead of clearing them
-    -- This reduces the number of table allocations during repeated calls
-    -- The list size is effectively managed by CandidateCount
-    
-    if CandidateCount == 0 then return nil end
-    
-    -- Sort candidates by screen distance (Magnitude)
-    -- PERFORMANCE FIX: table.sort sorts from index 1 to #CandidateList.
-    -- We must prune the "tail" of the reused table to prevent it from sorting stale data from previous frames.
+
+    if CandidateCount == 0 then
+        return nil
+    end
+
     local currentSize = #CandidateList
     if currentSize > CandidateCount then
         for i = CandidateCount + 1, currentSize do
@@ -2010,9 +2065,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     if CandidateCount > 1 then
         table.sort(CandidateList, CandidateSortFn)
     end
-    
-    -- Stability Optimization: Target Stickiness
-    -- If we have a sticky target, check if it's still valid/visible/within FOV
+
     if StickyTarget then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
@@ -2026,134 +2079,150 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     ClosestResult[6] = entry.pos
                     return ClosestResult
                 end
-                break -- Sticky target blocked or no longer valid
+                break
             end
         end
     end
 
-    -- Iterate sorted candidates and perform Raycast on the closest ones
-    -- Stop at the FIRST visible candidate
     local limit = min(CandidateCount, MAX_CANDIDATES)
-    
+
     for i = 1, limit do
         local entry = CandidateList[i]
-        if not entry then continue end
-        
-        -- Lazy Visibility Check
-        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
-            continue -- Blocked, try next closest
+        if not entry then
+            continue
         end
-        
-        -- Found best target!
+
+        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+            continue
+        end
+
         ClosestResult[1] = entry.ply
         ClosestResult[2] = entry.char
         ClosestResult[3] = entry.part
         ClosestResult[4] = entry.sx
         ClosestResult[5] = entry.sy
         ClosestResult[6] = entry.pos
-        
+
         return ClosestResult
     end
-    
+
     return nil
 end
 
 -- AimAt function (FIXED - handles mouse-locked mode properly)
+-- AimAt function (FIXED - stabilized initial acquisition / reacquisition)
 function AimAt(Hitbox, Sensitivity)
-    if not Hitbox then 
-        AimState.LastAimbotTarget = nil
-        return 
+    if not Hitbox then
+        ClearAimLockState(false)
+        return
     end
-    if not mousemoverel then return end
+    if not mousemoverel then
+        return
+    end
 
     local targetPart = Hitbox[3]
-    if not targetPart or not targetPart.Parent then 
-        AimState.LastAimbotTarget = nil
-        return 
+    if not targetPart or not targetPart.Parent then
+        ClearAimLockState(false)
+        return
     end
 
-    -- Stability Optimization: Mode-Switch Validation
-    -- Prevent snaps when entering/exiting mouse-locked mode (e.g. scoping)
     local currentMode = Services.UserInputService.MouseBehavior
     if currentMode ~= AimState.LastMouseMode then
         AimState.LastMouseMode = currentMode
+        AimState.LastOriginX = nil
+        AimState.LastOriginY = nil
+        AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
         return
     end
 
-    -- Stability Optimization: First-Frame Validation
-    -- If the target changed this frame, skip movement to allow coordinate stabilization
     local currentTarget = Hitbox[1]
     if currentTarget ~= AimState.LastAimbotTarget then
         AimState.LastAimbotTarget = currentTarget
+        AimState.LastOriginX = nil
+        AimState.LastOriginY = nil
+        AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
         return
     end
 
-    -- CRITICAL FIX: Re-calculate screen position from world-stable part
     local targetPos = targetPart.Position
     local cameraCFrame = Camera.CFrame
     local cameraPos = cameraCFrame.Position
     local dist = (targetPos - cameraPos).Magnitude
 
-    -- Safety: Don't aim at targets extremely close or behind
-    if dist < 1 then return end
+    if dist < 1 then
+        return
+    end
 
     if Flags["Aimbot/Prediction"] then
         local velocity = targetPart.AssemblyLinearVelocity
-        if typeof(velocity) ~= "Vector3" then velocity = Vector3.new(0, 0, 0) end
-        targetPos = SolveTrajectory(targetPos, velocity, dist / AimState.ProjectileSpeed, AimState.ProjectileGravity)
+        if typeof(velocity) ~= "Vector3" then
+            velocity = Vector3.new(0, 0, 0)
+        end
+        targetPos = SolveTrajectory(
+            targetPos,
+            velocity,
+            dist / AimState.ProjectileSpeed,
+            AimState.ProjectileGravity
+        )
     end
 
     local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
-    -- Depth check (Z > 0) is implicitly handled by OnScreen but made explicit for safety
-    if not OnScreen or ScreenPosition.Z <= 0 then return end
-    
-    local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
-    
-    -- Determine current crosshair location in Viewport space
-    local originX, originY
-    local viewportSize = Camera.ViewportSize
-    if currentMode == Enum.MouseBehavior.LockCenter then
-        originX, originY = viewportSize.X / 2, viewportSize.Y / 2
-    else
-        local mouseLoc = UserInputService:GetMouseLocation()
-        local guiInset = GuiService:GetGuiInset()
-        originX, originY = mouseLoc.X, mouseLoc.Y - guiInset.Y
+    if not OnScreen or ScreenPosition.Z <= 0 then
+        return
     end
-    
-    -- Calculate delta movement
-    local dx, dy = targetX - originX, targetY - originY
-    
-    -- Stability Optimization: FOV Re-Validation
-    -- Ensure target is still within the specific Aimbot FOV radius
-    local mag = sqrt(dx*dx + dy*dy)
-    if mag > Flags["Aimbot/FOV/Radius"] then return end
 
-    -- Apply Sensitivity/Smoothing
+    local viewportSize = Camera.ViewportSize
+    local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
+    if not originValid then
+        return
+    end
+
+    local lastOriginX = AimState.LastOriginX
+    local lastOriginY = AimState.LastOriginY
+    AimState.LastOriginX = originX
+    AimState.LastOriginY = originY
+
+    if lastOriginX and lastOriginY then
+        local jumpX = abs(originX - lastOriginX)
+        local jumpY = abs(originY - lastOriginY)
+
+        if jumpX > (viewportSize.X * AIM_ORIGIN_JUMP_RATIO) or jumpY > (viewportSize.Y * AIM_ORIGIN_JUMP_RATIO) then
+            AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
+            return
+        end
+    end
+
+    if AimState.AcquiringFrames > 0 then
+        AimState.AcquiringFrames = AimState.AcquiringFrames - 1
+        return
+    end
+
+    local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
+    local dx, dy = targetX - originX, targetY - originY
+
+    local mag = sqrt(dx * dx + dy * dy)
+    if mag > Flags["Aimbot/FOV/Radius"] then
+        return
+    end
+
     local deltaX = dx * Sensitivity
     local deltaY = dy * Sensitivity
-    
-    -- Stability Optimization: Magnitude Clamping
-    -- Discard movements that exceed 15% of the viewport size in a single frame
+
     local maxDeltaX = viewportSize.X * 0.15
     local maxDeltaY = viewportSize.Y * 0.15
-
     if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
         return
     end
 
-    -- NaN Safety Check
     if deltaX ~= deltaX or deltaY ~= deltaY then
         return
     end
-    
-    -- Sanity check - prevent extreme movements (likely error or edge case)
-    -- 180-degree spin would require moving roughly half the screen width
-    local maxDelta = min(Camera.ViewportSize.X, Camera.ViewportSize.Y) * 0.3 -- 30% of screen
+
+    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.3
     if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return -- Skip this frame, let aim catch up naturally
+        return
     end
-    
-    -- Improve precision by rounding to nearest pixel
+
     mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
 
@@ -5022,28 +5091,29 @@ function GetCachedTarget()
 end
 
 -- Aimbot update loop (OPTIMIZED - uses cached target)
+-- Aimbot update loop (FIXED - clears state when target is lost)
 function UpdateAimbot()
-    if not Sp3arParvus.Active or not LocalCharReady then return end
-    
-    -- Aimbot Clutch (Left Ctrl)
+    if not Sp3arParvus.Active or not LocalCharReady then
+        ClearAimLockState(false)
+        return
+    end
+
     if Br3ak3rState.LEFT_CTRL_HELD then
+        ClearAimLockState(false)
         return
     end
 
-    -- PERFORMANCE FIX: Early exit if nothing is enabled - prevents expensive GetClosest calls
-    -- Logic Fix: Aimbot/AimLock is the master switch. AlwaysEnabled just bypasses keybind check (if implemented)
-    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot) -- Aimbot global var acts as keybind state
-    
+    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
     if not aimbotActive then
+        ClearAimLockState(false)
         return
     end
 
-    -- Get cached target (single GetClosest call per frame)
     local target = GetCachedTarget()
-    
-    -- Aimbot uses cached target
-    if aimbotActive and target then
+    if target then
         AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+    else
+        ClearAimLockState(false)
     end
 end
 
