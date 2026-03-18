@@ -50,7 +50,8 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
 
 ### Developer Utilities
-*   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls
+*   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls.
+*   **H1ghL1ghter**: Highlight parts and get full workspace path nametags.
 *   **Waypoint System**: Create and manage custom map markers, visible from anywhere.
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting.
 *   **Performance Monitor**: Real-time FPS, ping, and resource usage monitoring.
@@ -68,6 +69,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 
 ### Developer Utilities
 *   **Br3ak3r**: `Ctrl + Left Click` to **Break** local objects, `Ctrl + Z` to **Undo** recent object breaks
+*   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, 'Ctrl + Shift + Z' to undo
 *   **Rejoin Server**: `Ctrl + R`
 *   **Unload Sp3arParvus**: `Ctrl + U`  
 
