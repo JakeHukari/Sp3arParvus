@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.2.3" -- Attempt to solve initial target acquisition
+local VERSION = "3.3.4" -- Added H1ghL1ghter, use 'ctrl+shift+left-click' to highlight parts, use 'ctrl+shift+z' to undo
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
