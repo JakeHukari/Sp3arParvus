@@ -599,10 +599,21 @@ function markHighlighted(part)
     hl.Name = "H1ghl1ght3r_Highlight"
     hl.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
     hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-    hl.FillTransparency = 0.5
+    hl.FillTransparency = 0
+    hl.OutlineTransparency = 0
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Adornee = part
     hl.Parent = part
+
+    local sb = Instance.new("SelectionBox")
+    sb.Name = "H1ghl1ght3r_SelectionBox"
+    sb.Color3 = Color3.fromRGB(255, 105, 180) -- Pink
+    sb.SurfaceColor3 = Color3.fromRGB(255, 105, 180)
+    sb.SurfaceTransparency = 0.8
+    sb.LineThickness = 0.1
+    sb.Adornee = part
+    sb.AlwaysOnTop = true
+    sb.Parent = part
 
     local bg = Instance.new("BillboardGui")
     bg.Name = "H1ghl1ght3r_Nametag"
@@ -624,6 +635,7 @@ function markHighlighted(part)
 
     H1ghl1ght3rState.highlightedSet[part] = {
         hl = hl,
+        sb = sb,
         bg = bg,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -632,6 +644,7 @@ function markHighlighted(part)
     table.insert(H1ghl1ght3rState.undoStack, {
         part = part,
         hl = hl,
+        sb = sb,
         bg = bg,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -641,21 +654,30 @@ function markHighlighted(part)
         table.remove(H1ghl1ght3rState.undoStack, 1)
     end
 
-    -- Force visibility so the Highlight is visible on transparent objects
-    part.LocalTransparencyModifier = 0.5
-    part.Transparency = 0.5
+    -- Conditionally force visibility if the object is too transparent
+    local needsVisibility = part.Transparency > 0.5 or part.LocalTransparencyModifier > 0.5
+    H1ghl1ght3rState.highlightedSet[part].forced = needsVisibility
+
+    -- Update undo entry as well
+    H1ghl1ght3rState.undoStack[#H1ghl1ght3rState.undoStack].forced = needsVisibility
+
+    if needsVisibility then
+        part.LocalTransparencyModifier = 0.5
+        part.Transparency = 0.5
+    end
 end
 
 function unhighlightLast()
     local entry = table.remove(H1ghl1ght3rState.undoStack)
     if entry then
-        if entry.part and entry.part.Parent then
+        if entry.part and entry.part.Parent and entry.forced then
             pcall(function()
                 entry.part.LocalTransparencyModifier = entry.ltm
                 entry.part.Transparency = entry.t
             end)
         end
         if entry.hl then pcall(function() entry.hl:Destroy() end) end
+        if entry.sb then pcall(function() entry.sb:Destroy() end) end
         if entry.bg then pcall(function() entry.bg:Destroy() end) end
         if entry.part then H1ghl1ght3rState.highlightedSet[entry.part] = nil end
     end
@@ -673,6 +695,7 @@ function sweepHighlightedUndo(dt)
             j = j + 1
         else
             if entry.hl then pcall(function() entry.hl:Destroy() end) end
+            if entry.sb then pcall(function() entry.sb:Destroy() end) end
             if entry.bg then pcall(function() entry.bg:Destroy() end) end
         end
     end
@@ -683,6 +706,7 @@ function pruneHighlightedSet()
     for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         if not part or not part.Parent then
             if data.hl then pcall(function() data.hl:Destroy() end) end
+            if data.sb then pcall(function() data.sb:Destroy() end) end
             if data.bg then pcall(function() data.bg:Destroy() end) end
             H1ghl1ght3rState.highlightedSet[part] = nil
         end
@@ -4822,11 +4846,12 @@ function Cleanup()
     -- Cleanup H1ghl1ght3r (remove all highlights and nametags, restore transparency)
     for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         pcall(function()
-            if part.Parent then
+            if part.Parent and data.forced then
                 part.LocalTransparencyModifier = data.ltm
                 part.Transparency = data.t
             end
             if data.hl then data.hl:Destroy() end
+            if data.sb then data.sb:Destroy() end
             if data.bg then data.bg:Destroy() end
         end)
     end
@@ -5119,7 +5144,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                     markHighlighted(hit.Instance)
                 end
             end
-        elseif Br3ak3rState.CLICKBREAK_ENABLED then
+        elseif Br3ak3rState.CLICKBREAK_ENABLED and not H1ghl1ght3rState.SHIFT_HELD then
             local origin, direction = GetMouseRay()
             if origin and direction then
                 local hit = WorldRaycastBr3ak3r(origin, direction, true)
@@ -5501,10 +5526,17 @@ function UnifiedHeartbeat(dt)
     end
 
     -- Continuous state enforcement for highlighted parts (ensure visibility)
-    for part, _ in pairs(H1ghl1ght3rState.highlightedSet) do
+    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         if part.Parent then
-            if part.Transparency ~= 0.5 then part.Transparency = 0.5 end
-            if part.LocalTransparencyModifier ~= 0.5 then part.LocalTransparencyModifier = 0.5 end
+            if data.forced then
+                if part.Transparency ~= 0.5 then part.Transparency = 0.5 end
+                if part.LocalTransparencyModifier ~= 0.5 then part.LocalTransparencyModifier = 0.5 end
+            end
+
+            -- Ensure visual effects are still parented/enabled
+            if data.hl and data.hl.Parent ~= part then data.hl.Parent = part end
+            if data.sb and data.sb.Parent ~= part then data.sb.Parent = part end
+            if data.bg and data.bg.Parent ~= part then data.bg.Parent = part end
         end
     end
 end
