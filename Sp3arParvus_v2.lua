@@ -389,6 +389,23 @@ local Br3ak3rState = {
 }
 Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
 
+local H1ghl1ght3rState = {
+    ENABLED = true,
+    highlightedSet = {},
+    undoStack = {},
+    SHIFT_HELD = false
+}
+
+function GetFullPath(instance)
+    local path = instance.Name
+    local current = instance.Parent
+    while current and current ~= game do
+        path = current.Name .. "/" .. path
+        current = current.Parent
+    end
+    return path
+end
+
 -- PERFORMANCE FIX: Cache filter type ONCE at startup
 Br3ak3rFilterType = (function()
     local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
@@ -573,6 +590,83 @@ function pruneBrokenSet()
     end
 end
 
+-- MARK HIGHLIGHTED (H1GHL1GHT3R)
+function markHighlighted(part)
+    if not part or not part:IsA("BasePart") then return end
+    if H1ghl1ght3rState.highlightedSet[part] then return end
+    
+    local hl = Instance.new("Highlight")
+    hl.Name = "H1ghl1ght3r_Highlight"
+    hl.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
+    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillTransparency = 0.5
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Adornee = part
+    hl.Parent = part
+    
+    local bg = Instance.new("BillboardGui")
+    bg.Name = "H1ghl1ght3r_Nametag"
+    bg.AlwaysOnTop = true
+    bg.Size = UDim2.new(0, 200, 0, 50)
+    bg.StudsOffset = Vector3.new(0, 2, 0)
+    bg.Adornee = part
+    bg.Parent = part
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = GetFullPath(part)
+    lbl.TextColor3 = Color3.fromRGB(255, 105, 180)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.TextStrokeTransparency = 0.5
+    lbl.Parent = bg
+    
+    H1ghl1ght3rState.highlightedSet[part] = {hl = hl, bg = bg}
+    
+    table.insert(H1ghl1ght3rState.undoStack, {part = part, hl = hl, bg = bg})
+    if #H1ghl1ght3rState.undoStack > UNDO_LIMIT then
+        table.remove(H1ghl1ght3rState.undoStack, 1)
+    end
+end
+
+function unhighlightLast()
+    local entry = table.remove(H1ghl1ght3rState.undoStack)
+    if entry then
+        if entry.hl then pcall(function() entry.hl:Destroy() end) end
+        if entry.bg then pcall(function() entry.bg:Destroy() end) end
+        if entry.part then H1ghl1ght3rState.highlightedSet[entry.part] = nil end
+    end
+end
+
+function sweepHighlightedUndo(dt)
+    -- Throttling already handled by caller or dt
+    local n = #H1ghl1ght3rState.undoStack
+    if n == 0 then return end
+    local j = 1
+    for i = 1, n do
+        local entry = H1ghl1ght3rState.undoStack[i]
+        if entry.part and entry.part.Parent then
+            if i ~= j then H1ghl1ght3rState.undoStack[j] = entry end
+            j = j + 1
+        else
+            if entry.hl then pcall(function() entry.hl:Destroy() end) end
+            if entry.bg then pcall(function() entry.bg:Destroy() end) end
+        end
+    end
+    for i = j, n do H1ghl1ght3rState.undoStack[i] = nil end
+end
+
+function pruneHighlightedSet()
+    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
+        if not part or not part.Parent then
+            if data.hl then pcall(function() data.hl:Destroy() end) end
+            if data.bg then pcall(function() data.bg:Destroy() end) end
+            H1ghl1ght3rState.highlightedSet[part] = nil
+        end
+    end
+end
+
 -- Create hover highlight for Br3ak3r preview
 function createHoverHighlight()
     if Br3ak3rState.hoverHL then return Br3ak3rState.hoverHL end
@@ -591,10 +685,14 @@ function createHoverHighlight()
 end
 
 -- Update hover highlight for Br3ak3r (called each frame)
+-- Update hover highlight for Br3ak3r / H1ghl1ght3r (called each frame)
 -- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
 function UpdateBr3ak3rHover()
     -- Early exit - don't do ANY work if feature disabled or Ctrl not held
-    if not Br3ak3rState.CLICKBREAK_ENABLED or not Br3ak3rState.CTRL_HELD then
+    local breakerActive = Br3ak3rState.CLICKBREAK_ENABLED and not H1ghl1ght3rState.SHIFT_HELD
+    local highlighterActive = H1ghl1ght3rState.ENABLED and H1ghl1ght3rState.SHIFT_HELD
+    
+    if not Br3ak3rState.CTRL_HELD or (not breakerActive and not highlighterActive) then
         if Br3ak3rState.hoverHL and Br3ak3rState.hoverHL.Enabled then
             Br3ak3rState.hoverHL.Enabled = false
         end
@@ -604,12 +702,21 @@ function UpdateBr3ak3rHover()
     if not Br3ak3rState.hoverHL then
         createHoverHighlight()
     end
+
+    -- Differentiate color: Pink for breaker, Green for highlighter
+    if H1ghl1ght3rState.SHIFT_HELD then
+        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(0, 255, 0) -- Green
+    else
+        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
+    end
     
     local origin, direction = GetMouseRay()
     if origin and direction then
         local result = WorldRaycastBr3ak3r(origin, direction, true)
         local part = result and result.Instance
-        if part and part:IsA("BasePart") and not Br3ak3rState.brokenSet[part] then
+        local alreadyProcessed = Br3ak3rState.brokenSet[part] or H1ghl1ght3rState.highlightedSet[part]
+        
+        if part and part:IsA("BasePart") and not alreadyProcessed then
             Br3ak3rState.hoverHL.Adornee = part
             Br3ak3rState.hoverHL.Enabled = true
         else
@@ -4689,6 +4796,17 @@ function Cleanup()
     Br3ak3rState.brokenCacheDirty = true
     Br3ak3rState.CTRL_HELD = false
     Br3ak3rState.LEFT_CTRL_HELD = false
+
+    -- Cleanup H1ghl1ght3r (remove all highlights and nametags)
+    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
+        pcall(function()
+            if data.hl then data.hl:Destroy() end
+            if data.bg then data.bg:Destroy() end
+        end)
+    end
+    table.clear(H1ghl1ght3rState.highlightedSet)
+    table.clear(H1ghl1ght3rState.undoStack)
+    H1ghl1ght3rState.SHIFT_HELD = false
     
     -- Cleanup hover highlight
     if Br3ak3rState.hoverHL then
@@ -4846,6 +4964,15 @@ UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Ena
 end)
 UI.CreateButton(MiscTab, "Undo Last Break (Ctrl+Z)", unbreakLast)
 
+UI.CreateSection(MiscTab, "H1ghl1ght3r Tool")
+UI.CreateToggle(MiscTab, "Enable H1ghl1ght3r", "H1ghl1ght3r/Enabled", H1ghl1ght3rState.ENABLED, function(state)
+    H1ghl1ght3rState.ENABLED = state
+    if not state and Br3ak3rState.hoverHL then
+        Br3ak3rState.hoverHL.Enabled = false
+    end
+end)
+UI.CreateButton(MiscTab, "Undo Last Highlight (Ctrl+Shift+Z)", unhighlightLast)
+
 UI.CreateSection(MiscTab, "Utilities")
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
@@ -4939,13 +5066,15 @@ end))
 
 -- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- Track Ctrl key state
+    -- Track Ctrl & Shift key state
     if input.KeyCode == Enum.KeyCode.LeftControl then
         Br3ak3rState.LEFT_CTRL_HELD = true
         Br3ak3rState.CTRL_HELD = true
     elseif input.KeyCode == Enum.KeyCode.RightControl then
         Br3ak3rState.RIGHT_CTRL_HELD = true
         Br3ak3rState.CTRL_HELD = true
+    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+        H1ghl1ght3rState.SHIFT_HELD = true
     end
     
     -- Handle RMB for Aimbot/Trigger (only when not processed by game)
@@ -4954,13 +5083,23 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         AimState.Trigger = Flags["Aimbot/AutoFire"]
     end
     
-    -- Br3ak3r: Ctrl+Click to break object
-    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 and Br3ak3rState.CLICKBREAK_ENABLED then
-        local origin, direction = GetMouseRay()
-        if origin and direction then
-            local hit = WorldRaycastBr3ak3r(origin, direction, true)
-            if hit and hit.Instance and hit.Instance:IsA("BasePart") then
-                markBroken(hit.Instance)
+    -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
+    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if H1ghl1ght3rState.SHIFT_HELD and H1ghl1ght3rState.ENABLED then
+            local origin, direction = GetMouseRay()
+            if origin and direction then
+                local hit = WorldRaycastBr3ak3r(origin, direction, true)
+                if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+                    markHighlighted(hit.Instance)
+                end
+            end
+        elseif Br3ak3rState.CLICKBREAK_ENABLED then
+            local origin, direction = GetMouseRay()
+            if origin and direction then
+                local hit = WorldRaycastBr3ak3r(origin, direction, true)
+                if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+                    markBroken(hit.Instance)
+                end
             end
         end
     end
@@ -5014,11 +5153,16 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         end
     end
     
-    -- Br3ak3r keyboard shortcuts (only when not processed by game)
+    -- Br3ak3r / H1ghl1ght3r keyboard shortcuts (only when not processed by game)
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.Keyboard then
         if input.KeyCode == Enum.KeyCode.Z then
-            -- Ctrl+Z: Undo last break
-            unbreakLast()
+            if H1ghl1ght3rState.SHIFT_HELD then
+                -- Ctrl+Shift+Z: Undo last highlight
+                unhighlightLast()
+            else
+                -- Ctrl+Z: Undo last break
+                unbreakLast()
+            end
         elseif input.KeyCode == Enum.KeyCode.B then
             -- Ctrl+B: Toggle Br3ak3r
             Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
@@ -5054,6 +5198,10 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
         Br3ak3rState.RIGHT_CTRL_HELD = false
         if not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
             Br3ak3rState.CTRL_HELD = false
+        end
+    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+        if not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and not UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
+            H1ghl1ght3rState.SHIFT_HELD = false
         end
     end
     
@@ -5291,6 +5439,7 @@ function UnifiedHeartbeat(dt)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
         lastBr3ak3rCleanup = now
         pruneBrokenSet()
+        pruneHighlightedSet()
         
         -- MEMORY LEAK FIX: Periodic cache pruning to clear stale references
         PruneCharCache()
@@ -5301,6 +5450,7 @@ function UnifiedHeartbeat(dt)
     
     -- Sweep undo stack (very cheap)
     sweepUndo(dt)
+    sweepHighlightedUndo(dt)
 
     -- Continuous state enforcement for broken parts (StreamingEnabled fix)
     local enforcementMadeChange = false
