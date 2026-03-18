@@ -250,7 +250,7 @@ local AimState = {
     AcquiringFrames = 0
 }
 
-local AIM_ACQUIRE_STABILIZE_FRAMES = 2
+local AIM_ACQUIRE_STABILIZE_FRAMES = 1
 local AIM_ORIGIN_JUMP_RATIO = 0.25
 
 function ClearAimLockState(resetMouseMode)
@@ -1847,10 +1847,10 @@ end
 -- PHYSICS & BALLISTICS
 
 
--- Maximum reasonable velocity magnitude (studs/second) - tries to prevents aim snapping to sky (fails) 
-MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
+-- Maximum reasonable velocity magnitude (studs/second) - supports high-speed vehicles/horses
+MAX_TARGET_VELOCITY = 500 -- Increased for better high-speed tracking
 
--- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
+-- Solve projectile trajectory with gravity & ping compensation
 function SolveTrajectory(origin, velocity, time, gravity)
     -- Safety check for NaN in time
     if time ~= time then return origin end
@@ -1858,28 +1858,38 @@ function SolveTrajectory(origin, velocity, time, gravity)
     -- Safety check for NaN or zero velocity
     local velocityMagnitude = velocity.Magnitude
     if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 then
-        -- NaN check (NaN ~= NaN is true) or zero velocity - just return origin
         return origin
     end
     
-    -- Clamp time to reasonable values (prevents extreme predictions at long range)
-    time = min(time, 1.0) -- Max 1 second of prediction
+    -- Clamp time to reasonable values
+    time = min(time, 3.0)
     
-    -- Clamp velocity magnitude to prevent extreme predictions
+    -- Dynamic velocity clamping
     if velocityMagnitude > MAX_TARGET_VELOCITY then
-        -- Scale down to max velocity while keeping direction
         velocity = velocity.Unit * MAX_TARGET_VELOCITY
     end
     
-    -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
-    local predictedPosition = origin + velocity * time + gravityVector
+    -- Ping compensation (latency)
+    local ping = GetPing() / 1000
+    local totalTime = time + ping
     
-    -- Sanity check: if predicted position is too far from origin, return original
+    -- 2-Pass iterative prediction for higher accuracy at speed
+    -- First pass: estimate position based on initial travel time + ping
+    local firstPassPos = origin + velocity * totalTime
+    local refinedTime = (firstPassPos - Camera.CFrame.Position).Magnitude / AimState.ProjectileSpeed + ping
+
+    -- Calculate drop compensation (aim UP to counteract gravity)
+    -- Formula: 0.5 * g * t^2
+    local dropAmount = 0.5 * gravity * refinedTime * refinedTime
+    local gravityVector = Vector3.new(0, dropAmount / AimState.GravityCorrection, 0)
+
+    -- Final predicted position
+    local predictedPosition = origin + (velocity * refinedTime) + gravityVector
+
+    -- Sanity check: if predicted position is unrealistic, fallback
     local predictionOffset = (predictedPosition - origin).Magnitude
-    -- Fix: NaN check (NaN > 200 is false in Lua, so we must explicitly check for NaN)
-    if predictionOffset ~= predictionOffset or predictionOffset > 200 then 
-        return origin -- Fall back to actual position
+    if predictionOffset ~= predictionOffset or predictionOffset > 600 then
+        return origin
     end
     
     return predictedPosition
@@ -2337,18 +2347,15 @@ function AimAt(Hitbox, Sensitivity)
     local deltaX = dx * Sensitivity
     local deltaY = dy * Sensitivity
 
-    local maxDeltaX = viewportSize.X * 0.15
-    local maxDeltaY = viewportSize.Y * 0.15
-    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
-        return
-    end
+    -- Increased delta thresholds for better tracking of fast-moving targets
+    local maxDeltaX = viewportSize.X * 0.5
+    local maxDeltaY = viewportSize.Y * 0.5
+
+    -- Clamp instead of return to ensure we always move towards the target
+    deltaX = math.clamp(deltaX, -maxDeltaX, maxDeltaX)
+    deltaY = math.clamp(deltaY, -maxDeltaY, maxDeltaY)
 
     if deltaX ~= deltaX or deltaY ~= deltaY then
-        return
-    end
-
-    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.3
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
         return
     end
 
@@ -4920,8 +4927,8 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) AimState.ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
