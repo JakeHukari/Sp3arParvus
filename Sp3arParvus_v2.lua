@@ -622,17 +622,39 @@ function markHighlighted(part)
     lbl.TextStrokeTransparency = 0.5
     lbl.Parent = bg
     
-    H1ghl1ght3rState.highlightedSet[part] = {hl = hl, bg = bg}
+    H1ghl1ght3rState.highlightedSet[part] = {
+        hl = hl, 
+        bg = bg,
+        ltm = part.LocalTransparencyModifier,
+        t = part.Transparency
+    }
     
-    table.insert(H1ghl1ght3rState.undoStack, {part = part, hl = hl, bg = bg})
+    table.insert(H1ghl1ght3rState.undoStack, {
+        part = part, 
+        hl = hl, 
+        bg = bg,
+        ltm = part.LocalTransparencyModifier,
+        t = part.Transparency
+    })
+
     if #H1ghl1ght3rState.undoStack > UNDO_LIMIT then
         table.remove(H1ghl1ght3rState.undoStack, 1)
     end
+
+    -- Force visibility so the Highlight is visible on transparent objects
+    part.LocalTransparencyModifier = 0.5
+    part.Transparency = 0.5
 end
 
 function unhighlightLast()
     local entry = table.remove(H1ghl1ght3rState.undoStack)
     if entry then
+        if entry.part and entry.part.Parent then
+            pcall(function()
+                entry.part.LocalTransparencyModifier = entry.ltm
+                entry.part.Transparency = entry.t
+            end)
+        end
         if entry.hl then pcall(function() entry.hl:Destroy() end) end
         if entry.bg then pcall(function() entry.bg:Destroy() end) end
         if entry.part then H1ghl1ght3rState.highlightedSet[entry.part] = nil end
@@ -4797,9 +4819,13 @@ function Cleanup()
     Br3ak3rState.CTRL_HELD = false
     Br3ak3rState.LEFT_CTRL_HELD = false
 
-    -- Cleanup H1ghl1ght3r (remove all highlights and nametags)
+    -- Cleanup H1ghl1ght3r (remove all highlights and nametags, restore transparency)
     for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         pcall(function()
+            if part.Parent then
+                part.LocalTransparencyModifier = data.ltm
+                part.Transparency = data.t
+            end
             if data.hl then data.hl:Destroy() end
             if data.bg then data.bg:Destroy() end
         end)
@@ -5472,6 +5498,14 @@ function UnifiedHeartbeat(dt)
     end
     if enforcementMadeChange then
         Br3ak3rState.brokenCacheDirty = true
+    end
+
+    -- Continuous state enforcement for highlighted parts (ensure visibility)
+    for part, _ in pairs(H1ghl1ght3rState.highlightedSet) do
+        if part.Parent then
+            if part.Transparency ~= 0.5 then part.Transparency = 0.5 end
+            if part.LocalTransparencyModifier ~= 0.5 then part.LocalTransparencyModifier = 0.5 end
+        end
     end
 end
 
