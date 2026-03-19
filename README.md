@@ -44,6 +44,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Physics Prediction**: Advanced velocity and gravity correction for projectiles (3155 velocity default).
 
 ### Visuals & ESP
+*   **Gh0st Mode**: Turns off all UI elements while still allowing functions like aimbot and br3ak3r.
 *   **Player ESP**: Full hitbox, nametag, distance tracking, team tracking, and tracer support.
 *   **Offscreen Indicators**: Never get snuck again.
 *   **Fullbright**: Complete control over workspace lighting and sky hues.
@@ -62,10 +63,11 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Aimbot Clutch**: Aimbot is **ON** by default, holding `Ctrl` will disable any aim-lock, auto-shoot, or silent aim for the duration that `Ctrl` is being held   
 
 ### Visuals & ESP
+*   **Gh0st Mode**: `Ctrl + G`
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
 *   **Fullbright**: `Ctrl + F`
 *   **Free-cam**: `Ctrl + P`
-*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` again to **Destroy**  
+*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**  
 
 ### Developer Utilities
 *   **Br3ak3r**: `Ctrl + Left Click` to **Break** local objects, `Ctrl + Z` to **Undo** recent object breaks
