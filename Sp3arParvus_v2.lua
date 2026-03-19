@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.3.4" -- Added H1ghL1ghter, use 'ctrl+shift+left-click' to highlight parts, use 'ctrl+shift+z' to undo
+local VERSION = "3.4.4" -- Invented: 'Gh0st Mode (Ctrl+G)', turns off all UI elements
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -349,7 +349,8 @@ local Flags = {
     ["Waypoints/Enabled"] = true,
 
     -- Freecam
-    ["Settings/Freecam Toggle"] = true
+    ["Settings/Freecam Toggle"] = true,
+    ["Settings/GhostMode"] = false
 }
 
 -- WAYPOINTS SYSTEM STATE
@@ -508,7 +509,7 @@ function markBroken(part)
     if not part or not part:IsA("BasePart") then return end
     if Br3ak3rState.brokenSet[part] then return end
     
-    Br3ak3rState.brokenSet[part] = true
+    Br3ak3rState.brokenSet[part] = {cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
     Br3ak3rState.brokenCacheDirty = true
     
     -- Save original state for undo
@@ -710,6 +711,13 @@ end
 -- Update hover highlight for Br3ak3r / H1ghl1ght3r (called each frame)
 -- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
 function UpdateBr3ak3rHover()
+    -- Early exit - don't do ANY work if Gh0st mode active
+    if Flags["Settings/GhostMode"] then
+        if Br3ak3rState.hoverHL and Br3ak3rState.hoverHL.Enabled then
+            Br3ak3rState.hoverHL.Enabled = false
+        end
+        return
+    end
     -- Early exit - don't do ANY work if feature disabled or Ctrl not held
     local breakerActive = Br3ak3rState.CLICKBREAK_ENABLED and not H1ghl1ght3rState.SHIFT_HELD
     local highlighterActive = H1ghl1ght3rState.ENABLED and H1ghl1ght3rState.SHIFT_HELD
@@ -3673,7 +3681,7 @@ end
 
 -- Update ESP for a player (optimized - uses cached closest player)
 function UpdateESP(now, player, isClosest)
-    if not Flags["ESP/Enabled"] then return end
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then return end
 
     local espData = ESPObjects[player]
     
@@ -4798,17 +4806,12 @@ function Cleanup()
     table.clear(ActiveWaypoints)
 
     -- Cleanup Br3ak3r (restore all broken parts)
-    for part, _ in pairs(Br3ak3rState.brokenSet) do
+    for part, original in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
-            -- Find original state in undo stack
-            for i = #Br3ak3rState.undoStack, 1, -1 do
-                local entry = Br3ak3rState.undoStack[i]
-                if entry.part == part then
-                    part.CanCollide = entry.cc
-                    part.LocalTransparencyModifier = entry.ltm
-                    part.Transparency = entry.t
-                    break
-                end
+            if part.Parent and type(original) == "table" then
+                part.CanCollide = original.cc
+                part.LocalTransparencyModifier = original.ltm
+                part.Transparency = original.t
             end
         end)
     end
@@ -4822,12 +4825,14 @@ function Cleanup()
     -- Cleanup H1ghl1ght3r (remove all highlights and nametags, restore transparency)
     for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         pcall(function()
-            if part.Parent then
+            if part.Parent and type(data) == "table" then
                 part.LocalTransparencyModifier = data.ltm
                 part.Transparency = data.t
             end
-            if data.hl then data.hl:Destroy() end
-            if data.bg then data.bg:Destroy() end
+            if type(data) == "table" then
+                if data.hl then data.hl:Destroy() end
+                if data.bg then data.bg:Destroy() end
+            end
         end)
     end
     table.clear(H1ghl1ght3rState.highlightedSet)
@@ -5010,6 +5015,7 @@ UI.CreateToggle(SettingsTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle
         _G.StopFreecamFunc()
     end
 end)
+UI.CreateToggle(SettingsTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"])
 UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
@@ -5208,6 +5214,9 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.F then
             -- Ctrl+F: Toggle Fullbright
             Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
+        elseif input.KeyCode == Enum.KeyCode.G then
+            -- Ctrl+G: Toggle Gh0st Mode
+            Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
         end
     end
 end))
@@ -5371,6 +5380,41 @@ hoverUpdateRate = 0.033 -- Hover at 30fps
 function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
+    local ghostMode = Flags["Settings/GhostMode"]
+    if ScreenGui then
+        if ScreenGui.Enabled == ghostMode then
+            ScreenGui.Enabled = not ghostMode
+        end
+    end
+
+    if ghostMode then
+        for _, espData in pairs(ESPObjects) do
+            if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+            if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
+                espData.OffscreenIndicator.Frame.Visible = false
+            end
+        end
+        if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
+        if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
+        if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
+        if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
+    else
+        -- Restore visibility when Gh0st mode toggled off
+        if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
+            ClosestPlayerTrackerLabel.Visible = true
+        end
+        if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
+            PerformanceLabel.Visible = true
+        end
+        if LocalHealthHUD and not LocalHealthHUD.Visible then
+            LocalHealthHUD.Visible = true
+        end
+        if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
+            PlayerPanelFrame.Visible = true
+        end
+    end
+
     UpdateFullbright()
     UpdateLocalHealthHUD()
     
@@ -5383,8 +5427,9 @@ function UnifiedHeartbeat(dt)
                 wpData.DistanceText = distRounded .. " studs"
                 wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
             end
-            if wpData.Billboard and not wpData.Billboard.Enabled then wpData.Billboard.Enabled = true end
-            if wpData.PinBg and not wpData.PinBg.Enabled then wpData.PinBg.Enabled = true end
+            local wpVisible = not ghostMode
+            if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
+            if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
         end
     else
         -- Hide all if disabled
@@ -5464,8 +5509,8 @@ function UnifiedHeartbeat(dt)
     -- Periodic cleanup (throttled)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
         lastBr3ak3rCleanup = now
-        pruneBrokenSet()
-        pruneHighlightedSet()
+        pcall(pruneBrokenSet)
+        pcall(pruneHighlightedSet)
         
         -- MEMORY LEAK FIX: Periodic cache pruning to clear stale references
         PruneCharCache()
@@ -5480,18 +5525,20 @@ function UnifiedHeartbeat(dt)
 
     -- Continuous state enforcement for broken parts (StreamingEnabled fix)
     local enforcementMadeChange = false
-    for part, _ in pairs(Br3ak3rState.brokenSet) do
+    for part, original in pairs(Br3ak3rState.brokenSet) do
         if part.Parent then
             if part.CanCollide ~= false then 
                 part.CanCollide = false 
                 enforcementMadeChange = true
             end
-            if part.Transparency ~= 0.5 then 
-                part.Transparency = 0.5 
+            local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
+            local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
+            if part.Transparency ~= targetT then 
+                part.Transparency = targetT 
                 enforcementMadeChange = true
             end
-            if part.LocalTransparencyModifier ~= 0.5 then 
-                part.LocalTransparencyModifier = 0.5 
+            if part.LocalTransparencyModifier ~= targetLTM then 
+                part.LocalTransparencyModifier = targetLTM 
                 enforcementMadeChange = true
             end
         end
@@ -5501,10 +5548,30 @@ function UnifiedHeartbeat(dt)
     end
 
     -- Continuous state enforcement for highlighted parts (ensure visibility)
-    for part, _ in pairs(H1ghl1ght3rState.highlightedSet) do
+    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         if part.Parent then
-            if part.Transparency ~= 0.5 then part.Transparency = 0.5 end
-            if part.LocalTransparencyModifier ~= 0.5 then part.LocalTransparencyModifier = 0.5 end
+            local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+            local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+            if part.Transparency ~= targetT then part.Transparency = targetT end
+            if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
+            
+            local hVisible = not ghostMode
+            if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
+            if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
+        end
+    end
+
+    -- Continuous state enforcement for player outlines (ensure Ghost Mode)
+    for player, storage in pairs(PlayerOutlineObjects) do
+        local outlineVisible = not ghostMode
+        if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
+            storage.Highlight.Enabled = outlineVisible
+        end
+        if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
+            storage.HeadDot.Enabled = outlineVisible
+        end
+        if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
+            storage.RootDot.Enabled = outlineVisible
         end
     end
 end
