@@ -3681,7 +3681,7 @@ end
 
 -- Update ESP for a player (optimized - uses cached closest player)
 function UpdateESP(now, player, isClosest)
-    if not Flags["ESP/Enabled"] then return end
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then return end
 
     local espData = ESPObjects[player]
     
@@ -5385,6 +5385,20 @@ function UnifiedHeartbeat(dt)
         if ScreenGui.Enabled == ghostMode then
             ScreenGui.Enabled = not ghostMode
         end
+    end
+
+    if ghostMode then
+        for _, espData in pairs(ESPObjects) do
+            if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+            if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
+                espData.OffscreenIndicator.Frame.Visible = false
+            end
+        end
+        if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
+        if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
+        if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
+        if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
     end
 
     UpdateFullbright()
