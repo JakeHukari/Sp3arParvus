@@ -149,10 +149,11 @@ local Services = {
     TweenService = game:GetService("TweenService"),
     Workspace = game:GetService("Workspace"),
     Players = game:GetService("Players"),
-    VirtualUser = game:GetService("VirtualUser")
+    VirtualUser = game:GetService("VirtualUser"),
+    TextService = game:GetService("TextService")
 }
-local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players, VirtualUser = 
-    Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players, Services.VirtualUser
+local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players, VirtualUser, TextService =
+    Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players, Services.VirtualUser, Services.TextService
 
 -- ANTI-AFK (Prevents idle kick)
 TrackConnection(LocalPlayer.Idled:Connect(function()
@@ -1189,16 +1190,35 @@ function UI.CreateWindow(title)
     local Minimized = false
     local OldSize = UDim2.fromOffset(600, 400)
     
+    local minimizedText = "Sp3arParvus v" .. VERSION
+    local textSize = TextService:GetTextSize(minimizedText, 14, Enum.Font.GothamBold, Vector2.new(1000, 1000))
+    local minimizedWidth = textSize.X + 45
+
+    local MinimizedLabel = Instance.new("TextLabel")
+    MinimizedLabel.Name = "MinimizedLabel"
+    MinimizedLabel.Text = minimizedText
+    MinimizedLabel.Font = Enum.Font.GothamBold
+    MinimizedLabel.TextSize = 14
+    MinimizedLabel.TextColor3 = UI_THEME.Accent
+    MinimizedLabel.Position = UDim2.fromOffset(10, 0)
+    MinimizedLabel.Size = UDim2.new(1, -45, 1, 0)
+    MinimizedLabel.BackgroundTransparency = 1
+    MinimizedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    MinimizedLabel.Visible = false
+    MinimizedLabel.Parent = MainFrame
+
     -- MEMORY LEAK FIX: Track minimize button connection
     TrackConnection(MinButton.MouseButton1Click:Connect(function()
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
-            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(600, 30)}):Play()
+            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(minimizedWidth, 30)}):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
+            MinimizedLabel.Visible = true
             MinButton.Text = "+"
         else
+            MinimizedLabel.Visible = false
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = OldSize}):Play()
             task.wait(0.1)
             ContentArea.Visible = true
@@ -1216,7 +1236,7 @@ function UI.CreateWindow(title)
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
                 MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(600, 30) or UDim2.fromOffset(600, 400)}):Play()
+                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(minimizedWidth, 30) or UDim2.fromOffset(600, 400)}):Play()
             end
         end
     end))
