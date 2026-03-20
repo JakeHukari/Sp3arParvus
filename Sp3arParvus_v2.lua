@@ -551,6 +551,23 @@ function unbreakLast()
     entry.part.Transparency = entry.t
 end
 
+-- Clear all broken parts
+function unbreakAll()
+    for part, original in pairs(Br3ak3rState.brokenSet) do
+        pcall(function()
+            if part.Parent and type(original) == "table" then
+                part.CanCollide = original.cc
+                part.LocalTransparencyModifier = original.ltm
+                part.Transparency = original.t
+            end
+        end)
+    end
+    table.clear(Br3ak3rState.brokenSet)
+    table.clear(Br3ak3rState.undoStack)
+    table.clear(Br3ak3rState.brokenIgnoreCache)
+    Br3ak3rState.brokenCacheDirty = true
+end
+
 -- Sweep undo stack (periodic cleanup of destroyed parts)
 sweepAccum = 0
 function sweepUndo(dt)
@@ -4994,6 +5011,7 @@ UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Ena
     end
 end)
 UI.CreateButton(MiscTab, "Undo Last Break (Ctrl+Z)", unbreakLast)
+UI.CreateButton(MiscTab, "Clear All Breaks (Ctrl+X)", unbreakAll)
 
 UI.CreateSection(MiscTab, "H1ghl1ght3r Tool")
 UI.CreateToggle(MiscTab, "Enable H1ghl1ght3r", "H1ghl1ght3r/Enabled", H1ghl1ght3rState.ENABLED, function(state)
@@ -5195,6 +5213,9 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                 -- Ctrl+Z: Undo last break
                 unbreakLast()
             end
+        elseif input.KeyCode == Enum.KeyCode.X then
+            -- Ctrl+X: Clear all breaks
+            unbreakAll()
         elseif input.KeyCode == Enum.KeyCode.B then
             -- Ctrl+B: Toggle Br3ak3r
             Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
