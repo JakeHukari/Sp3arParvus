@@ -63,6 +63,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Aimbot Clutch**: Aimbot is **ON** by default, holding `Ctrl` will disable any aim-lock, auto-shoot, or silent aim for the duration that `Ctrl` is being held   
 
 ### Visuals & ESP
+*   **Menu Visability**: `CapsLock`
 *   **Gh0st Mode**: `Ctrl + G`
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
 *   **Fullbright**: `Ctrl + F`
@@ -70,7 +71,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**  
 
 ### Developer Utilities
-*   **Br3ak3r**: `Ctrl + Left Click` to **Break** local objects, `Ctrl + Z` to **Undo** recent object breaks
+*   **Br3ak3r**: `Ctrl + Left Click` to **Br3ak** local objects, `Ctrl + Z` to **Undo** object **Br3aks** in sequence, `Ctrl + X` to **Undo** ALL **Br3aks** instantly 
 *   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, 'Ctrl + Shift + Z' to undo
 *   **Rejoin Server**: `Ctrl + R`
 *   **Unload Sp3arParvus**: `Ctrl + U`  
