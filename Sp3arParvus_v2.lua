@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.4.4" -- Invented: 'Gh0st Mode (Ctrl+G)', turns off all UI elements
+local VERSION = "3.5.4" -- Added undo all for Br3ak3r, 'Ctrl+X' will now undo ALL brok3n objects
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
