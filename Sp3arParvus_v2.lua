@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.5" -- Changed menu visibility toggle keybind to CapsLock
+local VERSION = "3.5.6" -- Updated performance monitor with broken and highlighted object tracker
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -4019,7 +4019,7 @@ end
 
 PerformanceLabel = nil
 PerfMinimized = false
-PerfOriginalSize = UDim2.fromOffset(180, 115)
+PerfOriginalSize = UDim2.fromOffset(180, 145)
 
 PerformanceRows = {}
 
@@ -4104,6 +4104,8 @@ function CreatePerformanceDisplay(parent)
     CreateRow("Memory", "0 MB")
     CreateRow("Players", "0")
     CreateRow("Aimbot", "OFF")
+    CreateRow("Br0k3n Objects", "0")
+    CreateRow("H1ghL1ghted Objects", "0")
 
     -- Minimize Button
     local minimizeBtn = Instance.new("TextButton")
@@ -4151,7 +4153,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
-    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 160)
+    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 190)
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     LocalHealthHUD.BackgroundTransparency = 0.2
     LocalHealthHUD.BorderSizePixel = 0
@@ -4237,9 +4239,19 @@ function UpdatePerformanceDisplay()
         PerformanceRows.Players.Text = tostring(playerCount)
     end
     if PerformanceRows.Aimbot then
-        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or Aimbot)
+        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
         PerformanceRows.Aimbot.Text = aimbotActive and "LOCKED 🔒" or "IDLE ─"
         PerformanceRows.Aimbot.TextColor3 = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
+    end
+    if PerformanceRows["Br0k3n Objects"] then
+        local brokenCount = 0
+        for _ in pairs(Br3ak3rState.brokenSet) do brokenCount = brokenCount + 1 end
+        PerformanceRows["Br0k3n Objects"].Text = tostring(brokenCount)
+    end
+    if PerformanceRows["H1ghL1ghted Objects"] then
+        local highlightedCount = 0
+        for _ in pairs(H1ghl1ght3rState.highlightedSet) do highlightedCount = highlightedCount + 1 end
+        PerformanceRows["H1ghL1ghted Objects"].Text = tostring(highlightedCount)
     end
 end
 
