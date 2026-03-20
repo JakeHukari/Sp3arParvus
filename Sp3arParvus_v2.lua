@@ -2651,8 +2651,8 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, 10)
-    ClosestPlayerTrackerLabel.BackgroundTransparency = 0.2
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, -55) -- Position of Closest Player Tracker
+    ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
     ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     ClosestPlayerTrackerLabel.BorderSizePixel = 0
     EnsureScreenGui()
@@ -4027,7 +4027,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
-    PerformanceLabel.Position = UDim2.new(1, -430, 0, 45)
+    PerformanceLabel.Position = UDim2.new(1, -430, 0, 45) -- Position of Performance Tracker
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     PerformanceLabel.BackgroundTransparency = 0
     PerformanceLabel.BorderSizePixel = 0
@@ -4153,7 +4153,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
-    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 190)
+    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 190) -- Position of Health Tracker
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     LocalHealthHUD.BackgroundTransparency = 0.2
     LocalHealthHUD.BorderSizePixel = 0
