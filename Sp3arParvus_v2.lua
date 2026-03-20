@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.4" -- Added undo all for Br3ak3r, 'Ctrl+X' will now undo ALL brok3n objects
+local VERSION = "3.5.5" -- Changed menu visibility toggle keybind to CapsLock
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -1210,7 +1210,7 @@ function UI.CreateWindow(title)
     -- Toggle Logic (Right Shift)
     -- MEMORY LEAK FIX: Track this connection
     TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if input.KeyCode == Enum.KeyCode.RightShift then
+        if input.KeyCode == Enum.KeyCode.CapsLock then
             UIState.Visible = not UIState.Visible
             MainFrame.Visible = UIState.Visible
             if UIState.Visible then
