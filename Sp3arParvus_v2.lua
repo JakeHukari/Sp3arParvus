@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.7" -- Updated UI to be more minimal
+local VERSION = "3.5.8" -- Fixed Origin Dot
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -3473,6 +3473,7 @@ end
 
 function _resetPooledObject(obj)
     obj.Adornee = nil
+    pcall(function() obj.Enabled = false end)
     obj.Parent = PoolFolder
 end
 
@@ -3520,6 +3521,7 @@ function UpdateDot(player, character, storage, dotType, partName)
         dot.Size = UDim2.fromOffset(6, 6)
         dot.StudsOffset = Vector3.new(0, 0, 0)
         dot.Adornee = part
+        dot.Enabled = true
         dot.Parent = character
         
         -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
@@ -3551,6 +3553,9 @@ function UpdateDot(player, character, storage, dotType, partName)
         end
         if dot.Parent ~= character then
             dot.Parent = character
+        end
+        if not dot.Enabled then
+            dot.Enabled = true
         end
         
         -- FIX: Ensure the dot frame child still exists
@@ -5448,6 +5453,14 @@ function UnifiedHeartbeat(dt)
                 espData.OffscreenIndicator.Frame.Visible = false
             end
         end
+
+        -- Ensure pooled objects are disabled during Gh0st mode
+        for _, obj in ipairs(PoolFolder:GetChildren()) do
+            pcall(function()
+                if obj.Enabled then obj.Enabled = false end
+            end)
+        end
+
         if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
         if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
         if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
