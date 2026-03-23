@@ -29,7 +29,7 @@ Sp3arParvus is a lua client designed to enhance your in-game senses with univers
 Copy the loadstring below:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus_v2.lua", true))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()
 ```
 
 Paste the loadstring into an executor [e.g. [Solara](https://getsolara.dev/), Wave, Delta] or use any other method of executing scripts in your workspace
