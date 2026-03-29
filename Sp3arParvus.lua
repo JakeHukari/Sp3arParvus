@@ -245,7 +245,7 @@ local AimState = {
     Trigger = false,
     ProjectileSpeed = 3155,
     ProjectileGravity = 196.2,
-    GravityCorrection = 2,
+    GravityCorrection = 1,
     LastAimbotTarget = nil,
     LastMouseMode = nil,
     LastOriginX = nil,
@@ -312,7 +312,7 @@ local Flags = {
     -- Ballistics
     ["Prediction/Velocity"] = 3155,
     ["Prediction/GravityForce"] = 196.2,
-    ["Prediction/GravityMultiplier"] = 2,
+    ["Prediction/GravityMultiplier"] = 1,
 
     -- Aimbot
     ["Aimbot/AimLock"] = true,
@@ -1147,22 +1147,20 @@ function UI.CreateWindow(title)
             local viewportSize = Camera.ViewportSize
             for frame, data in pairs(dragData) do
                 if data.dragging then
-                    local delta = input.Position - data.dragStart
+                    local mousePos = input.Position
                     local absSize = frame.AbsoluteSize
                     
-                    local newX = data.startPos.X.Offset + delta.X
-                    local newY = data.startPos.Y.Offset + delta.Y
+                    -- Calculate desired absolute position
+                    local targetX = mousePos.X - data.dragStart.X + data.startAbsPos.X
+                    local targetY = mousePos.Y - data.dragStart.Y + data.startAbsPos.Y
                     
                     -- Clamp within viewport
-                    newX = math.clamp(newX, 0, viewportSize.X - absSize.X)
-                    newY = math.clamp(newY, 0, viewportSize.Y - absSize.Y)
+                    targetX = math.clamp(targetX, 0, viewportSize.X - absSize.X)
+                    targetY = math.clamp(targetY, 0, viewportSize.Y - absSize.Y)
                     
-                    frame.Position = UDim2.new(
-                        data.startPos.X.Scale, 
-                        newX, 
-                        data.startPos.Y.Scale, 
-                        newY
-                    )
+                    -- Update frame position (offset only, scale to 0)
+                    frame.Position = UDim2.fromOffset(targetX, targetY)
+                    frame.AnchorPoint = Vector2.new(0, 0)
                 end
             end
         end
@@ -1176,7 +1174,7 @@ function UI.CreateWindow(title)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 data.dragging = true
                 data.dragStart = input.Position
-                data.startPos = Frame.Position
+                data.startAbsPos = Frame.AbsolutePosition
                 
                 -- Ensure this frame is on top while dragging
                 Frame.ZIndex = Frame.ZIndex + 100
@@ -1678,9 +1676,12 @@ function UpdateFullbright()
             FullbrightState.Originals.FogEnd = Services.Lighting.FogEnd
             FullbrightState.Originals.GlobalShadows = Services.Lighting.GlobalShadows
             
-            local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-            if atmosphere then
-                FullbrightState.Originals.AtmosphereDensity = atmosphere.Density
+            -- Save atmospheres
+            FullbrightState.Originals.Atmospheres = {}
+            for _, item in ipairs(Services.Lighting:GetChildren()) do
+                if item:IsA("Atmosphere") then
+                    FullbrightState.Originals.Atmospheres[item] = item.Density
+                end
             end
             
             FullbrightState.Active = true
@@ -1694,9 +1695,10 @@ function UpdateFullbright()
         Services.Lighting.FogEnd = 1e5
         Services.Lighting.GlobalShadows = false
         
-        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-        if atmosphere then
-            atmosphere.Density = 0
+        for _, item in ipairs(Services.Lighting:GetChildren()) do
+            if item:IsA("Atmosphere") then
+                item.Density = 0
+            end
         end
     elseif FullbrightState.Active then
         -- Restore original settings
@@ -1707,9 +1709,12 @@ function UpdateFullbright()
         Services.Lighting.FogEnd = FullbrightState.Originals.FogEnd
         Services.Lighting.GlobalShadows = FullbrightState.Originals.GlobalShadows
         
-        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-        if atmosphere and FullbrightState.Originals.AtmosphereDensity then
-            atmosphere.Density = FullbrightState.Originals.AtmosphereDensity
+        if FullbrightState.Originals.Atmospheres then
+            for atmosphere, density in pairs(FullbrightState.Originals.Atmospheres) do
+                if atmosphere and atmosphere.Parent then
+                    atmosphere.Density = density
+                end
+            end
         end
         
         FullbrightState.Active = false
@@ -1988,7 +1993,7 @@ function SolveTrajectory(origin, velocity, time, gravity)
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
+    local gravityVector = Vector3.new(0, -0.5 * gravity * AimState.GravityCorrection * time * time, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
     -- Sanity check: if predicted position is too far from origin, return original
@@ -3931,6 +3936,9 @@ function UpdateESP(now, player, isClosest)
         if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
             espData.HealthBarContainer.Visible = healthVisible
         end
+        if espData.HealthNumericalLabel and espData.HealthNumericalLabel.Visible ~= healthVisible then
+            espData.HealthNumericalLabel.Visible = healthVisible
+        end
 
         -- Update Health visuals
         local health, maxHealth = GetHealth(player)
@@ -5063,7 +5071,7 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
 UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) AimState.ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0.1, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -5442,6 +5450,7 @@ function UpdateAimbot()
 end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
+TrackConnection(RunService.RenderStepped:Connect(UpdateFullbright))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
@@ -5569,9 +5578,6 @@ function UnifiedHeartbeat(dt)
     end
 
     local now = os.clock()
-
-    -- Call Fullbright every frame while active to prevent flashing/overriding
-    UpdateFullbright()
 
     -- Throttled non-critical updates (10 FPS)
     if (now - lastMiscUpdate) > miscUpdateRate then
