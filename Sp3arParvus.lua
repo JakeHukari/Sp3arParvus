@@ -1144,14 +1144,24 @@ function UI.CreateWindow(title)
     -- Single shared listener for all draggable frames to reduce overhead
     TrackConnection(UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement then
+            local viewportSize = Camera.ViewportSize
             for frame, data in pairs(dragData) do
                 if data.dragging then
                     local delta = input.Position - data.dragStart
+                    local absSize = frame.AbsoluteSize
+                    
+                    local newX = data.startPos.X.Offset + delta.X
+                    local newY = data.startPos.Y.Offset + delta.Y
+                    
+                    -- Clamp within viewport
+                    newX = math.clamp(newX, 0, viewportSize.X - absSize.X)
+                    newY = math.clamp(newY, 0, viewportSize.Y - absSize.Y)
+                    
                     frame.Position = UDim2.new(
                         data.startPos.X.Scale, 
-                        data.startPos.X.Offset + delta.X, 
+                        newX, 
                         data.startPos.Y.Scale, 
-                        data.startPos.Y.Offset + delta.Y
+                        newY
                     )
                 end
             end
@@ -1597,7 +1607,11 @@ end
 -- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
 function GetPing()
     local success, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
-    return success and ping * 1000 or 0
+    -- Include NaN check
+    if success and ping == ping then
+        return ping * 1000
+    end
+    return 0
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
@@ -1646,20 +1660,59 @@ end))
 
 -- FULLBRIGHT SYSTEM
 
+local FullbrightState = {
+    Active = false,
+    Originals = {}
+}
+
 function UpdateFullbright()
-    if not Flags["Visuals/Fullbright"] then return end
+    local enabled = Flags["Visuals/Fullbright"]
     
-    Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-    Services.Lighting.Brightness = 2
-    Services.Lighting.ClockTime = 12
-    Services.Lighting.FogEnd = 1e5
-    Services.Lighting.GlobalShadows = false
-    
-    -- Option: Also disable Atmosphere/Bloom if present for maximum clarity
-    local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-    if atmosphere then
-        atmosphere.Density = 0
+    if enabled then
+        if not FullbrightState.Active then
+            -- Save original settings
+            FullbrightState.Originals.Ambient = Services.Lighting.Ambient
+            FullbrightState.Originals.OutdoorAmbient = Services.Lighting.OutdoorAmbient
+            FullbrightState.Originals.Brightness = Services.Lighting.Brightness
+            FullbrightState.Originals.ClockTime = Services.Lighting.ClockTime
+            FullbrightState.Originals.FogEnd = Services.Lighting.FogEnd
+            FullbrightState.Originals.GlobalShadows = Services.Lighting.GlobalShadows
+            
+            local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if atmosphere then
+                FullbrightState.Originals.AtmosphereDensity = atmosphere.Density
+            end
+            
+            FullbrightState.Active = true
+        end
+
+        -- Enforce Fullbright settings
+        Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Services.Lighting.Brightness = 2
+        Services.Lighting.ClockTime = 12
+        Services.Lighting.FogEnd = 1e5
+        Services.Lighting.GlobalShadows = false
+        
+        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere then
+            atmosphere.Density = 0
+        end
+    elseif FullbrightState.Active then
+        -- Restore original settings
+        Services.Lighting.Ambient = FullbrightState.Originals.Ambient
+        Services.Lighting.OutdoorAmbient = FullbrightState.Originals.OutdoorAmbient
+        Services.Lighting.Brightness = FullbrightState.Originals.Brightness
+        Services.Lighting.ClockTime = FullbrightState.Originals.ClockTime
+        Services.Lighting.FogEnd = FullbrightState.Originals.FogEnd
+        Services.Lighting.GlobalShadows = FullbrightState.Originals.GlobalShadows
+        
+        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere and FullbrightState.Originals.AtmosphereDensity then
+            atmosphere.Density = FullbrightState.Originals.AtmosphereDensity
+        end
+        
+        FullbrightState.Active = false
     end
 end
 
@@ -2144,7 +2197,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                         BodyPartPosition = SolveTrajectory(
                             BodyPartPosition,
                             velocity,
-                            Distance / AimState.ProjectileSpeed,
+                            (Distance / AimState.ProjectileSpeed) + (GetPing() / 1000),
                             AimState.ProjectileGravity
                         )
                     end
@@ -2204,7 +2257,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     BodyPartPosition = SolveTrajectory(
                         BodyPartPosition,
                         velocity,
-                        Distance / AimState.ProjectileSpeed,
+                        (Distance / AimState.ProjectileSpeed) + (GetPing() / 1000),
                         AimState.ProjectileGravity
                     )
                 end
@@ -2359,7 +2412,7 @@ function AimAt(Hitbox, Sensitivity)
         targetPos = SolveTrajectory(
             targetPos,
             velocity,
-            dist / AimState.ProjectileSpeed,
+            (dist / AimState.ProjectileSpeed) + (GetPing() / 1000),
             AimState.ProjectileGravity
         )
     end
@@ -2406,20 +2459,17 @@ function AimAt(Hitbox, Sensitivity)
     local deltaX = dx * Sensitivity
     local deltaY = dy * Sensitivity
 
-    local maxDeltaX = viewportSize.X * 0.15
-    local maxDeltaY = viewportSize.Y * 0.15
-    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
+    -- Validate for NaN and Inf
+    if deltaX ~= deltaX or deltaY ~= deltaY or abs(deltaX) == 1/0 or abs(deltaY) == 1/0 then
         return
     end
 
-    if deltaX ~= deltaX or deltaY ~= deltaY then
-        return
-    end
-
-    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.3
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return
-    end
+    -- Clamp movement to 50% of the viewport size for stability
+    local maxDeltaX = viewportSize.X * 0.5
+    local maxDeltaY = viewportSize.Y * 0.5
+    
+    deltaX = math.clamp(deltaX, -maxDeltaX, maxDeltaX)
+    deltaY = math.clamp(deltaY, -maxDeltaY, maxDeltaY)
 
     mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
@@ -4946,6 +4996,12 @@ function Cleanup()
     table.clear(cachedSortedPlayers)
     table.clear(cachedPlayersList)
 
+    -- Cleanup Fullbright
+    if FullbrightState.Active then
+        Flags["Visuals/Fullbright"] = false
+        UpdateFullbright()
+    end
+
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     _G.StopFreecamFunc = nil
     local globalEnv = getgenv and getgenv() or _G
@@ -5006,8 +5062,8 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) AimState.ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -5366,7 +5422,7 @@ function UpdateAimbot()
         return
     end
 
-    if Br3ak3rState.LEFT_CTRL_HELD then
+    if Br3ak3rState.CTRL_HELD then
         ClearAimLockState(false)
         return
     end
@@ -5395,7 +5451,7 @@ local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
         local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
-        if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
+        if triggerActive and not Br3ak3rState.CTRL_HELD then
             if type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -5426,7 +5482,7 @@ local triggerThread = task.spawn(function()
                             end
 
                             -- Break if target died, player left, trigger released, or clutch pressed
-                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.LEFT_CTRL_HELD
+                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.CTRL_HELD
                             if not targetStillValid or not shouldContinue then break end
                         end
 
@@ -5514,10 +5570,12 @@ function UnifiedHeartbeat(dt)
 
     local now = os.clock()
 
+    -- Call Fullbright every frame while active to prevent flashing/overriding
+    UpdateFullbright()
+
     -- Throttled non-critical updates (10 FPS)
     if (now - lastMiscUpdate) > miscUpdateRate then
         lastMiscUpdate = now
-        UpdateFullbright()
         UpdateLocalHealthHUD()
         
         -- Update Waypoint Distances
