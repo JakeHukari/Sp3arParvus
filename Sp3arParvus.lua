@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.8" -- Fixed Origin Dot
+local VERSION = "3.5.9" -- Performance Update
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -105,14 +105,6 @@ Sp3arParvus = globalEnv.Sp3arParvusV2
 -- CONNECTION TRACKING (for proper cleanup)
 
 function TrackConnection(connection)
-    -- Routine cleanup of dead connections to prevent memory leak
-    for i = #Sp3arParvus.Connections, 1, -1 do
-        local conn = Sp3arParvus.Connections[i]
-        if not conn or not conn.Connected then
-            table.remove(Sp3arParvus.Connections, i)
-        end
-    end
-
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
     end
@@ -120,18 +112,30 @@ function TrackConnection(connection)
 end
 
 function TrackThread(thread)
-    -- Routine cleanup of dead threads to prevent memory leak
-    for i = #Sp3arParvus.Threads, 1, -1 do
-        local t = Sp3arParvus.Threads[i]
-        if not t or coroutine.status(t) == "dead" then
-            table.remove(Sp3arParvus.Threads, i)
-        end
-    end
-
     if thread and type(thread) == "thread" then
         table.insert(Sp3arParvus.Threads, thread)
     end
     return thread
+end
+
+function CleanupDeadConnections()
+    local connections = Sp3arParvus.Connections
+    for i = #connections, 1, -1 do
+        local conn = connections[i]
+        if not conn or not conn.Connected then
+            table.remove(connections, i)
+        end
+    end
+end
+
+function CleanupDeadThreads()
+    local threads = Sp3arParvus.Threads
+    for i = #threads, 1, -1 do
+        local t = threads[i]
+        if not t or coroutine.status(t) == "dead" then
+            table.remove(threads, i)
+        end
+    end
 end
 
 TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
@@ -1835,12 +1839,14 @@ function PruneCharCache()
             if AimState.LastAimbotTarget == player then
                 AimState.LastAimbotTarget = nil
             end
+            RemoveESP(player)
             CharCache[player] = nil
         -- Clear character-linked fields if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
             if AimState.LastAimbotTarget == player then
                 AimState.LastAimbotTarget = nil
             end
+            RemovePlayerOutlines(player)
             cache.Char = nil
             cache.Root = nil
             cache.Humanoid = nil
@@ -1849,6 +1855,7 @@ function PruneCharCache()
             if AimState.LastAimbotTarget == player then
                 AimState.LastAimbotTarget = nil
             end
+            RemovePlayerOutlines(player)
             cache.Root = nil
             cache.Humanoid = nil
             cache.HealthInst = nil
@@ -2085,6 +2092,9 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     CandidateCount = 0
 
     local players = GetPlayersCache()
+    local lookVector = Camera.CFrame.LookVector
+    local maxCandsLimit = MAX_CANDIDATES * 3
+
     for _, Player in ipairs(players) do
         if Player == LocalPlayer or DNS(Player) then
             continue
@@ -2098,12 +2108,22 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        local rootDist = (RootPart.Position - CameraPosition).Magnitude
+        local rootPos = RootPart.Position
+        local relPos = rootPos - CameraPosition
+        
+        -- 1. DOT PRODUCT PRE-FILTER (Cheap check to ensure target is in front)
+        if lookVector:Dot(relPos) < 0 then
+            continue
+        end
+
+        -- 2. DISTANCE PRE-FILTER
+        local rootDist = relPos.Magnitude
         if DistanceCheck and rootDist > (DistanceLimit + 50) then
             continue
         end
 
-        local _, rootOnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+        -- 3. VIEWPORT PRE-FILTER (Expensive, called only if in front and in range)
+        local _, rootOnScreen = Camera:WorldToViewportPoint(rootPos)
         if not rootOnScreen then
             continue
         end
@@ -2135,8 +2155,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                         local Magnitude = sqrt(dx * dx + dy * dy)
 
                         if Magnitude < FieldOfView then
-                            CandidateCount = CandidateCount + 1
-                            if CandidateCount <= MAX_CANDIDATES * 3 then
+                            if CandidateCount < maxCandsLimit then
+                                CandidateCount = CandidateCount + 1
                                 local entry = CandidateList[CandidateCount]
                                 if not entry then
                                     entry = {}
@@ -2149,8 +2169,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                                 entry.sx = screenX
                                 entry.sy = screenY
                                 entry.pos = BodyPartPosition
-                            else
-                                CandidateCount = MAX_CANDIDATES * 3
                             end
                         end
                     end
@@ -2195,8 +2213,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     local Magnitude = sqrt(dx * dx + dy * dy)
 
                     if Magnitude < FieldOfView then
-                        CandidateCount = CandidateCount + 1
-                        if CandidateCount <= MAX_CANDIDATES * 3 then
+                        if CandidateCount < maxCandsLimit then
+                            CandidateCount = CandidateCount + 1
                             local entry = CandidateList[CandidateCount]
                             if not entry then
                                 entry = {}
@@ -2209,8 +2227,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                             entry.sx = screenX
                             entry.sy = screenY
                             entry.pos = BodyPartPosition
-                        else
-                            CandidateCount = MAX_CANDIDATES * 3
                         end
                     end
                 end
@@ -4913,11 +4929,25 @@ function Cleanup()
     table.clear(PlayerPanelRows)
     
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
+    for p, c in pairs(CharCache) do
+        c.Char = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil
+    end
     table.clear(CharCache)
+    
+    for _, entry in ipairs(CandidateList) do
+        entry.ply = nil; entry.char = nil; entry.part = nil; entry.pos = nil
+    end
     table.clear(CandidateList)
+
+    for _, entry in ipairs(cachedPlayerListForSort) do
+        entry.player = nil; entry.position = nil
+    end
     table.clear(cachedPlayerListForSort)
+    
     table.clear(cachedSortedPlayers)
     table.clear(cachedPlayersList)
+    table.clear(Br3ak3rState.brokenIgnoreCache)
+    table.clear(Br3ak3rState.scratchIgnore)
 
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     _G.StopFreecamFunc = nil
@@ -5432,52 +5462,59 @@ lastBr3ak3rCleanup = 0
 br3ak3rCleanupRate = 2.0 
 lastHoverUpdate = 0
 hoverUpdateRate = 0.033 -- Hover at 30fps
+lastStateEnforcement = 0
+stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
+lastGhostMode = nil
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
 function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
     
+    local now = os.clock()
     local ghostMode = Flags["Settings/GhostMode"]
-    if ScreenGui then
-        if ScreenGui.Enabled == ghostMode then
+    local ghostModeChanged = (ghostMode ~= lastGhostMode)
+    lastGhostMode = ghostMode
+
+    if ghostModeChanged then
+        if ScreenGui then
             ScreenGui.Enabled = not ghostMode
         end
-    end
 
-    if ghostMode then
-        for _, espData in pairs(ESPObjects) do
-            if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
-            if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
-                espData.OffscreenIndicator.Frame.Visible = false
+        if ghostMode then
+            for _, espData in pairs(ESPObjects) do
+                if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+                if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
+                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
+                    espData.OffscreenIndicator.Frame.Visible = false
+                end
             end
-        end
 
-        -- Ensure pooled objects are disabled during Gh0st mode
-        for _, obj in ipairs(PoolFolder:GetChildren()) do
-            pcall(function()
-                if obj.Enabled then obj.Enabled = false end
-            end)
-        end
+            -- Ensure pooled objects are disabled during Gh0st mode
+            for _, obj in ipairs(PoolFolder:GetChildren()) do
+                pcall(function()
+                    if obj.Enabled then obj.Enabled = false end
+                end)
+            end
 
-        if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
-        if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
-        if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
-        if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
-    else
-        -- Restore visibility when Gh0st mode toggled off
-        if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
-            ClosestPlayerTrackerLabel.Visible = true
-        end
-        if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
-            PerformanceLabel.Visible = true
-        end
-        if LocalHealthHUD and not LocalHealthHUD.Visible then
-            LocalHealthHUD.Visible = true
-        end
-        if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
-            PlayerPanelFrame.Visible = true
+            if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
+            if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
+            if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
+            if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
+        else
+            -- Restore visibility when Gh0st mode toggled off
+            if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
+                ClosestPlayerTrackerLabel.Visible = true
+            end
+            if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
+                PerformanceLabel.Visible = true
+            end
+            if LocalHealthHUD and not LocalHealthHUD.Visible then
+                LocalHealthHUD.Visible = true
+            end
+            if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
+                PlayerPanelFrame.Visible = true
+            end
         end
     end
 
@@ -5579,6 +5616,8 @@ function UnifiedHeartbeat(dt)
         pcall(pruneHighlightedSet)
         
         -- MEMORY LEAK FIX: Periodic cache pruning to clear stale references
+        CleanupDeadConnections()
+        CleanupDeadThreads()
         PruneCharCache()
         ClearCandidateReferences()
         ClearSortCacheReferences()
@@ -5589,55 +5628,59 @@ function UnifiedHeartbeat(dt)
     sweepUndo(dt)
     sweepHighlightedUndo(dt)
 
-    -- Continuous state enforcement for broken parts (StreamingEnabled fix)
-    local enforcementMadeChange = false
-    for part, original in pairs(Br3ak3rState.brokenSet) do
-        if part.Parent then
-            if part.CanCollide ~= false then 
-                part.CanCollide = false 
-                enforcementMadeChange = true
-            end
-            local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
-            local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
-            if part.Transparency ~= targetT then 
-                part.Transparency = targetT 
-                enforcementMadeChange = true
-            end
-            if part.LocalTransparencyModifier ~= targetLTM then 
-                part.LocalTransparencyModifier = targetLTM 
-                enforcementMadeChange = true
-            end
-        end
-    end
-    if enforcementMadeChange then
-        Br3ak3rState.brokenCacheDirty = true
-    end
+    -- Periodic state enforcement for broken/highlighted parts (StreamingEnabled fix)
+    if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
+        lastStateEnforcement = now
 
-    -- Continuous state enforcement for highlighted parts (ensure visibility)
-    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
-        if part.Parent then
-            local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
-            local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-            if part.Transparency ~= targetT then part.Transparency = targetT end
-            if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
-            
-            local hVisible = not ghostMode
-            if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
-            if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
+        local enforcementMadeChange = false
+        for part, original in pairs(Br3ak3rState.brokenSet) do
+            if part.Parent then
+                if part.CanCollide ~= false then 
+                    part.CanCollide = false 
+                    enforcementMadeChange = true
+                end
+                local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
+                local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
+                if part.Transparency ~= targetT then 
+                    part.Transparency = targetT 
+                    enforcementMadeChange = true
+                end
+                if part.LocalTransparencyModifier ~= targetLTM then 
+                    part.LocalTransparencyModifier = targetLTM 
+                    enforcementMadeChange = true
+                end
+            end
         end
-    end
+        if enforcementMadeChange then
+            Br3ak3rState.brokenCacheDirty = true
+        end
 
-    -- Continuous state enforcement for player outlines (ensure Ghost Mode)
-    for player, storage in pairs(PlayerOutlineObjects) do
-        local outlineVisible = not ghostMode
-        if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
-            storage.Highlight.Enabled = outlineVisible
+        -- Continuous state enforcement for highlighted parts (ensure visibility)
+        for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
+            if part.Parent then
+                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+                if part.Transparency ~= targetT then part.Transparency = targetT end
+                if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
+                
+                local hVisible = not ghostMode
+                if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
+                if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
+            end
         end
-        if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
-            storage.HeadDot.Enabled = outlineVisible
-        end
-        if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
-            storage.RootDot.Enabled = outlineVisible
+
+        -- Continuous state enforcement for player outlines (ensure Ghost Mode)
+        for player, storage in pairs(PlayerOutlineObjects) do
+            local outlineVisible = not ghostMode
+            if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
+                storage.Highlight.Enabled = outlineVisible
+            end
+            if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
+                storage.HeadDot.Enabled = outlineVisible
+            end
+            if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
+                storage.RootDot.Enabled = outlineVisible
+            end
         end
     end
 end
