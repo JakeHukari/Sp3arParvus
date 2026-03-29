@@ -3936,10 +3936,7 @@ function UpdateESP(now, player, isClosest)
         if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
             espData.HealthBarContainer.Visible = healthVisible
         end
-        if espData.HealthNumericalLabel and espData.HealthNumericalLabel.Visible ~= healthVisible then
-            espData.HealthNumericalLabel.Visible = healthVisible
-        end
-
+        
         -- Update Health visuals
         local health, maxHealth = GetHealth(player)
         if abs((espData.lastHealth or 0) - health) > 0.5 or espData.lastMaxHealth ~= maxHealth then
