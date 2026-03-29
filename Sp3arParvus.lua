@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.9" -- Performance Update
+local VERSION = "3.6.0" -- Fullbright Restoration Update
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
