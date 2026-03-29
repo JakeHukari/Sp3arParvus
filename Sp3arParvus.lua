@@ -402,6 +402,11 @@ local H1ghl1ght3rState = {
     SHIFT_HELD = false
 }
 
+local FullbrightState = {
+    lastState = false,
+    originalSettings = nil
+}
+
 function GetFullPath(instance)
     local path = instance.Name
     local current = instance.Parent
@@ -1633,7 +1638,44 @@ end))
 -- FULLBRIGHT SYSTEM
 
 function UpdateFullbright()
-    if not Flags["Visuals/Fullbright"] then return end
+    local currentState = Flags["Visuals/Fullbright"]
+    
+    if currentState ~= FullbrightState.lastState then
+        if currentState then
+            -- Store original settings
+            local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            FullbrightState.originalSettings = {
+                Ambient = Services.Lighting.Ambient,
+                OutdoorAmbient = Services.Lighting.OutdoorAmbient,
+                Brightness = Services.Lighting.Brightness,
+                ClockTime = Services.Lighting.ClockTime,
+                FogEnd = Services.Lighting.FogEnd,
+                GlobalShadows = Services.Lighting.GlobalShadows,
+                AtmosphereDensity = atmosphere and atmosphere.Density or nil
+            }
+        else
+            -- Restore original settings
+            if FullbrightState.originalSettings then
+                Services.Lighting.Ambient = FullbrightState.originalSettings.Ambient
+                Services.Lighting.OutdoorAmbient = FullbrightState.originalSettings.OutdoorAmbient
+                Services.Lighting.Brightness = FullbrightState.originalSettings.Brightness
+                Services.Lighting.ClockTime = FullbrightState.originalSettings.ClockTime
+                Services.Lighting.FogEnd = FullbrightState.originalSettings.FogEnd
+                Services.Lighting.GlobalShadows = FullbrightState.originalSettings.GlobalShadows
+                
+                if FullbrightState.originalSettings.AtmosphereDensity then
+                    local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+                    if atmosphere then
+                        atmosphere.Density = FullbrightState.originalSettings.AtmosphereDensity
+                    end
+                end
+                FullbrightState.originalSettings = nil
+            end
+        end
+        FullbrightState.lastState = currentState
+    end
+
+    if not currentState then return end
     
     Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
     Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
@@ -1642,7 +1684,6 @@ function UpdateFullbright()
     Services.Lighting.FogEnd = 1e5
     Services.Lighting.GlobalShadows = false
     
-    -- Option: Also disable Atmosphere/Bloom if present for maximum clarity
     local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
     if atmosphere then
         atmosphere.Density = 0
@@ -4913,6 +4954,12 @@ function Cleanup()
     if Br3ak3rState.hoverHL then
         pcall(function() Br3ak3rState.hoverHL:Destroy() end)
         Br3ak3rState.hoverHL = nil
+    end
+
+    -- Restore Fullbright if active
+    if FullbrightState.lastState then
+        Flags["Visuals/Fullbright"] = false
+        pcall(UpdateFullbright)
     end
 
     -- Reset module-level state
