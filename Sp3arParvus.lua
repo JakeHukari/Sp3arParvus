@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.5.9" -- performance improvements && mem leak fix
+local VERSION = "3.5.8" -- Fixed Origin Dot
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -105,6 +105,14 @@ Sp3arParvus = globalEnv.Sp3arParvusV2
 -- CONNECTION TRACKING (for proper cleanup)
 
 function TrackConnection(connection)
+    -- Routine cleanup of dead connections to prevent memory leak
+    for i = #Sp3arParvus.Connections, 1, -1 do
+        local conn = Sp3arParvus.Connections[i]
+        if not conn or not conn.Connected then
+            table.remove(Sp3arParvus.Connections, i)
+        end
+    end
+
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
     end
@@ -112,28 +120,18 @@ function TrackConnection(connection)
 end
 
 function TrackThread(thread)
-    if thread and type(thread) == "thread" then
-        table.insert(Sp3arParvus.Threads, thread)
-    end
-    return thread
-end
-
-function CleanupDeadConnections()
-    for i = #Sp3arParvus.Connections, 1, -1 do
-        local conn = Sp3arParvus.Connections[i]
-        if not conn or not conn.Connected then
-            table.remove(Sp3arParvus.Connections, i)
-        end
-    end
-end
-
-function CleanupDeadThreads()
+    -- Routine cleanup of dead threads to prevent memory leak
     for i = #Sp3arParvus.Threads, 1, -1 do
         local t = Sp3arParvus.Threads[i]
         if not t or coroutine.status(t) == "dead" then
             table.remove(Sp3arParvus.Threads, i)
         end
     end
+
+    if thread and type(thread) == "thread" then
+        table.insert(Sp3arParvus.Threads, thread)
+    end
+    return thread
 end
 
 TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
@@ -183,8 +181,8 @@ local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
-local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
-local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
@@ -245,7 +243,7 @@ local AimState = {
     Trigger = false,
     ProjectileSpeed = 3155,
     ProjectileGravity = 196.2,
-    GravityCorrection = 1,
+    GravityCorrection = 2,
     LastAimbotTarget = nil,
     LastMouseMode = nil,
     LastOriginX = nil,
@@ -312,7 +310,7 @@ local Flags = {
     -- Ballistics
     ["Prediction/Velocity"] = 3155,
     ["Prediction/GravityForce"] = 196.2,
-    ["Prediction/GravityMultiplier"] = 1,
+    ["Prediction/GravityMultiplier"] = 2,
 
     -- Aimbot
     ["Aimbot/AimLock"] = true,
@@ -584,7 +582,7 @@ function sweepUndo(dt)
     local j = 1
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
-        if entry.part and entry.part.Parent then
+        if entry.part then
             if i ~= j then
                 Br3ak3rState.undoStack[j] = entry
             end
@@ -601,7 +599,7 @@ end
 function pruneBrokenSet()
     local removed = false
     for part, _ in pairs(Br3ak3rState.brokenSet) do
-        if not part or not part.Parent then
+        if not part then
             Br3ak3rState.brokenSet[part] = nil
             removed = true
         end
@@ -1139,61 +1137,37 @@ function UI.CreateWindow(title)
     -- Dragging Logic Helper
     -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
     -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
-    local dragData = {} -- Map of Frame -> {dragging, dragStart, startPos}
-
-    -- Single shared listener for all draggable frames to reduce overhead
-    TrackConnection(UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            local viewportSize = Camera.ViewportSize
-            for frame, data in pairs(dragData) do
-                if data.dragging then
-                    local mousePos = input.Position
-                    local absSize = frame.AbsoluteSize
-                    
-                    -- Calculate desired absolute position
-                    local targetX = mousePos.X - data.dragStart.X + data.startAbsPos.X
-                    local targetY = mousePos.Y - data.dragStart.Y + data.startAbsPos.Y
-                    
-                    -- Clamp within viewport
-                    targetX = math.clamp(targetX, 0, viewportSize.X - absSize.X)
-                    targetY = math.clamp(targetY, 0, viewportSize.Y - absSize.Y)
-                    
-                    -- Update frame position (offset only, scale to 0)
-                    frame.Position = UDim2.fromOffset(targetX, targetY)
-                    frame.AnchorPoint = Vector2.new(0, 0)
-                end
-            end
-        end
-    end))
-
     local function MakeDraggable(Frame)
-        local data = {dragging = false}
-        dragData[Frame] = data
+        local dragging, dragInput, dragStart, startPos
         
+        -- Track frame-level connections for cleanup
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                data.dragging = true
-                data.dragStart = input.Position
-                data.startAbsPos = Frame.AbsolutePosition
-                
-                -- Ensure this frame is on top while dragging
-                Frame.ZIndex = Frame.ZIndex + 100
-                
-                local connection
-                connection = input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        data.dragging = false
-                        Frame.ZIndex = Frame.ZIndex - 100
-                        connection:Disconnect()
-                    end
-                end)
+                dragging = true
+                dragStart = input.Position
+                startPos = Frame.Position
             end
         end))
         
-        -- Cleanup if frame is destroyed
-        TrackConnection(Frame.AncestryChanged:Connect(function(_, parent)
-            if not parent then
-                dragData[Frame] = nil
+        TrackConnection(Frame.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end))
+        
+        TrackConnection(Frame.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                dragInput = input
+            end
+        end))
+        
+        -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
+        -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
+        TrackConnection(UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                -- Direct position update - NO TWEEN CREATION
+                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             end
         end))
     end
@@ -1605,11 +1579,7 @@ end
 -- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
 function GetPing()
     local success, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
-    -- Include NaN check
-    if success and ping == ping then
-        return ping * 1000
-    end
-    return 0
+    return success and ping * 1000 or 0
 end
 
 -- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
@@ -1658,66 +1628,20 @@ end))
 
 -- FULLBRIGHT SYSTEM
 
-local FullbrightState = {
-    Active = false,
-    Originals = {}
-}
-
 function UpdateFullbright()
-    local enabled = Flags["Visuals/Fullbright"]
+    if not Flags["Visuals/Fullbright"] then return end
     
-    if enabled then
-        if not FullbrightState.Active then
-            -- Save original settings
-            FullbrightState.Originals.Ambient = Services.Lighting.Ambient
-            FullbrightState.Originals.OutdoorAmbient = Services.Lighting.OutdoorAmbient
-            FullbrightState.Originals.Brightness = Services.Lighting.Brightness
-            FullbrightState.Originals.ClockTime = Services.Lighting.ClockTime
-            FullbrightState.Originals.FogEnd = Services.Lighting.FogEnd
-            FullbrightState.Originals.GlobalShadows = Services.Lighting.GlobalShadows
-            
-            -- Save atmospheres
-            FullbrightState.Originals.Atmospheres = {}
-            for _, item in ipairs(Services.Lighting:GetChildren()) do
-                if item:IsA("Atmosphere") then
-                    FullbrightState.Originals.Atmospheres[item] = item.Density
-                end
-            end
-            
-            FullbrightState.Active = true
-        end
-
-        -- Enforce Fullbright settings
-        Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Services.Lighting.Brightness = 2
-        Services.Lighting.ClockTime = 12
-        Services.Lighting.FogEnd = 1e5
-        Services.Lighting.GlobalShadows = false
-        
-        for _, item in ipairs(Services.Lighting:GetChildren()) do
-            if item:IsA("Atmosphere") then
-                item.Density = 0
-            end
-        end
-    elseif FullbrightState.Active then
-        -- Restore original settings
-        Services.Lighting.Ambient = FullbrightState.Originals.Ambient
-        Services.Lighting.OutdoorAmbient = FullbrightState.Originals.OutdoorAmbient
-        Services.Lighting.Brightness = FullbrightState.Originals.Brightness
-        Services.Lighting.ClockTime = FullbrightState.Originals.ClockTime
-        Services.Lighting.FogEnd = FullbrightState.Originals.FogEnd
-        Services.Lighting.GlobalShadows = FullbrightState.Originals.GlobalShadows
-        
-        if FullbrightState.Originals.Atmospheres then
-            for atmosphere, density in pairs(FullbrightState.Originals.Atmospheres) do
-                if atmosphere and atmosphere.Parent then
-                    atmosphere.Density = density
-                end
-            end
-        end
-        
-        FullbrightState.Active = false
+    Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Services.Lighting.Brightness = 2
+    Services.Lighting.ClockTime = 12
+    Services.Lighting.FogEnd = 1e5
+    Services.Lighting.GlobalShadows = false
+    
+    -- Option: Also disable Atmosphere/Bloom if present for maximum clarity
+    local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+    if atmosphere then
+        atmosphere.Density = 0
     end
 end
 
@@ -1993,7 +1917,7 @@ function SolveTrajectory(origin, velocity, time, gravity)
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -0.5 * gravity * AimState.GravityCorrection * time * time, 0)
+    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
     -- Sanity check: if predicted position is too far from origin, return original
@@ -2081,11 +2005,8 @@ end
 ClosestResult = {nil, nil, nil, 0, 0, nil} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY, [6]=pos
 
 -- Hoisted comparator for candidate sorting
--- FIXED: Added nil checks for mag to prevent comparison errors during sorting
 function CandidateSortFn(a, b)
-    local magA = a and a.mag or 1e10
-    local magB = b and b.mag or 1e10
-    return magA < magB
+    return a.mag < b.mag
 end
 
 -- Hoisted comparator for distance sorting
@@ -2202,7 +2123,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                         BodyPartPosition = SolveTrajectory(
                             BodyPartPosition,
                             velocity,
-                            (Distance / AimState.ProjectileSpeed) + (GetPing() / 1000),
+                            Distance / AimState.ProjectileSpeed,
                             AimState.ProjectileGravity
                         )
                     end
@@ -2262,7 +2183,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     BodyPartPosition = SolveTrajectory(
                         BodyPartPosition,
                         velocity,
-                        (Distance / AimState.ProjectileSpeed) + (GetPing() / 1000),
+                        Distance / AimState.ProjectileSpeed,
                         AimState.ProjectileGravity
                     )
                 end
@@ -2297,25 +2218,22 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
     end
 
-    -- Clean up unused entries instead of setting them to nil to keep the table pool
-    -- This MUST happen before potential early returns to clear player/character references
-    -- We clear up to the maximum potential size to ensure no stale data remains
-    local poolLimit = max(#CandidateList, MAX_CANDIDATES * 3)
-    for i = CandidateCount + 1, poolLimit do
-        local entry = CandidateList[i]
-        if entry then
-            entry.ply = nil
-            entry.char = nil
-            entry.part = nil
-            entry.pos = nil
-            entry.mag = nil
-            entry.sx = nil
-            entry.sy = nil
-        end
-    end
-
     if CandidateCount == 0 then
         return nil
+    end
+
+    local currentSize = #CandidateList
+    if currentSize > CandidateCount then
+        for i = CandidateCount + 1, currentSize do
+            local entry = CandidateList[i]
+            if entry then
+                entry.ply = nil
+                entry.char = nil
+                entry.part = nil
+                entry.pos = nil
+            end
+            CandidateList[i] = nil
+        end
     end
 
     if CandidateCount > 1 then
@@ -2417,7 +2335,7 @@ function AimAt(Hitbox, Sensitivity)
         targetPos = SolveTrajectory(
             targetPos,
             velocity,
-            (dist / AimState.ProjectileSpeed) + (GetPing() / 1000),
+            dist / AimState.ProjectileSpeed,
             AimState.ProjectileGravity
         )
     end
@@ -2464,17 +2382,20 @@ function AimAt(Hitbox, Sensitivity)
     local deltaX = dx * Sensitivity
     local deltaY = dy * Sensitivity
 
-    -- Validate for NaN and Inf
-    if deltaX ~= deltaX or deltaY ~= deltaY or abs(deltaX) == 1/0 or abs(deltaY) == 1/0 then
+    local maxDeltaX = viewportSize.X * 0.15
+    local maxDeltaY = viewportSize.Y * 0.15
+    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
         return
     end
 
-    -- Clamp movement to 50% of the viewport size for stability
-    local maxDeltaX = viewportSize.X * 0.5
-    local maxDeltaY = viewportSize.Y * 0.5
-    
-    deltaX = math.clamp(deltaX, -maxDeltaX, maxDeltaX)
-    deltaY = math.clamp(deltaY, -maxDeltaY, maxDeltaY)
+    if deltaX ~= deltaX or deltaY ~= deltaY then
+        return
+    end
+
+    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.3
+    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
+        return
+    end
 
     mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
@@ -2491,9 +2412,7 @@ COLORS = {
     NORMAL = Color3.fromRGB(255, 255, 255),
     TRACER = Color3.fromRGB(0, 255, 255),
     OUTLINE = Color3.fromRGB(255, 105, 180),
-    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50),
-    GREEN = Color3.fromRGB(0, 255, 0),
-    RED = Color3.fromRGB(255, 0, 0)
+    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50)
 }
 
 -- Off-screen indicator settings
@@ -3476,7 +3395,7 @@ local function CreateESP(player)
     healthNumLabel.Name = "HealthNumericalLabel"
     healthNumLabel.Size = UDim2.new(1, 0, 0, 18)
     healthNumLabel.BackgroundTransparency = 1
-    healthNumLabel.TextColor3 = COLORS.NORMAL
+    healthNumLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     healthNumLabel.TextStrokeTransparency = 0
     healthNumLabel.Font = Enum.Font.GothamBold
     healthNumLabel.TextSize = 14
@@ -3611,7 +3530,7 @@ function UpdateDot(player, character, storage, dotType, partName)
             dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = COLORS.GREEN -- Green by default
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
             
@@ -3645,7 +3564,7 @@ function UpdateDot(player, character, storage, dotType, partName)
             dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = COLORS.GREEN
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
             
@@ -3658,13 +3577,13 @@ function UpdateDot(player, character, storage, dotType, partName)
     -- Update Color based on Locked Status
     local dotFrame = dot:FindFirstChild("Dot")
     if dotFrame then
-            local dotColor = COLORS.GREEN -- Default Green
+            local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
             
             -- Check if this specific part is being locked onto
             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
                 local lockedPart = CachedTarget[3]
                 if lockedPart and lockedPart.Name == partName then
-                    dotColor = COLORS.RED -- Red when locked
+                    dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
                 end
             end
 
@@ -3917,7 +3836,7 @@ function UpdateESP(now, player, isClosest)
         end
 
         -- Update Distance
-        if abs(espData.lastDistance - distRounded) > 5 then
+        if math.abs(espData.lastDistance - distRounded) > 5 then
             espData.DistanceLabel.Text = string.format("%d studs", distRounded)
             espData.lastDistance = distRounded
         end
@@ -3936,19 +3855,18 @@ function UpdateESP(now, player, isClosest)
         if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
             espData.HealthBarContainer.Visible = healthVisible
         end
-        
+
         -- Update Health visuals
         local health, maxHealth = GetHealth(player)
-        if abs((espData.lastHealth or 0) - health) > 0.5 or espData.lastMaxHealth ~= maxHealth then
+        if espData.lastHealth ~= health or espData.lastMaxHealth ~= maxHealth then
             espData.HealthNumericalLabel.Text = string.format("%d/%d", math.floor(health), math.floor(maxHealth))
             
             local healthPercent = math.clamp(health / maxHealth, 0, 1)
-            -- Only update health bar size if it changed significantly (1% difference)
-            local lastHPPercent = espData.lastHPPercent or -1
-            if abs(healthPercent - lastHPPercent) > 0.01 then
-                espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
-                espData.lastHPPercent = healthPercent
-            end
+            espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
+            
+            -- Optional: adjust color based on health? Requirements say green fill, red BG.
+            -- Requirement also says "turns red to indicate any lost health"
+            -- The BG is red, fill is green. So if health is 50%, 50% green is shown over red.
             
             espData.lastHealth = health
             espData.lastMaxHealth = maxHealth
@@ -5001,12 +4919,6 @@ function Cleanup()
     table.clear(cachedSortedPlayers)
     table.clear(cachedPlayersList)
 
-    -- Cleanup Fullbright
-    if FullbrightState.Active then
-        Flags["Visuals/Fullbright"] = false
-        UpdateFullbright()
-    end
-
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     _G.StopFreecamFunc = nil
     local globalEnv = getgenv and getgenv() or _G
@@ -5067,8 +4979,8 @@ UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) AimState.ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0.1, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) AimState.GravityCorrection = v end)
+UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
+UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -5427,7 +5339,7 @@ function UpdateAimbot()
         return
     end
 
-    if Br3ak3rState.CTRL_HELD then
+    if Br3ak3rState.LEFT_CTRL_HELD then
         ClearAimLockState(false)
         return
     end
@@ -5447,7 +5359,6 @@ function UpdateAimbot()
 end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
-TrackConnection(RunService.RenderStepped:Connect(UpdateFullbright))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
@@ -5457,7 +5368,7 @@ local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
         local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
-        if triggerActive and not Br3ak3rState.CTRL_HELD then
+        if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
             if type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
                 -- Get initial target
                 local TriggerClosest = GetCachedTarget()
@@ -5488,7 +5399,7 @@ local triggerThread = task.spawn(function()
                             end
 
                             -- Break if target died, player left, trigger released, or clutch pressed
-                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.CTRL_HELD
+                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.LEFT_CTRL_HELD
                             if not targetStillValid or not shouldContinue then break end
                         end
 
@@ -5521,10 +5432,6 @@ lastBr3ak3rCleanup = 0
 br3ak3rCleanupRate = 2.0 
 lastHoverUpdate = 0
 hoverUpdateRate = 0.033 -- Hover at 30fps
-lastEnforcementUpdate = 0
-enforcementUpdateRate = 0.1 -- 10 FPS for property enforcement
-lastMiscUpdate = 0
-miscUpdateRate = 0.1 -- 10 FPS for non-critical HUD/Light/Waypoint updates
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
@@ -5574,34 +5481,31 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    local now = os.clock()
-
-    -- Throttled non-critical updates (10 FPS)
-    if (now - lastMiscUpdate) > miscUpdateRate then
-        lastMiscUpdate = now
-        UpdateLocalHealthHUD()
-        
-        -- Update Waypoint Distances
-        if Flags["Waypoints/Enabled"] then
-            for id, wpData in pairs(ActiveWaypoints) do
-                if wpData.Part and wpData.Label then
-                    local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
-                    local distRounded = math.floor(dist)
-                    wpData.DistanceText = distRounded .. " studs"
-                    wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
-                end
-                local wpVisible = not ghostMode
-                if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
-                if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
+    UpdateFullbright()
+    UpdateLocalHealthHUD()
+    
+    -- Update Waypoint Distances
+    if Flags["Waypoints/Enabled"] then
+        for id, wpData in pairs(ActiveWaypoints) do
+            if wpData.Part and wpData.Label then
+                local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
+                local distRounded = math.floor(dist)
+                wpData.DistanceText = distRounded .. " studs"
+                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
             end
-        else
-            -- Hide all if disabled
-            for id, wpData in pairs(ActiveWaypoints) do
-                if wpData.Billboard then wpData.Billboard.Enabled = false end
-                if wpData.PinBg then wpData.PinBg.Enabled = false end
-            end
+            local wpVisible = not ghostMode
+            if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
+            if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
+        end
+    else
+        -- Hide all if disabled
+        for id, wpData in pairs(ActiveWaypoints) do
+            if wpData.Billboard then wpData.Billboard.Enabled = false end
+            if wpData.PinBg then wpData.PinBg.Enabled = false end
         end
     end
+
+    local now = os.clock()
     
     -- 1. ESP & Tracker Updates
     -- Check throttle FIRST before anything else to save perf
@@ -5679,70 +5583,61 @@ function UnifiedHeartbeat(dt)
         ClearCandidateReferences()
         ClearSortCacheReferences()
         ValidateESPObjects()
-        
-        -- Connection and thread cleanup
-        CleanupDeadConnections()
-        CleanupDeadThreads()
     end
     
     -- Sweep undo stack (very cheap)
     sweepUndo(dt)
     sweepHighlightedUndo(dt)
 
-    -- Throttled property enforcement (10 FPS)
-    if (now - lastEnforcementUpdate) > enforcementUpdateRate then
-        lastEnforcementUpdate = now
-
-        -- Continuous state enforcement for broken parts (StreamingEnabled fix)
-        local enforcementMadeChange = false
-        for part, original in pairs(Br3ak3rState.brokenSet) do
-            if part.Parent then
-                if part.CanCollide ~= false then 
-                    part.CanCollide = false 
-                    enforcementMadeChange = true
-                end
-                local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
-                local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
-                if part.Transparency ~= targetT then 
-                    part.Transparency = targetT 
-                    enforcementMadeChange = true
-                end
-                if part.LocalTransparencyModifier ~= targetLTM then 
-                    part.LocalTransparencyModifier = targetLTM 
-                    enforcementMadeChange = true
-                end
+    -- Continuous state enforcement for broken parts (StreamingEnabled fix)
+    local enforcementMadeChange = false
+    for part, original in pairs(Br3ak3rState.brokenSet) do
+        if part.Parent then
+            if part.CanCollide ~= false then 
+                part.CanCollide = false 
+                enforcementMadeChange = true
+            end
+            local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
+            local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
+            if part.Transparency ~= targetT then 
+                part.Transparency = targetT 
+                enforcementMadeChange = true
+            end
+            if part.LocalTransparencyModifier ~= targetLTM then 
+                part.LocalTransparencyModifier = targetLTM 
+                enforcementMadeChange = true
             end
         end
-        if enforcementMadeChange then
-            Br3ak3rState.brokenCacheDirty = true
-        end
+    end
+    if enforcementMadeChange then
+        Br3ak3rState.brokenCacheDirty = true
+    end
 
-        -- Continuous state enforcement for highlighted parts (ensure visibility)
-        for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
-            if part.Parent then
-                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
-                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-                if part.Transparency ~= targetT then part.Transparency = targetT end
-                if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
-                
-                local hVisible = not ghostMode
-                if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
-                if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
-            end
+    -- Continuous state enforcement for highlighted parts (ensure visibility)
+    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
+        if part.Parent then
+            local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+            local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+            if part.Transparency ~= targetT then part.Transparency = targetT end
+            if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
+            
+            local hVisible = not ghostMode
+            if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
+            if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
         end
+    end
 
-        -- Continuous state enforcement for player outlines (ensure Ghost Mode)
-        for player, storage in pairs(PlayerOutlineObjects) do
-            local outlineVisible = not ghostMode
-            if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
-                storage.Highlight.Enabled = outlineVisible
-            end
-            if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
-                storage.HeadDot.Enabled = outlineVisible
-            end
-            if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
-                storage.RootDot.Enabled = outlineVisible
-            end
+    -- Continuous state enforcement for player outlines (ensure Ghost Mode)
+    for player, storage in pairs(PlayerOutlineObjects) do
+        local outlineVisible = not ghostMode
+        if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
+            storage.Highlight.Enabled = outlineVisible
+        end
+        if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
+            storage.HeadDot.Enabled = outlineVisible
+        end
+        if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
+            storage.RootDot.Enabled = outlineVisible
         end
     end
 end
