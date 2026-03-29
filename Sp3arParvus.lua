@@ -105,14 +105,6 @@ Sp3arParvus = globalEnv.Sp3arParvusV2
 -- CONNECTION TRACKING (for proper cleanup)
 
 function TrackConnection(connection)
-    -- Routine cleanup of dead connections to prevent memory leak
-    for i = #Sp3arParvus.Connections, 1, -1 do
-        local conn = Sp3arParvus.Connections[i]
-        if not conn or not conn.Connected then
-            table.remove(Sp3arParvus.Connections, i)
-        end
-    end
-
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(Sp3arParvus.Connections, connection)
     end
@@ -120,18 +112,28 @@ function TrackConnection(connection)
 end
 
 function TrackThread(thread)
-    -- Routine cleanup of dead threads to prevent memory leak
+    if thread and type(thread) == "thread" then
+        table.insert(Sp3arParvus.Threads, thread)
+    end
+    return thread
+end
+
+function CleanupDeadConnections()
+    for i = #Sp3arParvus.Connections, 1, -1 do
+        local conn = Sp3arParvus.Connections[i]
+        if not conn or not conn.Connected then
+            table.remove(Sp3arParvus.Connections, i)
+        end
+    end
+end
+
+function CleanupDeadThreads()
     for i = #Sp3arParvus.Threads, 1, -1 do
         local t = Sp3arParvus.Threads[i]
         if not t or coroutine.status(t) == "dead" then
             table.remove(Sp3arParvus.Threads, i)
         end
     end
-
-    if thread and type(thread) == "thread" then
-        table.insert(Sp3arParvus.Threads, thread)
-    end
-    return thread
 end
 
 TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
@@ -181,8 +183,8 @@ local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
-abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
-deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
+local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
@@ -582,7 +584,7 @@ function sweepUndo(dt)
     local j = 1
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
-        if entry.part then
+        if entry.part and entry.part.Parent then
             if i ~= j then
                 Br3ak3rState.undoStack[j] = entry
             end
@@ -599,7 +601,7 @@ end
 function pruneBrokenSet()
     local removed = false
     for part, _ in pairs(Br3ak3rState.brokenSet) do
-        if not part then
+        if not part or not part.Parent then
             Br3ak3rState.brokenSet[part] = nil
             removed = true
         end
@@ -1137,37 +1139,53 @@ function UI.CreateWindow(title)
     -- Dragging Logic Helper
     -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
     -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
+    local dragData = {} -- Map of Frame -> {dragging, dragStart, startPos}
+
+    -- Single shared listener for all draggable frames to reduce overhead
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            for frame, data in pairs(dragData) do
+                if data.dragging then
+                    local delta = input.Position - data.dragStart
+                    frame.Position = UDim2.new(
+                        data.startPos.X.Scale,
+                        data.startPos.X.Offset + delta.X,
+                        data.startPos.Y.Scale,
+                        data.startPos.Y.Offset + delta.Y
+                    )
+                end
+            end
+        end
+    end))
+
     local function MakeDraggable(Frame)
-        local dragging, dragInput, dragStart, startPos
+        local data = {dragging = false}
+        dragData[Frame] = data
         
-        -- Track frame-level connections for cleanup
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position
-                startPos = Frame.Position
+                data.dragging = true
+                data.dragStart = input.Position
+                data.startPos = Frame.Position
+
+                -- Ensure this frame is on top while dragging
+                Frame.ZIndex = Frame.ZIndex + 100
+
+                local connection
+                connection = input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        data.dragging = false
+                        Frame.ZIndex = Frame.ZIndex - 100
+                        connection:Disconnect()
+                    end
+                end)
             end
         end))
         
-        TrackConnection(Frame.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end))
-        
-        TrackConnection(Frame.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                dragInput = input
-            end
-        end))
-        
-        -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
-        -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
-        TrackConnection(UserInputService.InputChanged:Connect(function(input)
-            if input == dragInput and dragging then
-                local delta = input.Position - dragStart
-                -- Direct position update - NO TWEEN CREATION
-                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        -- Cleanup if frame is destroyed
+        TrackConnection(Frame.AncestryChanged:Connect(function(_, parent)
+            if not parent then
+                dragData[Frame] = nil
             end
         end))
     end
@@ -2218,10 +2236,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
     end
 
-    if CandidateCount == 0 then
-        return nil
-    end
-
+    -- Clean up unused entries instead of setting them to nil to keep the table pool
+    -- This MUST happen before potential early returns to clear player/character references
     local currentSize = #CandidateList
     if currentSize > CandidateCount then
         for i = CandidateCount + 1, currentSize do
@@ -2231,9 +2247,15 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 entry.char = nil
                 entry.part = nil
                 entry.pos = nil
+                entry.mag = nil
+                entry.sx = nil
+                entry.sy = nil
             end
-            CandidateList[i] = nil
         end
+    end
+
+    if CandidateCount == 0 then
+        return nil
     end
 
     if CandidateCount > 1 then
@@ -2412,7 +2434,9 @@ COLORS = {
     NORMAL = Color3.fromRGB(255, 255, 255),
     TRACER = Color3.fromRGB(0, 255, 255),
     OUTLINE = Color3.fromRGB(255, 105, 180),
-    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50)
+    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50),
+    GREEN = Color3.fromRGB(0, 255, 0),
+    RED = Color3.fromRGB(255, 0, 0)
 }
 
 -- Off-screen indicator settings
@@ -3395,7 +3419,7 @@ local function CreateESP(player)
     healthNumLabel.Name = "HealthNumericalLabel"
     healthNumLabel.Size = UDim2.new(1, 0, 0, 18)
     healthNumLabel.BackgroundTransparency = 1
-    healthNumLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    healthNumLabel.TextColor3 = COLORS.NORMAL
     healthNumLabel.TextStrokeTransparency = 0
     healthNumLabel.Font = Enum.Font.GothamBold
     healthNumLabel.TextSize = 14
@@ -3530,7 +3554,7 @@ function UpdateDot(player, character, storage, dotType, partName)
             dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+            dotFrame.BackgroundColor3 = COLORS.GREEN -- Green by default
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
             
@@ -3564,7 +3588,7 @@ function UpdateDot(player, character, storage, dotType, partName)
             dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            dotFrame.BackgroundColor3 = COLORS.GREEN
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
             
@@ -3577,13 +3601,13 @@ function UpdateDot(player, character, storage, dotType, partName)
     -- Update Color based on Locked Status
     local dotFrame = dot:FindFirstChild("Dot")
     if dotFrame then
-            local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
+            local dotColor = COLORS.GREEN -- Default Green
             
             -- Check if this specific part is being locked onto
             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
                 local lockedPart = CachedTarget[3]
                 if lockedPart and lockedPart.Name == partName then
-                    dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
+                    dotColor = COLORS.RED -- Red when locked
                 end
             end
 
@@ -3836,7 +3860,7 @@ function UpdateESP(now, player, isClosest)
         end
 
         -- Update Distance
-        if math.abs(espData.lastDistance - distRounded) > 5 then
+        if abs(espData.lastDistance - distRounded) > 5 then
             espData.DistanceLabel.Text = string.format("%d studs", distRounded)
             espData.lastDistance = distRounded
         end
@@ -3858,15 +3882,16 @@ function UpdateESP(now, player, isClosest)
 
         -- Update Health visuals
         local health, maxHealth = GetHealth(player)
-        if espData.lastHealth ~= health or espData.lastMaxHealth ~= maxHealth then
+        if abs((espData.lastHealth or 0) - health) > 0.5 or espData.lastMaxHealth ~= maxHealth then
             espData.HealthNumericalLabel.Text = string.format("%d/%d", math.floor(health), math.floor(maxHealth))
             
             local healthPercent = math.clamp(health / maxHealth, 0, 1)
-            espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
-            
-            -- Optional: adjust color based on health? Requirements say green fill, red BG.
-            -- Requirement also says "turns red to indicate any lost health"
-            -- The BG is red, fill is green. So if health is 50%, 50% green is shown over red.
+            -- Only update health bar size if it changed significantly (1% difference)
+            local lastHPPercent = espData.lastHPPercent or -1
+            if abs(healthPercent - lastHPPercent) > 0.01 then
+                espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
+                espData.lastHPPercent = healthPercent
+            end
             
             espData.lastHealth = health
             espData.lastMaxHealth = maxHealth
@@ -5432,6 +5457,10 @@ lastBr3ak3rCleanup = 0
 br3ak3rCleanupRate = 2.0 
 lastHoverUpdate = 0
 hoverUpdateRate = 0.033 -- Hover at 30fps
+lastEnforcementUpdate = 0
+enforcementUpdateRate = 0.1 -- 10 FPS for property enforcement
+lastMiscUpdate = 0
+miscUpdateRate = 0.1 -- 10 FPS for non-critical HUD/Light/Waypoint updates
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
 -- Combines ESP, Tracker, Br3ak3r logic into one scheduler
@@ -5481,31 +5510,35 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    UpdateFullbright()
-    UpdateLocalHealthHUD()
-    
-    -- Update Waypoint Distances
-    if Flags["Waypoints/Enabled"] then
-        for id, wpData in pairs(ActiveWaypoints) do
-            if wpData.Part and wpData.Label then
-                local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
-                local distRounded = math.floor(dist)
-                wpData.DistanceText = distRounded .. " studs"
-                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+    local now = os.clock()
+
+    -- Throttled non-critical updates (10 FPS)
+    if (now - lastMiscUpdate) > miscUpdateRate then
+        lastMiscUpdate = now
+        UpdateFullbright()
+        UpdateLocalHealthHUD()
+
+        -- Update Waypoint Distances
+        if Flags["Waypoints/Enabled"] then
+            for id, wpData in pairs(ActiveWaypoints) do
+                if wpData.Part and wpData.Label then
+                    local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
+                    local distRounded = math.floor(dist)
+                    wpData.DistanceText = distRounded .. " studs"
+                    wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+                end
+                local wpVisible = not ghostMode
+                if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
+                if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
             end
-            local wpVisible = not ghostMode
-            if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
-            if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
-        end
-    else
-        -- Hide all if disabled
-        for id, wpData in pairs(ActiveWaypoints) do
-            if wpData.Billboard then wpData.Billboard.Enabled = false end
-            if wpData.PinBg then wpData.PinBg.Enabled = false end
+        else
+            -- Hide all if disabled
+            for id, wpData in pairs(ActiveWaypoints) do
+                if wpData.Billboard then wpData.Billboard.Enabled = false end
+                if wpData.PinBg then wpData.PinBg.Enabled = false end
+            end
         end
     end
-
-    local now = os.clock()
     
     -- 1. ESP & Tracker Updates
     -- Check throttle FIRST before anything else to save perf
@@ -5583,61 +5616,70 @@ function UnifiedHeartbeat(dt)
         ClearCandidateReferences()
         ClearSortCacheReferences()
         ValidateESPObjects()
+
+        -- Connection and thread cleanup
+        CleanupDeadConnections()
+        CleanupDeadThreads()
     end
     
     -- Sweep undo stack (very cheap)
     sweepUndo(dt)
     sweepHighlightedUndo(dt)
 
-    -- Continuous state enforcement for broken parts (StreamingEnabled fix)
-    local enforcementMadeChange = false
-    for part, original in pairs(Br3ak3rState.brokenSet) do
-        if part.Parent then
-            if part.CanCollide ~= false then 
-                part.CanCollide = false 
-                enforcementMadeChange = true
-            end
-            local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
-            local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
-            if part.Transparency ~= targetT then 
-                part.Transparency = targetT 
-                enforcementMadeChange = true
-            end
-            if part.LocalTransparencyModifier ~= targetLTM then 
-                part.LocalTransparencyModifier = targetLTM 
-                enforcementMadeChange = true
-            end
-        end
-    end
-    if enforcementMadeChange then
-        Br3ak3rState.brokenCacheDirty = true
-    end
+    -- Throttled property enforcement (10 FPS)
+    if (now - lastEnforcementUpdate) > enforcementUpdateRate then
+        lastEnforcementUpdate = now
 
-    -- Continuous state enforcement for highlighted parts (ensure visibility)
-    for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
-        if part.Parent then
-            local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
-            local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-            if part.Transparency ~= targetT then part.Transparency = targetT end
-            if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
-            
-            local hVisible = not ghostMode
-            if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
-            if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
+        -- Continuous state enforcement for broken parts (StreamingEnabled fix)
+        local enforcementMadeChange = false
+        for part, original in pairs(Br3ak3rState.brokenSet) do
+            if part.Parent then
+                if part.CanCollide ~= false then
+                    part.CanCollide = false
+                    enforcementMadeChange = true
+                end
+                local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
+                local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
+                if part.Transparency ~= targetT then
+                    part.Transparency = targetT
+                    enforcementMadeChange = true
+                end
+                if part.LocalTransparencyModifier ~= targetLTM then
+                    part.LocalTransparencyModifier = targetLTM
+                    enforcementMadeChange = true
+                end
+            end
         end
-    end
+        if enforcementMadeChange then
+            Br3ak3rState.brokenCacheDirty = true
+        end
 
-    -- Continuous state enforcement for player outlines (ensure Ghost Mode)
-    for player, storage in pairs(PlayerOutlineObjects) do
-        local outlineVisible = not ghostMode
-        if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
-            storage.Highlight.Enabled = outlineVisible
+        -- Continuous state enforcement for highlighted parts (ensure visibility)
+        for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
+            if part.Parent then
+                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+                if part.Transparency ~= targetT then part.Transparency = targetT end
+                if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
+
+                local hVisible = not ghostMode
+                if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
+                if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
+            end
         end
-        if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
-            storage.HeadDot.Enabled = outlineVisible
-        end
-        if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
-            storage.RootDot.Enabled = outlineVisible
+
+        -- Continuous state enforcement for player outlines (ensure Ghost Mode)
+        for player, storage in pairs(PlayerOutlineObjects) do
+            local outlineVisible = not ghostMode
+            if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
+                storage.Highlight.Enabled = outlineVisible
+            end
+            if storage.HeadDot and storage.HeadDot.Enabled ~= outlineVisible then
+                storage.HeadDot.Enabled = outlineVisible
+            end
+            if storage.RootDot and storage.RootDot.Enabled ~= outlineVisible then
+                storage.RootDot.Enabled = outlineVisible
+            end
         end
     end
 end
