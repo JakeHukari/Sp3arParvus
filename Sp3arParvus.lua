@@ -2023,8 +2023,11 @@ end
 ClosestResult = {nil, nil, nil, 0, 0, nil} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY, [6]=pos
 
 -- Hoisted comparator for candidate sorting
+-- FIXED: Added nil checks for mag to prevent comparison errors during sorting
 function CandidateSortFn(a, b)
-    return a.mag < b.mag
+    local magA = a and a.mag or 1e10
+    local magB = b and b.mag or 1e10
+    return magA < magB
 end
 
 -- Hoisted comparator for distance sorting
@@ -2238,19 +2241,18 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
     -- Clean up unused entries instead of setting them to nil to keep the table pool
     -- This MUST happen before potential early returns to clear player/character references
-    local currentSize = #CandidateList
-    if currentSize > CandidateCount then
-        for i = CandidateCount + 1, currentSize do
-            local entry = CandidateList[i]
-            if entry then
-                entry.ply = nil
-                entry.char = nil
-                entry.part = nil
-                entry.pos = nil
-                entry.mag = nil
-                entry.sx = nil
-                entry.sy = nil
-            end
+    -- We clear up to the maximum potential size to ensure no stale data remains
+    local poolLimit = max(#CandidateList, MAX_CANDIDATES * 3)
+    for i = CandidateCount + 1, poolLimit do
+        local entry = CandidateList[i]
+        if entry then
+            entry.ply = nil
+            entry.char = nil
+            entry.part = nil
+            entry.pos = nil
+            entry.mag = nil
+            entry.sx = nil
+            entry.sy = nil
         end
     end
 
