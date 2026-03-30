@@ -1143,15 +1143,15 @@ TrackConnection(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(ReclampA
 -- Responsive sizing helpers
 function GetMainFrameSize()
     local viewport = Camera.ViewportSize
-    local width = math.min(600, viewport.X * 0.9)
-    local height = math.min(400, viewport.Y * 0.9)
+    local width = math.min(580, viewport.X * 0.7)
+    local height = math.min(380, viewport.Y * 0.7)
     return UDim2.fromOffset(width, height)
 end
 
 function GetPlayerPanelSize()
     local viewport = Camera.ViewportSize
-    local width = math.min(320, viewport.X * 0.4)
-    local height = math.min(340, viewport.Y * 0.6)
+    local width = math.min(280, viewport.X * 0.35)
+    local height = math.min(320, viewport.Y * 0.5)
     return UDim2.fromOffset(width, height)
 end
 
@@ -1182,6 +1182,8 @@ function EnsureScreenGui()
     ScreenGui.Name = "Sp3arParvusUI"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.DisplayOrder = 999
+    ScreenGui.IgnoreGuiInset = false
 
     if gethui then
         ScreenGui.Parent = gethui()
@@ -1212,8 +1214,8 @@ function UI.CreateWindow(title)
     MainFrame.Parent = ScreenGui
 
     local mainConstraint = Instance.new("UISizeConstraint")
-    mainConstraint.MinSize = Vector2.new(450, 300)
-    mainConstraint.MaxSize = Vector2.new(700, 500)
+    mainConstraint.MinSize = Vector2.new(420, 280)
+    mainConstraint.MaxSize = Vector2.new(650, 450)
     mainConstraint.Parent = MainFrame
 
     local aspect = Instance.new("UIAspectRatioConstraint")
@@ -1417,8 +1419,8 @@ function UI.CreateWindow(title)
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
-            aspect.Enabled = false
-            mainConstraint.Enabled = false
+            aspect.Parent = nil
+            mainConstraint.Parent = nil
             -- Responsive Minimize: Use relative Scale for position (Top-Right)
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
@@ -1431,8 +1433,8 @@ function UI.CreateWindow(title)
             MinButton.Text = "+"
         else
             MinimizedLabel.Visible = false
-            aspect.Enabled = true
-            mainConstraint.Enabled = true
+            aspect.Parent = MainFrame
+            mainConstraint.Parent = MainFrame
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = OldSize,
                 Position = UDim2.fromScale(0.5, 0.5),
@@ -2893,7 +2895,7 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromScale(0.12, 0.08)
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 10) -- Top Center
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 50) -- Top Center (Clears Top Bar)
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -3177,8 +3179,8 @@ function CreatePlayerPanel()
     PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(220, 240)
-    sizeConstraint.MaxSize = Vector2.new(340, 400)
+    sizeConstraint.MinSize = Vector2.new(200, 220)
+    sizeConstraint.MaxSize = Vector2.new(300, 360)
     sizeConstraint.Parent = PlayerPanelFrame
 
     PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -4284,7 +4286,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 10, 0, 10) -- Top Left
+    D3vToolHUD.Position = UDim2.new(0, 10, 0, 50) -- Top Left (Clears Top Bar)
     D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
@@ -4353,7 +4355,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
-    PerformanceLabel.Position = UDim2.new(1, -10, 0, 10) -- Top Right
+    PerformanceLabel.Position = UDim2.new(1, -10, 0, 50) -- Top Right (Clears Top Bar)
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -4486,7 +4488,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 180) -- Right Side
+    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 220) -- Right Side (Clears Top Bar)
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
