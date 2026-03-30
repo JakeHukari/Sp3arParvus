@@ -1428,7 +1428,7 @@ function UI.CreateWindow(title)
             -- Responsive Minimize: Use relative Scale for position (Top-Right)
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
-                Position = UDim2.new(1, -minimizedWidth, 0, 0),
+                Position = UDim2.new(1, -minimizedWidth, 0, 30),
                 AnchorPoint = Vector2.new(0, 0)
             }):Play()
             ContentArea.Visible = false
@@ -2903,7 +2903,7 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(180, 60)
+    sizeConstraint.MinSize = Vector2.new(150, 50)
     sizeConstraint.MaxSize = Vector2.new(220, 70)
     sizeConstraint.Parent = ClosestPlayerTrackerLabel
 
