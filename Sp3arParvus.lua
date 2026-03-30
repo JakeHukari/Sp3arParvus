@@ -1103,8 +1103,57 @@ local UIState = {
     Tabs = {},
     CurrentTab = nil,
     Visible = true,
-    ToggleMinimize = nil
+    ToggleMinimize = nil,
+    DraggableFrames = {}
 }
+
+function ReclampAllUI()
+    local viewportSize = Camera.ViewportSize
+    if not viewportSize or viewportSize.X == 0 then return end
+    
+    for _, Frame in ipairs(UIState.DraggableFrames) do
+        pcall(function()
+            if not Frame or not Frame.Parent then return end
+            
+            local absoluteSize = Frame.AbsoluteSize
+            local anchor = Frame.AnchorPoint
+            
+            -- Get current center-point position in absolute pixels
+            local currentPos = Frame.AbsolutePosition + (absoluteSize * anchor)
+            
+            -- Calculate bounds for the anchor point
+            local minX = anchor.X * absoluteSize.X
+            local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
+            local minY = anchor.Y * absoluteSize.Y
+            local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
+            
+            -- Clamp
+            local clampedX = math.clamp(currentPos.X, minX, maxX)
+            local clampedY = math.clamp(currentPos.Y, minY, maxY)
+            
+            -- Set position in Scale to keep it responsive
+            Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
+        end)
+    end
+end
+
+-- Listen for viewport changes to re-clamp UI
+TrackConnection(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(ReclampAllUI))
+
+-- Responsive sizing helpers
+function GetMainFrameSize()
+    local viewport = Camera.ViewportSize
+    local width = math.min(600, viewport.X * 0.9)
+    local height = math.min(400, viewport.Y * 0.9)
+    return UDim2.fromOffset(width, height)
+end
+
+function GetPlayerPanelSize()
+    local viewport = Camera.ViewportSize
+    local width = math.min(320, viewport.X * 0.4)
+    local height = math.min(340, viewport.Y * 0.6)
+    return UDim2.fromOffset(width, height)
+end
 
 -- UI Constants
 UI_THEME = {
@@ -1153,7 +1202,7 @@ function UI.CreateWindow(title)
     -- Main Container
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.fromOffset(600, 400)
+    MainFrame.Size = UDim2.fromScale(0.4, 0.45)
     MainFrame.Position = UDim2.fromScale(0.5, 0.5)
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.BackgroundColor3 = UI_THEME.Background
@@ -1161,6 +1210,16 @@ function UI.CreateWindow(title)
     MainFrame.Visible = UIState.Visible
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
+
+    local mainConstraint = Instance.new("UISizeConstraint")
+    mainConstraint.MinSize = Vector2.new(450, 300)
+    mainConstraint.MaxSize = Vector2.new(700, 500)
+    mainConstraint.Parent = MainFrame
+
+    local aspect = Instance.new("UIAspectRatioConstraint")
+    aspect.AspectRatio = 1.5
+    aspect.DominantAxis = Enum.DominantAxis.Width
+    aspect.Parent = MainFrame
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -1189,10 +1248,15 @@ function UI.CreateWindow(title)
     -- Sidebar
     local Sidebar = Instance.new("Frame")
     Sidebar.Name = "Sidebar"
-    Sidebar.Size = UDim2.new(0, 160, 1, 0)
+    Sidebar.Size = UDim2.new(0.26, 0, 1, 0) -- Responsive width
     Sidebar.BackgroundColor3 = UI_THEME.Sidebar
     Sidebar.BorderSizePixel = 0
     Sidebar.Parent = MainFrame
+
+    local sideConstraint = Instance.new("UISizeConstraint")
+    sideConstraint.MinSize = Vector2.new(120, 0)
+    sideConstraint.MaxSize = Vector2.new(180, 9999)
+    sideConstraint.Parent = Sidebar
     
     local sbCorner = Instance.new("UICorner")
     sbCorner.CornerRadius = UDim.new(0, 8)
@@ -1249,8 +1313,8 @@ function UI.CreateWindow(title)
     -- Content Area
     local ContentArea = Instance.new("Frame")
     ContentArea.Name = "Content"
-    ContentArea.Size = UDim2.new(1, -170, 1, -20)
-    ContentArea.Position = UDim2.new(0, 170, 0, 10)
+    ContentArea.Size = UDim2.new(0.72, 0, 1, -20) -- Responsive width
+    ContentArea.Position = UDim2.new(0.28, 0, 0, 10)
     ContentArea.BackgroundTransparency = 1
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
@@ -1262,15 +1326,18 @@ function UI.CreateWindow(title)
     -- Dragging Logic Helper
     -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
     -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
+    -- RESPONSIVE FIX: Update to use Scale-based positioning and screen bounding
     local function MakeDraggable(Frame)
-        local dragging, dragInput, dragStart, startPos
+        table.insert(UIState.DraggableFrames, Frame)
+        local dragging, dragInput, dragStart, startAbsPos
         
         -- Track frame-level connections for cleanup
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
                 dragStart = input.Position
-                startPos = Frame.Position
+                -- Store the initial anchor position in absolute pixels
+                startAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
             end
         end))
         
@@ -1287,12 +1354,26 @@ function UI.CreateWindow(title)
         end))
         
         -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
-        -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
         TrackConnection(UserInputService.InputChanged:Connect(function(input)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
-                -- Direct position update - NO TWEEN CREATION
-                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                local newAbsPos = startAbsPos + Vector2.new(delta.X, delta.Y)
+                
+                local viewportSize = Camera.ViewportSize
+                local absoluteSize = Frame.AbsoluteSize
+                local anchor = Frame.AnchorPoint
+                
+                -- MATHEMATICAL BOUNDING: Clamp against ViewportSize using AbsoluteSize and AnchorPoint
+                local minX = anchor.X * absoluteSize.X
+                local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
+                local minY = anchor.Y * absoluteSize.Y
+                local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
+                
+                local clampedX = math.clamp(newAbsPos.X, minX, maxX)
+                local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
+                
+                -- Update to SCALE for responsiveness
+                Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
             end
         end))
     end
@@ -1313,7 +1394,7 @@ function UI.CreateWindow(title)
     MinButton.Parent = MainFrame
 
     local Minimized = false
-    local OldSize = UDim2.fromOffset(600, 400)
+    local OldSize = MainFrame.Size
     
     local minimizedText = "Sp3arParvus v" .. VERSION
     local textSize = TextService:GetTextSize(minimizedText, 14, Enum.Font.GothamBold, Vector2.new(1000, 1000))
@@ -1336,9 +1417,13 @@ function UI.CreateWindow(title)
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
+            aspect.Enabled = false
+            mainConstraint.Enabled = false
+            -- Responsive Minimize: Use relative Scale for position (Top-Right)
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
-                Position = UDim2.fromOffset(1837, -17)
+                Position = UDim2.new(1, -minimizedWidth, 0, 0),
+                AnchorPoint = Vector2.new(0, 0)
             }):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
@@ -1346,9 +1431,12 @@ function UI.CreateWindow(title)
             MinButton.Text = "+"
         else
             MinimizedLabel.Visible = false
+            aspect.Enabled = true
+            mainConstraint.Enabled = true
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = OldSize,
-                Position = UDim2.fromScale(0.5, 0.5)
+                Position = UDim2.fromScale(0.5, 0.5),
+                AnchorPoint = Vector2.new(0.5, 0.5)
             }):Play()
             task.wait(0.1)
             ContentArea.Visible = true
@@ -2804,8 +2892,15 @@ function CreateClosestPlayerTracker()
     -- Main container frame
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
-    ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, -55) -- Position of Closest Player Tracker
+    ClosestPlayerTrackerLabel.Size = UDim2.fromScale(0.12, 0.08)
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 10) -- Top Center
+    ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
+    
+    local sizeConstraint = Instance.new("UISizeConstraint")
+    sizeConstraint.MinSize = Vector2.new(180, 60)
+    sizeConstraint.MaxSize = Vector2.new(250, 100)
+    sizeConstraint.Parent = ClosestPlayerTrackerLabel
+
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
     ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     ClosestPlayerTrackerLabel.BorderSizePixel = 0
@@ -3077,8 +3172,15 @@ function CreatePlayerPanel()
     -- Main container
     PlayerPanelFrame = Instance.new("Frame")
     PlayerPanelFrame.Name = "PlayerPanel"
-    PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
-    PlayerPanelFrame.Position = UDim2.new(0, 10, 0.5, -170)
+    PlayerPanelFrame.Size = GetPlayerPanelSize()
+    PlayerPanelFrame.Position = UDim2.fromScale(0, 0.5) -- Left Center
+    PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
+    
+    local sizeConstraint = Instance.new("UISizeConstraint")
+    sizeConstraint.MinSize = Vector2.new(220, 240)
+    sizeConstraint.MaxSize = Vector2.new(340, 400)
+    sizeConstraint.Parent = PlayerPanelFrame
+
     PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     PlayerPanelFrame.BackgroundTransparency = 0.1
     PlayerPanelFrame.BorderSizePixel = 0
@@ -4182,7 +4284,8 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 1470, 0, -55)
+    D3vToolHUD.Position = UDim2.new(0, 10, 0, 10) -- Top Left
+    D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolHUD.Parent = parent
@@ -4249,8 +4352,15 @@ PerformanceRows = {}
 function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
-    PerformanceLabel.Size = PerfOriginalSize
-    PerformanceLabel.Position = UDim2.new(1, -430, 0, 45) -- Position of Performance Tracker
+    PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
+    PerformanceLabel.Position = UDim2.new(1, -10, 0, 10) -- Top Right
+    PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
+    
+    local sizeConstraint = Instance.new("UISizeConstraint")
+    sizeConstraint.MinSize = Vector2.new(160, 130)
+    sizeConstraint.MaxSize = Vector2.new(220, 180)
+    sizeConstraint.Parent = PerformanceLabel
+
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     PerformanceLabel.BackgroundTransparency = 0
     PerformanceLabel.BorderSizePixel = 0
@@ -4375,8 +4485,15 @@ local LocalHealthValueLabel = nil
 function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
-    LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
-    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 190) -- Position of Health Tracker
+    LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
+    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 180) -- Right Side
+    LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
+    
+    local sizeConstraint = Instance.new("UISizeConstraint")
+    sizeConstraint.MinSize = Vector2.new(110, 35)
+    sizeConstraint.MaxSize = Vector2.new(160, 50)
+    sizeConstraint.Parent = LocalHealthHUD
+
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     LocalHealthHUD.BackgroundTransparency = 0.2
     LocalHealthHUD.BorderSizePixel = 0
@@ -5006,6 +5123,11 @@ function Cleanup()
         pcall(function() ScreenGui:Destroy() end)
         ScreenGui = nil
     end
+    table.clear(UIState.Tabs)
+    table.clear(UIState.DraggableFrames)
+    UIState.MainFrame = nil
+    UIState.ContentArea = nil
+    UIState.TabContainer = nil
     
     -- Cleanup ESP objects
     for player, espData in pairs(ESPObjects) do
