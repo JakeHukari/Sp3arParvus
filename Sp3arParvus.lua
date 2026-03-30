@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.5" -- Humanoid Tab
+local VERSION = "3.7.6" -- Fully dynamic UI element sizing and positions
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -4492,7 +4492,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -250, 0, 70) -- Right Side, above Performance
+    LocalHealthHUD.Position = UDim2.new(1, -260, 0, 70) -- Right Side, above Performance
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
