@@ -355,7 +355,10 @@ local Flags = {
 
     -- Freecam
     ["Settings/Freecam Toggle"] = true,
-    ["Settings/GhostMode"] = false
+    ["Settings/GhostMode"] = false,
+
+    -- Misc
+    ["Misc/D3vTool"] = true
 }
 
 -- WAYPOINTS SYSTEM STATE
@@ -4097,6 +4100,64 @@ function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
+-- D3V TOOL DISPLAY
+
+local D3vToolHUD = nil
+local D3vToolLabel = nil
+
+function CreateD3vToolHUD(parent)
+    D3vToolHUD = Instance.new("Frame")
+    D3vToolHUD.Name = "D3vToolHUD"
+    D3vToolHUD.Position = UDim2.new(0, 10, 0, 10)
+    D3vToolHUD.BackgroundTransparency = 1
+    D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
+    D3vToolHUD.Parent = parent
+
+    D3vToolLabel = Instance.new("TextLabel")
+    D3vToolLabel.Name = "D3vToolLabel"
+    D3vToolLabel.BackgroundTransparency = 1
+    D3vToolLabel.Font = Enum.Font.GothamBold
+    D3vToolLabel.TextSize = 12
+    D3vToolLabel.TextColor3 = Color3.new(1, 1, 1)
+    D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Left
+    D3vToolLabel.AutomaticSize = Enum.AutomaticSize.XY
+    D3vToolLabel.Parent = D3vToolHUD
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = Color3.new(0, 0, 0)
+    stroke.Parent = D3vToolLabel
+end
+
+function UpdateD3vTool()
+    if not D3vToolHUD then return end
+    
+    local visible = Flags["Misc/D3vTool"] and not Flags["Settings/GhostMode"]
+    if D3vToolHUD.Visible ~= visible then
+        D3vToolHUD.Visible = visible
+    end
+    
+    if not visible then return end
+    
+    -- Clock
+    local timeStr = Lighting.TimeOfDay:sub(1, 5)
+    
+    -- LPC (Local Player Coordinates)
+    local lpcStr = "N/A"
+    local char = LocalPlayer.Character
+    local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+    if root then
+        local pos = root.Position
+        lpcStr = string.format("%d,%d,%d", floor(pos.X), floor(pos.Y), floor(pos.Z))
+    end
+    
+    -- LMC (Local Mouse Coordinates)
+    local mouseLoc = UserInputService:GetMouseLocation()
+    local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
+    
+    D3vToolLabel.Text = string.format("T-%s | LPC-%s | LMC-%s", timeStr, lpcStr, lmcStr)
+end
+
 -- PERFORMANCE DISPLAY
 
 PerformanceLabel = nil
@@ -4969,6 +5030,11 @@ function Cleanup()
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
+    if D3vToolHUD then
+        pcall(function() D3vToolHUD:Destroy() end)
+    end
+    D3vToolHUD = nil
+    D3vToolLabel = nil
     ClosestPlayerTrackerLabel = nil
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
@@ -5008,6 +5074,7 @@ end
 local Window = UI.CreateWindow("Sp3arParvusV2")
 
 -- Initialize HUD Elements
+CreateD3vToolHUD(ScreenGui)
 CreatePerformanceDisplay(ScreenGui)
 CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
@@ -5149,6 +5216,7 @@ UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Set
 UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
+UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+/)", "Misc/D3vTool", Flags["Misc/D3vTool"])
 
 -- Helper to setup player ESP and connections
 function SetupPlayerESP(player)
@@ -5350,6 +5418,9 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.G then
             -- Ctrl+G: Toggle Gh0st Mode
             Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
+        elseif input.KeyCode == Enum.KeyCode.Slash then
+            -- Ctrl+/: Toggle D3v Tool
+            Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
         end
     end
 end))
@@ -5565,6 +5636,7 @@ function UnifiedHeartbeat(dt)
 
     UpdateFullbright()
     UpdateLocalHealthHUD()
+    UpdateD3vTool()
     
     -- Update Waypoint Distances
     if Flags["Waypoints/Enabled"] then
