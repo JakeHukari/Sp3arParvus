@@ -1183,7 +1183,7 @@ function EnsureScreenGui()
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.DisplayOrder = 999
-    ScreenGui.IgnoreGuiInset = false
+    ScreenGui.IgnoreGuiInset = true
 
     if gethui then
         ScreenGui.Parent = gethui()
@@ -1375,7 +1375,11 @@ function UI.CreateWindow(title)
                 local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
                 
                 -- Update to SCALE for responsiveness
-                Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
+                pcall(function()
+                    local clampedX = math.clamp(newAbsPos.X, minX, maxX)
+                    local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
+                    Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
+                end)
             end
         end))
     end
@@ -2895,7 +2899,7 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromScale(0.12, 0.08)
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 50) -- Top Center (Clears Top Bar)
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 5) -- Top Center
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -3174,7 +3178,7 @@ function CreatePlayerPanel()
     -- Main container
     PlayerPanelFrame = Instance.new("Frame")
     PlayerPanelFrame.Name = "PlayerPanel"
-    PlayerPanelFrame.Size = GetPlayerPanelSize()
+    PlayerPanelFrame.Size = UDim2.fromScale(0.15, 0.45)
     PlayerPanelFrame.Position = UDim2.fromScale(0, 0.5) -- Left Center
     PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
     
@@ -4286,7 +4290,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 10, 0, 50) -- Top Left (Clears Top Bar)
+    D3vToolHUD.Position = UDim2.new(0, 10, 0, 5) -- Top Left
     D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
@@ -4355,7 +4359,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
-    PerformanceLabel.Position = UDim2.new(1, -10, 0, 50) -- Top Right (Clears Top Bar)
+    PerformanceLabel.Position = UDim2.new(1, -10, 0, 5) -- Top Right
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -4488,7 +4492,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 220) -- Right Side (Clears Top Bar)
+    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 150) -- Right Side, below Performance
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
