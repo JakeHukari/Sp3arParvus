@@ -4359,7 +4359,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
-    PerformanceLabel.Position = UDim2.new(1, -250, 0, 100) -- Next to player list
+    PerformanceLabel.Position = UDim2.new(1, -240, 0, 100) -- Next to player list
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -4492,7 +4492,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -270, 0, 70) -- Right Side, above Performance
+    LocalHealthHUD.Position = UDim2.new(1, -250, 0, 70) -- Right Side, above Performance
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
