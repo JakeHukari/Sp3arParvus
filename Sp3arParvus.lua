@@ -5016,7 +5016,6 @@ CreateClosestPlayerTracker()
 local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
 local MiscTab = UI.CreateTab("Misc")
-local SettingsTab = UI.CreateTab("Settings")
 
 local WaypointsPage = UI.CreateTab("Waypoints")
 
@@ -5140,15 +5139,14 @@ UI.CreateSection(MiscTab, "Utilities")
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
--- SETTINGS TAB
-UI.CreateSection(SettingsTab, "Configuration")
-UI.CreateToggle(SettingsTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
+UI.CreateSection(MiscTab, "Configuration")
+UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
     if not state and type(_G.StopFreecamFunc) == "function" then
         _G.StopFreecamFunc()
     end
 end)
-UI.CreateToggle(SettingsTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"])
-UI.CreateToggle(SettingsTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
+UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"])
+UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 
