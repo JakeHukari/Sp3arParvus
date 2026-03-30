@@ -1423,6 +1423,10 @@ function UI.CreateTab(name, icon)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = Page
     
+    TrackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        Page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+    end))
+    
     local padding = Instance.new("UIPadding")
     padding.PaddingRight = UDim.new(0, 5)
     padding.Parent = Page
