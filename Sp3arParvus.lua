@@ -5141,7 +5141,6 @@ UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
 UI.CreateSection(MiscTab, "Configuration")
 UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
-UI.CreateToggle(SettingsTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
     if not state and type(_G.StopFreecamFunc) == "function" then
         _G.StopFreecamFunc()
     end
