@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.1" -- Menu auto-reposition && 'Ctrl+-' shortcut to minimize
+local VERSION = "3.7.0" -- D3v Tool Implementation
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -1226,7 +1226,7 @@ function UI.CreateWindow(title)
             OldSize = MainFrame.Size
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
-                Position = UDim2.fromOffset(1760, 35)
+                Position = UDim2.fromOffset(1837, -17)
             }):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
