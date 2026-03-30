@@ -452,15 +452,15 @@ function ApplyHumanoidSettings()
         -- ["Humanoid/Sit"] = "Sit", -- Excluded from loop to allow normal gameplay
         -- ["Humanoid/Jump"] = "Jump", -- Excluded from loop to allow normal gameplay
         ["Humanoid/AutoJumpEnabled"] = "AutoJumpEnabled",
-        ["Humanoid/JumpHeight"] = "JumpHeight",
-        ["Humanoid/JumpPower"] = "JumpPower",
+        -- ["Humanoid/JumpHeight"] = "JumpHeight", -- Excluded from loop to allow sprinting/game-logic
+        -- ["Humanoid/JumpPower"] = "JumpPower", -- Excluded from loop to allow sprinting/game-logic
         ["Humanoid/UseJumpPower"] = "UseJumpPower",
         ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
         -- ["Humanoid/Health"] = "Health", -- Excluded from loop to prevent god-mode
         ["Humanoid/MaxHealth"] = "MaxHealth",
-        ["Humanoid/HipHeight"] = "HipHeight",
-        ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle",
-        ["Humanoid/WalkSpeed"] = "WalkSpeed"
+        -- ["Humanoid/HipHeight"] = "HipHeight", -- Excluded from loop to allow sprinting/game-logic
+        ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle"
+        -- ["Humanoid/WalkSpeed"] = "WalkSpeed" -- Excluded from loop to allow sprinting/game-logic
     }
     
     for flag, prop in pairs(mapping) do
@@ -1544,9 +1544,9 @@ function UI.CreateToggle(page, text, flag, default, callback)
     end))
 end
 
-function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
+function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, callback)
     local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, 0, 0, 56)
+    Frame.Size = UDim2.new(1, 0, 0, 48)
     Frame.BackgroundColor3 = UI_THEME.Element
     Frame.BorderSizePixel = 0
     Frame.Parent = page
@@ -1556,8 +1556,8 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     corner.Parent = Frame
 
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -24, 0, 24)
-    Label.Position = UDim2.new(0, 12, 0, 4)
+    Label.Size = UDim2.new(0.6, -12, 1, 0)
+    Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
     Label.Font = Enum.Font.GothamMedium
@@ -1566,116 +1566,64 @@ function UI.CreateSlider(page, text, flag, min, max, default, unit, callback)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
     
-    local ValueLabel = Instance.new("TextLabel")
-    ValueLabel.Size = UDim2.new(0, 60, 0, 24)
-    ValueLabel.AnchorPoint = Vector2.new(1, 0)
-    ValueLabel.Position = UDim2.new(1, -12, 0, 4)
-    ValueLabel.BackgroundTransparency = 1
-    ValueLabel.Text = tostring(default) .. (unit or "")
-    ValueLabel.Font = Enum.Font.Gotham
-    ValueLabel.TextSize = 12
-    ValueLabel.TextColor3 = UI_THEME.TextDark
-    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    ValueLabel.Parent = Frame
-    
-    local Track = Instance.new("TextButton") -- Using TextButton for easier input handling area
-    Track.Text = ""
-    Track.Size = UDim2.new(1, -24, 0, 4)
-    Track.Position = UDim2.new(0, 12, 0, 36)
-    Track.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    Track.BorderSizePixel = 0
-    Track.AutoButtonColor = false
-    Track.Parent = Frame
-    
-    local tCorner = Instance.new("UICorner")
-    tCorner.CornerRadius = UDim.new(1, 0)
-    tCorner.Parent = Track
-    
-    local Fill = Instance.new("Frame")
-    Fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
-    Fill.BackgroundColor3 = UI_THEME.Accent
-    Fill.BorderSizePixel = 0
-    Fill.Parent = Track
-    
-    local fCorner = Instance.new("UICorner")
-    fCorner.CornerRadius = UDim.new(1, 0)
-    fCorner.Parent = Fill
-    
-    local Circle = Instance.new("Frame")
-    Circle.Size = UDim2.new(0, 12, 0, 12)
-    Circle.AnchorPoint = Vector2.new(0.5, 0.5)
-    Circle.Position = UDim2.new(1, 0, 0.5, 0)
-    Circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Circle.BorderSizePixel = 0
-    Circle.Parent = Fill
-    
-    local cCorner = Instance.new("UICorner")
-    cCorner.CornerRadius = UDim.new(1, 0)
-    cCorner.Parent = Circle
-    
-    Flags[flag] = default
+    local InputFrame = Instance.new("Frame")
+    InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
+    InputFrame.Position = UDim2.new(1, -12, 0.5, 0)
+    InputFrame.AnchorPoint = Vector2.new(1, 0.5)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    InputFrame.Parent = Frame
+    local ifCorner = Instance.new("UICorner"); ifCorner.CornerRadius = UDim.new(0, 4); ifCorner.Parent = InputFrame
 
-    local function Update(input)
-        local sizeX = Track.AbsoluteSize.X
-        local posX = Track.AbsolutePosition.X
-        local percent = math.clamp((input.Position.X - posX) / sizeX, 0, 1)
-        local value = math.floor(min + (max - min) * percent)
-        
-        Flags[flag] = value
-        ValueLabel.Text = tostring(value) .. (unit or "")
-        Fill.Size = UDim2.new(percent, 0, 1, 0)
-        
-        if callback then callback(value) end
-    end
-    
-    local dragging = false
-    local activeSliderMoveConn = nil
-    local activeSliderEndConn = nil
-    
-    -- OPTIMIZED: Only connect move/end events while dragging to avoid overhead
-    -- MEMORY LEAK FIX: Added safety cleanup and tracking to prevent connection accumulation
-    TrackConnection(Track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            -- Safety: Disconnect any existing connections before creating new ones
-            if activeSliderMoveConn then 
-                activeSliderMoveConn:Disconnect() 
-                activeSliderMoveConn = nil 
-            end
-            if activeSliderEndConn then 
-                activeSliderEndConn:Disconnect() 
-                activeSliderEndConn = nil 
-            end
-            
-            dragging = true
-            TweenService:Create(Circle, TWEENS.FAST, {Size = UDim2.fromOffset(16, 16)}):Play()
-            Update(input)
-            
-            -- Handle dragging
-            activeSliderMoveConn = UserInputService.InputChanged:Connect(function(moveInput)
-                if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
-                    Update(moveInput)
-                end
-            end)
-            
-            -- Handle release
-            activeSliderEndConn = UserInputService.InputEnded:Connect(function(endInput)
-                if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = false
-                    TweenService:Create(Circle, TWEENS.FAST, {Size = UDim2.fromOffset(12, 12)}):Play()
-                    
-                    -- Cleanup connections immediately
-                    if activeSliderMoveConn then 
-                        activeSliderMoveConn:Disconnect() 
-                        activeSliderMoveConn = nil 
-                    end
-                    if activeSliderEndConn then 
-                        activeSliderEndConn:Disconnect() 
-                        activeSliderEndConn = nil 
-                    end
-                end
-            end)
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.new(1, -50, 1, 0)
+    Input.Position = UDim2.new(0, 25, 0, 0)
+    Input.BackgroundTransparency = 1
+    Input.Text = tostring(default)
+    Input.Font = Enum.Font.GothamBold
+    Input.TextSize = 13
+    Input.TextColor3 = UI_THEME.Accent
+    Input.ClearTextOnFocus = false
+    Input.Parent = InputFrame
+
+    local function updateValue(val)
+        val = math.clamp(tonumber(val) or default, min, max)
+        if step and step > 0 then
+            val = math.floor(val / step + 0.5) * step
         end
+        Flags[flag] = val
+        Input.Text = tostring(val)
+        if callback then callback(val) end
+    end
+
+    TrackConnection(Input.FocusLost:Connect(function()
+        updateValue(Input.Text)
     end))
+
+    local function createBtn(t, pos, xAlign)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 25, 1, 0)
+        btn.Position = pos
+        btn.BackgroundTransparency = 1
+        btn.Text = t
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 16
+        btn.TextColor3 = UI_THEME.TextDark
+        btn.Parent = InputFrame
+        return btn
+    end
+
+    local minusBtn = createBtn("-", UDim2.new(0, 0, 0, 0))
+    local plusBtn = createBtn("+", UDim2.new(1, -25, 0, 0))
+
+    TrackConnection(minusBtn.MouseButton1Click:Connect(function()
+        updateValue(Flags[flag] - (step or 1))
+    end))
+
+    TrackConnection(plusBtn.MouseButton1Click:Connect(function()
+        updateValue(Flags[flag] + (step or 1))
+    end))
+
+    Flags[flag] = default
 end
 
 function UI.CreateButton(page, text, callback)
@@ -4262,7 +4210,13 @@ function UpdateD3vTool()
     if not visible then return end
     
     -- Clock
-    local timeStr = Lighting.TimeOfDay:sub(1, 5)
+    local clockTime = Lighting.ClockTime
+    local hours = math.floor(clockTime)
+    local minutes = math.floor((clockTime - hours) * 60)
+    local period = hours >= 12 and "PM" or "AM"
+    local hours12 = hours % 12
+    if hours12 == 0 then hours12 = 12 end
+    local timeStr = string.format("%d:%02d %s", hours12, minutes, period)
     
     -- LPC (Local Player Coordinates)
     local lpcStr = "N/A"
@@ -5255,19 +5209,19 @@ UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/Aut
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock onto enemies)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
-UI.CreateSlider(AimTab, "Smoothing", "Aimbot/Sensitivity", 0, 100, Flags["Aimbot/Sensitivity"], "%")
-UI.CreateSlider(AimTab, "FOV Radius", "Aimbot/FOV/Radius", 0, 500, Flags["Aimbot/FOV/Radius"], "px")
+UI.CreateNumericInput(AimTab, "Smoothing", "Aimbot/Sensitivity", Flags["Aimbot/Sensitivity"], 0, 100, 1, "%")
+UI.CreateNumericInput(AimTab, "FOV Radius", "Aimbot/FOV/Radius", Flags["Aimbot/FOV/Radius"], 0, 500, 5, "px")
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateSlider(AimTab, "Bullet Speed", "Prediction/Velocity", 100, 5000, Flags["Prediction/Velocity"], " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateSlider(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", 0, 5, Flags["Prediction/GravityMultiplier"], "x", function(v) GravityCorrection = v end)
+UI.CreateNumericInput(AimTab, "Bullet Speed", "Prediction/Velocity", Flags["Prediction/Velocity"], 100, 5000, 50, " st/s", function(v) ProjectileSpeed = v end)
+UI.CreateNumericInput(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", Flags["Prediction/GravityMultiplier"], 0, 5, 0.1, "x", function(v) GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
 UI.CreateToggle(AimTab, "Enable Trigger", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
 UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", Flags["Trigger/HoldMouseButton"])
-UI.CreateSlider(AimTab, "Trigger Delay", "Trigger/Delay", 0, 100, Flags["Trigger/Delay"], "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
+UI.CreateNumericInput(AimTab, "Trigger Delay", "Trigger/Delay", Flags["Trigger/Delay"] * 1000, 0, 1000, 10, "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
 
 -- VISUALS TAB
 UI.CreateSection(VisualsTab, "Player ESP")
@@ -5339,27 +5293,27 @@ UI.CreateSection(HumanoidTab, "Control")
 UI.CreateToggle(HumanoidTab, "Auto Rotate", "Humanoid/AutoRotate", Flags["Humanoid/AutoRotate"], function(v) _updateHum("AutoRotate", v) end)
 UI.CreateToggle(HumanoidTab, "Platform Stand", "Humanoid/PlatformStand", Flags["Humanoid/PlatformStand"], function(v) _updateHum("PlatformStand", v) end)
 UI.CreateToggle(HumanoidTab, "Sit", "Humanoid/Sit", Flags["Humanoid/Sit"], function(v) _updateHum("Sit", v) end)
-UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v) _updateHum("Jump", v) end)
+UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v) 
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Jump = v
+    end
+end)
 
 UI.CreateSection(HumanoidTab, "Jump Settings")
 UI.CreateToggle(HumanoidTab, "Auto Jump Enabled", "Humanoid/AutoJumpEnabled", Flags["Humanoid/AutoJumpEnabled"], function(v) _updateHum("AutoJumpEnabled", v) end)
-UI.CreateSlider(HumanoidTab, "Jump Height", "Humanoid/JumpHeight_Slider", 0, 1000, Flags["Humanoid/JumpHeight"] * 10, " (x10)", function(v) 
-    Flags["Humanoid/JumpHeight"] = v / 10
-    _updateHum("JumpHeight", Flags["Humanoid/JumpHeight"])
-end)
-UI.CreateSlider(HumanoidTab, "Jump Power", "Humanoid/JumpPower", 0, 500, Flags["Humanoid/JumpPower"], nil, function(v) _updateHum("JumpPower", v) end)
+UI.CreateNumericInput(HumanoidTab, "Jump Height", "Humanoid/JumpHeight", Flags["Humanoid/JumpHeight"], 0, 500, 0.1, nil, function(v) _updateHum("JumpHeight", v) end)
+UI.CreateNumericInput(HumanoidTab, "Jump Power", "Humanoid/JumpPower", Flags["Humanoid/JumpPower"], 0, 500, 1, nil, function(v) _updateHum("JumpPower", v) end)
 UI.CreateToggle(HumanoidTab, "Use Jump Power", "Humanoid/UseJumpPower", Flags["Humanoid/UseJumpPower"], function(v) _updateHum("UseJumpPower", v) end)
 
 UI.CreateSection(HumanoidTab, "Game")
 UI.CreateToggle(HumanoidTab, "Automatic Scaling Enabled", "Humanoid/AutomaticScalingEnabled", Flags["Humanoid/AutomaticScalingEnabled"], function(v) _updateHum("AutomaticScalingEnabled", v) end)
-UI.CreateSlider(HumanoidTab, "Health", "Humanoid/Health", 0, 2000, Flags["Humanoid/Health"], nil, function(v) _updateHum("Health", v) end)
-UI.CreateSlider(HumanoidTab, "Max Health", "Humanoid/MaxHealth", 0, 2000, Flags["Humanoid/MaxHealth"], nil, function(v) _updateHum("MaxHealth", v) end)
-UI.CreateSlider(HumanoidTab, "Hip Height", "Humanoid/HipHeight_Slider", 0, 1000, Flags["Humanoid/HipHeight"] * 100, " (x100)", function(v) 
-    Flags["Humanoid/HipHeight"] = v / 100
-    _updateHum("HipHeight", Flags["Humanoid/HipHeight"])
-end)
-UI.CreateSlider(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", 0, 90, Flags["Humanoid/MaxSlopeAngle"], nil, function(v) _updateHum("MaxSlopeAngle", v) end)
-UI.CreateSlider(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", 0, 500, Flags["Humanoid/WalkSpeed"], nil, function(v) _updateHum("WalkSpeed", v) end)
+UI.CreateNumericInput(HumanoidTab, "Health", "Humanoid/Health", Flags["Humanoid/Health"], 0, 2000, 1, nil, function(v) _updateHum("Health", v) end)
+UI.CreateNumericInput(HumanoidTab, "Max Health", "Humanoid/MaxHealth", Flags["Humanoid/MaxHealth"], 0, 2000, 1, nil, function(v) _updateHum("MaxHealth", v) end)
+UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 0.01, nil, function(v) _updateHum("HipHeight", v) end)
+UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end)
+UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end)
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
