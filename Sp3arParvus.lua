@@ -2903,8 +2903,8 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(180, 60)
-    sizeConstraint.MaxSize = Vector2.new(250, 100)
+    sizeConstraint.MinSize = Vector2.new(150, 50)
+    sizeConstraint.MaxSize = Vector2.new(220, 70)
     sizeConstraint.Parent = ClosestPlayerTrackerLabel
 
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
@@ -4290,7 +4290,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 10, 0, 5) -- Top Left
+    D3vToolHUD.Position = UDim2.new(1, -500, 0, 5) -- Top right
     D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
@@ -4359,7 +4359,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
-    PerformanceLabel.Position = UDim2.new(1, -10, 0, 5) -- Top Right
+    PerformanceLabel.Position = UDim2.new(1, -250, 0, 100) -- Next to player list
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
@@ -4492,12 +4492,12 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -10, 0, 150) -- Right Side, below Performance
+    LocalHealthHUD.Position = UDim2.new(1, -270, 0, 250) -- Right Side, below Performance
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(110, 35)
-    sizeConstraint.MaxSize = Vector2.new(160, 50)
+    sizeConstraint.MinSize = Vector2.new(110, 15)
+    sizeConstraint.MaxSize = Vector2.new(160, 30)
     sizeConstraint.Parent = LocalHealthHUD
 
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
