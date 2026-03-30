@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.6.0" -- Fullbright Restoration Update
+local VERSION = "3.7.0" -- D3v Tool Implementation
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -5216,7 +5216,7 @@ UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Set
 UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
-UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+/)", "Misc/D3vTool", Flags["Misc/D3vTool"])
+UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+.)", "Misc/D3vTool", Flags["Misc/D3vTool"])
 
 -- Helper to setup player ESP and connections
 function SetupPlayerESP(player)
@@ -5418,8 +5418,8 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.G then
             -- Ctrl+G: Toggle Gh0st Mode
             Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
-        elseif input.KeyCode == Enum.KeyCode.Slash then
-            -- Ctrl+/: Toggle D3v Tool
+        elseif input.KeyCode == Enum.KeyCode.Period then
+            -- Ctrl+.: Toggle D3v Tool
             Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
         end
     end
