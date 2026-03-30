@@ -990,7 +990,8 @@ local UIState = {
     MainFrame = nil,
     Tabs = {},
     CurrentTab = nil,
-    Visible = true
+    Visible = true,
+    ToggleMinimize = nil
 }
 
 -- UI Constants
@@ -1219,25 +1220,34 @@ function UI.CreateWindow(title)
     MinimizedLabel.Visible = false
     MinimizedLabel.Parent = MainFrame
 
-    -- MEMORY LEAK FIX: Track minimize button connection
-    TrackConnection(MinButton.MouseButton1Click:Connect(function()
+    local function ToggleMinimize()
         Minimized = not Minimized
         if Minimized then
             OldSize = MainFrame.Size
-            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(minimizedWidth, 30)}):Play()
+            TweenService:Create(MainFrame, TWEENS.SMOOTH, {
+                Size = UDim2.fromOffset(minimizedWidth, 30),
+                Position = UDim2.fromOffset(1760, 35)
+            }):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
             MinimizedLabel.Visible = true
             MinButton.Text = "+"
         else
             MinimizedLabel.Visible = false
-            TweenService:Create(MainFrame, TWEENS.SMOOTH, {Size = OldSize}):Play()
+            TweenService:Create(MainFrame, TWEENS.SMOOTH, {
+                Size = OldSize,
+                Position = UDim2.fromScale(0.5, 0.5)
+            }):Play()
             task.wait(0.1)
             ContentArea.Visible = true
             Sidebar.Visible = true
             MinButton.Text = "-"
         end
-    end))
+    end
+    UIState.ToggleMinimize = ToggleMinimize
+
+    -- MEMORY LEAK FIX: Track minimize button connection
+    TrackConnection(MinButton.MouseButton1Click:Connect(ToggleMinimize))
 
     -- Toggle Logic (Right Shift)
     -- MEMORY LEAK FIX: Track this connection
@@ -5421,6 +5431,11 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.Period then
             -- Ctrl+.: Toggle D3v Tool
             Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
+        elseif input.KeyCode == Enum.KeyCode.Minus then
+            -- Ctrl+-: Toggle Minimize
+            if UIState.ToggleMinimize then
+                UIState.ToggleMinimize()
+            end
         end
     end
 end))
