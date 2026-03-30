@@ -381,6 +381,51 @@ local Flags = {
     ["Humanoid/WalkSpeed"] = 16
 }
 
+local UIState = {
+    MainFrame = nil,
+    Tabs = {},
+    CurrentTab = nil,
+    Visible = true,
+    ToggleMinimize = nil,
+    DraggableFrames = {},
+    Updaters = {}
+}
+
+local HUMANOID_PROPERTY_MAPPING = {
+    ["Humanoid/Archivable"] = "Archivable",
+    ["Humanoid/BreakJointsOnDeath"] = "BreakJointsOnDeath",
+    ["Humanoid/EvaluateStateMachine"] = "EvaluateStateMachine",
+    ["Humanoid/RequiresNeck"] = "RequiresNeck",
+    ["Humanoid/AutoRotate"] = "AutoRotate",
+    ["Humanoid/PlatformStand"] = "PlatformStand",
+    ["Humanoid/Sit"] = "Sit",
+    ["Humanoid/Jump"] = "Jump",
+    ["Humanoid/AutoJumpEnabled"] = "AutoJumpEnabled",
+    ["Humanoid/JumpHeight"] = "JumpHeight",
+    ["Humanoid/JumpPower"] = "JumpPower",
+    ["Humanoid/UseJumpPower"] = "UseJumpPower",
+    ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
+    ["Humanoid/Health"] = "Health",
+    ["Humanoid/MaxHealth"] = "MaxHealth",
+    ["Humanoid/HipHeight"] = "HipHeight",
+    ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle",
+    ["Humanoid/WalkSpeed"] = "WalkSpeed"
+}
+
+local HUMANOID_ENFORCED_PROPERTIES = {
+    ["Humanoid/Archivable"] = "Archivable",
+    ["Humanoid/BreakJointsOnDeath"] = "BreakJointsOnDeath",
+    ["Humanoid/EvaluateStateMachine"] = "EvaluateStateMachine",
+    ["Humanoid/RequiresNeck"] = "RequiresNeck",
+    ["Humanoid/AutoRotate"] = "AutoRotate",
+    ["Humanoid/PlatformStand"] = "PlatformStand",
+    ["Humanoid/AutoJumpEnabled"] = "AutoJumpEnabled",
+    ["Humanoid/UseJumpPower"] = "UseJumpPower",
+    ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
+    ["Humanoid/MaxHealth"] = "MaxHealth",
+    ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle"
+}
+
 local HumanoidState = {
     originalSettings = {},
     captured = false
@@ -423,7 +468,12 @@ function CaptureHumanoidSettings(humanoid)
             HumanoidState.originalSettings[prop] = val
             -- Sync initial flags with game defaults
             if flagMapping[prop] then
-                Flags[flagMapping[prop]] = val
+                local flag = flagMapping[prop]
+                Flags[flag] = val
+                local updater = UIState.Updaters[flag]
+                if updater then
+                    updater(val)
+                end
             end
         end)
     end
@@ -442,32 +492,30 @@ function ApplyHumanoidSettings()
         CaptureHumanoidSettings(humanoid)
     end
     
-    local mapping = {
-        ["Humanoid/Archivable"] = "Archivable",
-        ["Humanoid/BreakJointsOnDeath"] = "BreakJointsOnDeath",
-        ["Humanoid/EvaluateStateMachine"] = "EvaluateStateMachine",
-        ["Humanoid/RequiresNeck"] = "RequiresNeck",
-        ["Humanoid/AutoRotate"] = "AutoRotate",
-        ["Humanoid/PlatformStand"] = "PlatformStand",
-        -- ["Humanoid/Sit"] = "Sit", -- Excluded from loop to allow normal gameplay
-        -- ["Humanoid/Jump"] = "Jump", -- Excluded from loop to allow normal gameplay
-        ["Humanoid/AutoJumpEnabled"] = "AutoJumpEnabled",
-        -- ["Humanoid/JumpHeight"] = "JumpHeight", -- Excluded from loop to allow sprinting/game-logic
-        -- ["Humanoid/JumpPower"] = "JumpPower", -- Excluded from loop to allow sprinting/game-logic
-        ["Humanoid/UseJumpPower"] = "UseJumpPower",
-        ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
-        -- ["Humanoid/Health"] = "Health", -- Excluded from loop to prevent god-mode
-        ["Humanoid/MaxHealth"] = "MaxHealth",
-        -- ["Humanoid/HipHeight"] = "HipHeight", -- Excluded from loop to allow sprinting/game-logic
-        ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle"
-        -- ["Humanoid/WalkSpeed"] = "WalkSpeed" -- Excluded from loop to allow sprinting/game-logic
-    }
-    
-    for flag, prop in pairs(mapping) do
+    for flag, prop in pairs(HUMANOID_ENFORCED_PROPERTIES) do
         pcall(function()
             local val = Flags[flag]
             if val ~= nil and humanoid[prop] ~= val then
                 humanoid[prop] = val
+            end
+        end)
+    end
+end
+
+function UpdateHumanoidUI()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
+        pcall(function()
+            local val = humanoid[prop]
+            if val ~= nil and Flags[flag] ~= val then
+                Flags[flag] = val
+                local updater = UIState.Updaters[flag]
+                if updater then
+                    updater(val)
+                end
             end
         end)
     end
@@ -1098,14 +1146,6 @@ end
 TweenService = Services.TweenService
 local ScreenGui = nil -- Define at top level to be accessible to all functions
 local UI = {}
-local UIState = {
-    MainFrame = nil,
-    Tabs = {},
-    CurrentTab = nil,
-    Visible = true,
-    ToggleMinimize = nil,
-    DraggableFrames = {}
-}
 
 function ReclampAllUI()
     local viewportSize = Camera.ViewportSize
@@ -1626,18 +1666,21 @@ function UI.CreateToggle(page, text, flag, default, callback)
     
     Flags[flag] = default
     
-    -- MEMORY LEAK FIX: Track button connection
-    TrackConnection(Button.MouseButton1Click:Connect(function()
-        Flags[flag] = not Flags[flag]
-        local state = Flags[flag]
-        
-        -- Animate
+    local function updateVisuals(state)
         local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
         local targetPos = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
         
         TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = targetColor}):Play()
         TweenService:Create(Knob, TWEENS.SMOOTH, {Position = targetPos}):Play()
-        
+    end
+
+    UIState.Updaters[flag] = updateVisuals
+
+    -- MEMORY LEAK FIX: Track button connection
+    TrackConnection(Button.MouseButton1Click:Connect(function()
+        Flags[flag] = not Flags[flag]
+        local state = Flags[flag]
+        updateVisuals(state)
         if callback then callback(state) end
     end))
 end
@@ -1691,6 +1734,16 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         Flags[flag] = val
         Input.Text = tostring(val)
         if callback then callback(val) end
+    end
+
+    UIState.Updaters[flag] = function(val)
+        if not Input:IsFocused() then
+            val = math.clamp(tonumber(val) or default, min, max)
+            if step and step > 0 then
+                val = math.floor(val / step + 0.5) * step
+            end
+            Input.Text = tostring(val)
+        end
     end
 
     TrackConnection(Input.FocusLost:Connect(function()
@@ -5131,6 +5184,7 @@ function Cleanup()
     end
     table.clear(UIState.Tabs)
     table.clear(UIState.DraggableFrames)
+    table.clear(UIState.Updaters)
     UIState.MainFrame = nil
     UIState.ContentArea = nil
     UIState.TabContainer = nil
@@ -5850,6 +5904,8 @@ lastHoverUpdate = 0
 hoverUpdateRate = 0.033 -- Hover at 30fps
 lastStateEnforcement = 0
 stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
+lastHumanoidSync = 0
+humanoidSyncRate = 0.1 -- 10 FPS
 lastGhostMode = nil
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
@@ -5909,6 +5965,11 @@ function UnifiedHeartbeat(dt)
     UpdateD3vTool()
     ApplyHumanoidSettings()
     
+    if (now - lastHumanoidSync) > humanoidSyncRate then
+        lastHumanoidSync = now
+        UpdateHumanoidUI()
+    end
+
     -- Update Waypoint Distances
     if Flags["Waypoints/Enabled"] then
         for id, wpData in pairs(ActiveWaypoints) do
