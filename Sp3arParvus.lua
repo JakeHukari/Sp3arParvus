@@ -2903,7 +2903,7 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(150, 50)
+    sizeConstraint.MinSize = Vector2.new(180, 60)
     sizeConstraint.MaxSize = Vector2.new(220, 70)
     sizeConstraint.Parent = ClosestPlayerTrackerLabel
 
@@ -4363,7 +4363,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(160, 130)
+    sizeConstraint.MinSize = Vector2.new(160, 140)
     sizeConstraint.MaxSize = Vector2.new(220, 180)
     sizeConstraint.Parent = PerformanceLabel
 
@@ -4492,11 +4492,11 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -270, 0, 250) -- Right Side, below Performance
+    LocalHealthHUD.Position = UDim2.new(1, -270, 0, 70) -- Right Side, above Performance
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(110, 15)
+    sizeConstraint.MinSize = Vector2.new(110, 30)
     sizeConstraint.MaxSize = Vector2.new(160, 30)
     sizeConstraint.Parent = LocalHealthHUD
 
