@@ -4108,7 +4108,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 1530, 0, -56)
+    D3vToolHUD.Position = UDim2.new(0, 1530, 0, -55)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolHUD.Parent = parent
