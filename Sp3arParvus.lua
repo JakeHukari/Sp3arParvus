@@ -4182,7 +4182,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 1530, 0, -55)
+    D3vToolHUD.Position = UDim2.new(0, 1470, 0, -55)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolHUD.Parent = parent
@@ -4235,7 +4235,7 @@ function UpdateD3vTool()
     local mouseLoc = UserInputService:GetMouseLocation()
     local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
     
-    D3vToolLabel.Text = string.format("Time[%s]  Humanoid[%s]  Mouse[%s]", timeStr, lpcStr, lmcStr)
+    D3vToolLabel.Text = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
 end
 
 -- PERFORMANCE DISPLAY
