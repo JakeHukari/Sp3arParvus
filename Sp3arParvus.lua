@@ -2899,12 +2899,12 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromScale(0.12, 0.08)
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 5) -- Top Center
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 0) -- Top Center
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
     local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(150, 50)
-    sizeConstraint.MaxSize = Vector2.new(220, 70)
+    sizeConstraint.MinSize = Vector2.new(180, 60)
+    sizeConstraint.MaxSize = Vector2.new(250, 60)
     sizeConstraint.Parent = ClosestPlayerTrackerLabel
 
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
@@ -4290,7 +4290,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(1, -500, 0, 5) -- Top right
+    D3vToolHUD.Position = UDim2.new(1, -450, 0, 3) -- Top right
     D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
