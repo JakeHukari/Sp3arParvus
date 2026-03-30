@@ -358,8 +358,120 @@ local Flags = {
     ["Settings/GhostMode"] = false,
 
     -- Misc
-    ["Misc/D3vTool"] = true
+    ["Misc/D3vTool"] = true,
+
+    -- Humanoid
+    ["Humanoid/Archivable"] = true,
+    ["Humanoid/BreakJointsOnDeath"] = true,
+    ["Humanoid/EvaluateStateMachine"] = true,
+    ["Humanoid/RequiresNeck"] = true,
+    ["Humanoid/AutoRotate"] = true,
+    ["Humanoid/PlatformStand"] = false,
+    ["Humanoid/Sit"] = false,
+    ["Humanoid/Jump"] = false,
+    ["Humanoid/AutoJumpEnabled"] = false,
+    ["Humanoid/JumpHeight"] = 7.2,
+    ["Humanoid/JumpPower"] = 50,
+    ["Humanoid/UseJumpPower"] = true,
+    ["Humanoid/AutomaticScalingEnabled"] = true,
+    ["Humanoid/Health"] = 100,
+    ["Humanoid/MaxHealth"] = 100,
+    ["Humanoid/HipHeight"] = 1.35,
+    ["Humanoid/MaxSlopeAngle"] = 89,
+    ["Humanoid/WalkSpeed"] = 16
 }
+
+local HumanoidState = {
+    originalSettings = {},
+    captured = false
+}
+
+function CaptureHumanoidSettings(humanoid)
+    if not humanoid or HumanoidState.captured then return end
+
+    local properties = {
+        "Archivable", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck",
+        "AutoRotate", "PlatformStand", "Sit", "Jump", "AutoJumpEnabled",
+        "JumpHeight", "JumpPower", "UseJumpPower", "AutomaticScalingEnabled",
+        "Health", "MaxHealth", "HipHeight", "MaxSlopeAngle", "WalkSpeed"
+    }
+
+    local flagMapping = {
+        Archivable = "Humanoid/Archivable",
+        BreakJointsOnDeath = "Humanoid/BreakJointsOnDeath",
+        EvaluateStateMachine = "Humanoid/EvaluateStateMachine",
+        RequiresNeck = "Humanoid/RequiresNeck",
+        AutoRotate = "Humanoid/AutoRotate",
+        PlatformStand = "Humanoid/PlatformStand",
+        Sit = "Humanoid/Sit",
+        Jump = "Humanoid/Jump",
+        AutoJumpEnabled = "Humanoid/AutoJumpEnabled",
+        JumpHeight = "Humanoid/JumpHeight",
+        JumpPower = "Humanoid/JumpPower",
+        UseJumpPower = "Humanoid/UseJumpPower",
+        AutomaticScalingEnabled = "Humanoid/AutomaticScalingEnabled",
+        Health = "Humanoid/Health",
+        MaxHealth = "Humanoid/MaxHealth",
+        HipHeight = "Humanoid/HipHeight",
+        MaxSlopeAngle = "Humanoid/MaxSlopeAngle",
+        WalkSpeed = "Humanoid/WalkSpeed"
+    }
+
+    for _, prop in ipairs(properties) do
+        pcall(function()
+            local val = humanoid[prop]
+            HumanoidState.originalSettings[prop] = val
+            -- Sync initial flags with game defaults
+            if flagMapping[prop] then
+                Flags[flagMapping[prop]] = val
+            end
+        end)
+    end
+
+    HumanoidState.captured = true
+    print("[Sp3arParvus] Local Humanoid settings captured and synced.")
+end
+
+function ApplyHumanoidSettings()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoid then return end
+
+    if not HumanoidState.captured then
+        CaptureHumanoidSettings(humanoid)
+    end
+
+    local mapping = {
+        ["Humanoid/Archivable"] = "Archivable",
+        ["Humanoid/BreakJointsOnDeath"] = "BreakJointsOnDeath",
+        ["Humanoid/EvaluateStateMachine"] = "EvaluateStateMachine",
+        ["Humanoid/RequiresNeck"] = "RequiresNeck",
+        ["Humanoid/AutoRotate"] = "AutoRotate",
+        ["Humanoid/PlatformStand"] = "PlatformStand",
+        -- ["Humanoid/Sit"] = "Sit", -- Excluded from loop to allow normal gameplay
+        -- ["Humanoid/Jump"] = "Jump", -- Excluded from loop to allow normal gameplay
+        ["Humanoid/AutoJumpEnabled"] = "AutoJumpEnabled",
+        ["Humanoid/JumpHeight"] = "JumpHeight",
+        ["Humanoid/JumpPower"] = "JumpPower",
+        ["Humanoid/UseJumpPower"] = "UseJumpPower",
+        ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
+        -- ["Humanoid/Health"] = "Health", -- Excluded from loop to prevent god-mode
+        ["Humanoid/MaxHealth"] = "MaxHealth",
+        ["Humanoid/HipHeight"] = "HipHeight",
+        ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle",
+        ["Humanoid/WalkSpeed"] = "WalkSpeed"
+    }
+
+    for flag, prop in pairs(mapping) do
+        pcall(function()
+            local val = Flags[flag]
+            if val ~= nil and humanoid[prop] ~= val then
+                humanoid[prop] = val
+            end
+        end)
+    end
+end
 
 -- WAYPOINTS SYSTEM STATE
 ActiveWaypoints = {}
@@ -5033,6 +5145,21 @@ function Cleanup()
         pcall(UpdateFullbright)
     end
 
+    -- Restore Humanoid settings
+    if HumanoidState.captured then
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            for prop, value in pairs(HumanoidState.originalSettings) do
+                pcall(function()
+                    humanoid[prop] = value
+                end)
+            end
+        end
+        table.clear(HumanoidState.originalSettings)
+        HumanoidState.captured = false
+    end
+
     -- Reset module-level state
     AimState.Aimbot = false
     AimState.Trigger = false
@@ -5092,6 +5219,7 @@ CreateClosestPlayerTracker()
 -- Create Tabs
 local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
+local HumanoidTab = UI.CreateTab("Humanoid")
 local MiscTab = UI.CreateTab("Misc")
 
 local WaypointsPage = UI.CreateTab("Waypoints")
@@ -5191,6 +5319,47 @@ UI.CreateSection(VisualsTab, "Waypoints Settings")
 UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
     RefreshWaypointUI()
 end)
+
+-- HUMANOID TAB
+local function _updateHum(prop, val)
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum[prop] = val end)
+    end
+end
+
+UI.CreateSection(HumanoidTab, "Behavior")
+UI.CreateToggle(HumanoidTab, "Archivable", "Humanoid/Archivable", Flags["Humanoid/Archivable"], function(v) _updateHum("Archivable", v) end)
+UI.CreateToggle(HumanoidTab, "Break Joints On Death", "Humanoid/BreakJointsOnDeath", Flags["Humanoid/BreakJointsOnDeath"], function(v) _updateHum("BreakJointsOnDeath", v) end)
+UI.CreateToggle(HumanoidTab, "Evaluate State Machine", "Humanoid/EvaluateStateMachine", Flags["Humanoid/EvaluateStateMachine"], function(v) _updateHum("EvaluateStateMachine", v) end)
+UI.CreateToggle(HumanoidTab, "Requires Neck", "Humanoid/RequiresNeck", Flags["Humanoid/RequiresNeck"], function(v) _updateHum("RequiresNeck", v) end)
+
+UI.CreateSection(HumanoidTab, "Control")
+UI.CreateToggle(HumanoidTab, "Auto Rotate", "Humanoid/AutoRotate", Flags["Humanoid/AutoRotate"], function(v) _updateHum("AutoRotate", v) end)
+UI.CreateToggle(HumanoidTab, "Platform Stand", "Humanoid/PlatformStand", Flags["Humanoid/PlatformStand"], function(v) _updateHum("PlatformStand", v) end)
+UI.CreateToggle(HumanoidTab, "Sit", "Humanoid/Sit", Flags["Humanoid/Sit"], function(v) _updateHum("Sit", v) end)
+UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v) _updateHum("Jump", v) end)
+
+UI.CreateSection(HumanoidTab, "Jump Settings")
+UI.CreateToggle(HumanoidTab, "Auto Jump Enabled", "Humanoid/AutoJumpEnabled", Flags["Humanoid/AutoJumpEnabled"], function(v) _updateHum("AutoJumpEnabled", v) end)
+UI.CreateSlider(HumanoidTab, "Jump Height", "Humanoid/JumpHeight_Slider", 0, 1000, Flags["Humanoid/JumpHeight"] * 10, " (x10)", function(v)
+    Flags["Humanoid/JumpHeight"] = v / 10
+    _updateHum("JumpHeight", Flags["Humanoid/JumpHeight"])
+end)
+UI.CreateSlider(HumanoidTab, "Jump Power", "Humanoid/JumpPower", 0, 500, Flags["Humanoid/JumpPower"], nil, function(v) _updateHum("JumpPower", v) end)
+UI.CreateToggle(HumanoidTab, "Use Jump Power", "Humanoid/UseJumpPower", Flags["Humanoid/UseJumpPower"], function(v) _updateHum("UseJumpPower", v) end)
+
+UI.CreateSection(HumanoidTab, "Game")
+UI.CreateToggle(HumanoidTab, "Automatic Scaling Enabled", "Humanoid/AutomaticScalingEnabled", Flags["Humanoid/AutomaticScalingEnabled"], function(v) _updateHum("AutomaticScalingEnabled", v) end)
+UI.CreateSlider(HumanoidTab, "Health", "Humanoid/Health", 0, 2000, Flags["Humanoid/Health"], nil, function(v) _updateHum("Health", v) end)
+UI.CreateSlider(HumanoidTab, "Max Health", "Humanoid/MaxHealth", 0, 2000, Flags["Humanoid/MaxHealth"], nil, function(v) _updateHum("MaxHealth", v) end)
+UI.CreateSlider(HumanoidTab, "Hip Height", "Humanoid/HipHeight_Slider", 0, 1000, Flags["Humanoid/HipHeight"] * 100, " (x100)", function(v)
+    Flags["Humanoid/HipHeight"] = v / 100
+    _updateHum("HipHeight", Flags["Humanoid/HipHeight"])
+end)
+UI.CreateSlider(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", 0, 90, Flags["Humanoid/MaxSlopeAngle"], nil, function(v) _updateHum("MaxSlopeAngle", v) end)
+UI.CreateSlider(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", 0, 500, Flags["Humanoid/WalkSpeed"], nil, function(v) _updateHum("WalkSpeed", v) end)
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
@@ -5652,6 +5821,7 @@ function UnifiedHeartbeat(dt)
     UpdateFullbright()
     UpdateLocalHealthHUD()
     UpdateD3vTool()
+    ApplyHumanoidSettings()
     
     -- Update Waypoint Distances
     if Flags["Waypoints/Enabled"] then
