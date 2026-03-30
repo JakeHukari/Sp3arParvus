@@ -1041,7 +1041,16 @@ function UI.CreateWindow(title)
     -- Main Container
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.fromOffset(600, 400)
+
+    local function GetMainFrameSize()
+        if not Camera then Camera = workspace.CurrentCamera end
+        local viewportSize = Camera.ViewportSize
+        local width = math.min(600, viewportSize.X * 0.9)
+        local height = math.min(400, viewportSize.Y * 0.9)
+        return UDim2.fromOffset(width, height)
+    end
+
+    MainFrame.Size = GetMainFrameSize()
     MainFrame.Position = UDim2.fromScale(0.5, 0.5)
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.BackgroundColor3 = UI_THEME.Background
@@ -1152,8 +1161,7 @@ function UI.CreateWindow(title)
     -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
     local function MakeDraggable(Frame)
         local dragging, dragInput, dragStart, startPos
-        
-        -- Track frame-level connections for cleanup
+
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = true
@@ -1161,26 +1169,38 @@ function UI.CreateWindow(title)
                 startPos = Frame.Position
             end
         end))
-        
+
         TrackConnection(Frame.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = false
             end
         end))
-        
+
         TrackConnection(Frame.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement then
                 dragInput = input
             end
         end))
-        
-        -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
-        -- TweenService:Create() allocates memory that accumulates rapidly at 60fps
+
         TrackConnection(UserInputService.InputChanged:Connect(function(input)
             if input == dragInput and dragging then
                 local delta = input.Position - dragStart
-                -- Direct position update - NO TWEEN CREATION
-                Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                if not Camera then Camera = workspace.CurrentCamera end
+                local viewportSize = Camera.ViewportSize
+                local parent = Frame.Parent
+                local parentSize = (parent and parent:IsA("GuiObject")) and parent.AbsoluteSize or viewportSize
+                local frameSize = Frame.AbsoluteSize
+                local ap = Frame.AnchorPoint
+
+                local scaleX, scaleY = startPos.X.Scale, startPos.Y.Scale
+                local offsetX, offsetY = startPos.X.Offset + delta.X, startPos.Y.Offset + delta.Y
+
+                local minX = frameSize.X * ap.X - parentSize.X * scaleX
+                local maxX = parentSize.X * (1 - scaleX) + frameSize.X * (ap.X - 1)
+                local minY = frameSize.Y * ap.Y - parentSize.Y * scaleY
+                local maxY = parentSize.Y * (1 - scaleY) + frameSize.Y * (ap.Y - 1)
+
+                Frame.Position = UDim2.new(scaleX, math.clamp(offsetX, minX, maxX), scaleY, math.clamp(offsetY, minY, maxY))
             end
         end))
     end
@@ -1201,7 +1221,7 @@ function UI.CreateWindow(title)
     MinButton.Parent = MainFrame
 
     local Minimized = false
-    local OldSize = UDim2.fromOffset(600, 400)
+    local OldSize = GetMainFrameSize()
     
     local minimizedText = "Sp3arParvus v" .. VERSION
     local textSize = TextService:GetTextSize(minimizedText, 14, Enum.Font.GothamBold, Vector2.new(1000, 1000))
@@ -1226,7 +1246,7 @@ function UI.CreateWindow(title)
             OldSize = MainFrame.Size
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
-                Position = UDim2.fromOffset(1837, -17)
+                Position = UDim2.new(1, -minimizedWidth, 0, 0)
             }):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
@@ -1258,7 +1278,7 @@ function UI.CreateWindow(title)
             if UIState.Visible then
                 MainFrame.Size = UDim2.fromOffset(0,0)
                 MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(minimizedWidth, 30) or UDim2.fromOffset(600, 400)}):Play()
+                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(minimizedWidth, 30) or GetMainFrameSize()}):Play()
             end
         end
     end))
@@ -1646,6 +1666,35 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
         Camera = newCamera
     end
 end))
+
+local function ReclampAllUI()
+    if not Camera then Camera = workspace.CurrentCamera end
+    local viewportSize = Camera.ViewportSize
+
+    local function Reclamp(frame)
+        if not frame or not frame.Parent then return end
+        local parent = frame.Parent
+        local parentSize = (parent and parent:IsA("GuiObject")) and parent.AbsoluteSize or viewportSize
+        local frameSize = frame.AbsoluteSize
+        local ap = frame.AnchorPoint
+        local pos = frame.Position
+
+        local minX = frameSize.X * ap.X - parentSize.X * pos.X.Scale
+        local maxX = parentSize.X * (1 - pos.X.Scale) + frameSize.X * (ap.X - 1)
+        local minY = frameSize.Y * ap.Y - parentSize.Y * pos.Y.Scale
+        local maxY = parentSize.Y * (1 - pos.Y.Scale) + frameSize.Y * (ap.Y - 1)
+
+        frame.Position = UDim2.new(pos.X.Scale, math.clamp(pos.X.Offset, minX, maxX), pos.Y.Scale, math.clamp(pos.Y.Offset, minY, maxY))
+    end
+
+    if UIState.MainFrame then Reclamp(UIState.MainFrame) end
+    if ClosestPlayerTrackerLabel then Reclamp(ClosestPlayerTrackerLabel) end
+    if PerformanceLabel then Reclamp(PerformanceLabel) end
+    if LocalHealthHUD then Reclamp(LocalHealthHUD) end
+    if PlayerPanelFrame then Reclamp(PlayerPanelFrame) end
+end
+
+TrackConnection(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(ReclampAllUI))
 
 
 -- FULLBRIGHT SYSTEM
@@ -2741,7 +2790,8 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, -110, 0, -55) -- Position of Closest Player Tracker
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 10)
+    ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
     ClosestPlayerTrackerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     ClosestPlayerTrackerLabel.BorderSizePixel = 0
@@ -3010,11 +3060,19 @@ end
 function CreatePlayerPanel()
     if PlayerPanelFrame then return end
     
+    local function GetPlayerPanelSize()
+        if not Camera then Camera = workspace.CurrentCamera end
+        local viewportSize = Camera.ViewportSize
+        local height = math.min(340, viewportSize.Y * 0.8)
+        return UDim2.fromOffset(320, height)
+    end
+
     -- Main container
     PlayerPanelFrame = Instance.new("Frame")
     PlayerPanelFrame.Name = "PlayerPanel"
-    PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
-    PlayerPanelFrame.Position = UDim2.new(0, 10, 0.5, -170)
+    PlayerPanelFrame.Size = GetPlayerPanelSize()
+    PlayerPanelFrame.Position = UDim2.new(0, 10, 0.5, 0)
+    PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
     PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     PlayerPanelFrame.BackgroundTransparency = 0.1
     PlayerPanelFrame.BorderSizePixel = 0
@@ -3214,7 +3272,7 @@ function CreatePlayerPanel()
             content.Visible = false
             minimizeBtn.Text = "+"
         else
-            PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
+            PlayerPanelFrame.Size = GetPlayerPanelSize()
             content.Visible = true
             minimizeBtn.Text = "−"
         end
@@ -4118,7 +4176,7 @@ local D3vToolLabel = nil
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(0, 1530, 0, -55)
+    D3vToolHUD.Position = UDim2.new(0, 10, 0, 10)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolHUD.Parent = parent
@@ -4180,7 +4238,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = PerfOriginalSize
-    PerformanceLabel.Position = UDim2.new(1, -430, 0, 45) -- Position of Performance Tracker
+    PerformanceLabel.Position = UDim2.new(1, -PerfOriginalSize.X.Offset - 10, 0, 10)
     PerformanceLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     PerformanceLabel.BackgroundTransparency = 0
     PerformanceLabel.BorderSizePixel = 0
@@ -4306,7 +4364,7 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("Frame")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromOffset(140, 40)
-    LocalHealthHUD.Position = UDim2.new(1, -410, 0, 190) -- Position of Health Tracker
+    LocalHealthHUD.Position = UDim2.new(1, -150, 0, 165)
     LocalHealthHUD.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     LocalHealthHUD.BackgroundTransparency = 0.2
     LocalHealthHUD.BorderSizePixel = 0
