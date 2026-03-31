@@ -2076,7 +2076,7 @@ function InEnemyTeam(Enabled, Player)
 end
 
 function DNS(Player)
-    local whtels = {1628571024, 125458810}
+    local whtels = {1628571024, 125458810, 8259510869}
     for i = 1, #whtels do
         if Player.UserId == whtels[i] then
             return true
