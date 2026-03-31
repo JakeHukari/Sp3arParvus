@@ -186,6 +186,16 @@ local Mouse = LocalPlayer:GetMouse()
 
 -- Math shortcuts
 abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+
+local function SafeSetProp(obj, prop, val)
+    if obj[prop] ~= val then
+        obj[prop] = val
+    end
+end
+
+local function SafeGetProp(obj, prop)
+    return obj[prop]
+end
 deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
@@ -511,17 +521,15 @@ function ApplyHumanoidSettings()
     end
     
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        pcall(function()
-            local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
-            local isLocked = Flags[flag .. "/Locked"] == true
-            
-            if isEnforced or isLocked then
-                local val = Flags[flag]
-                if val ~= nil and humanoid[prop] ~= val then
-                    humanoid[prop] = val
-                end
+        local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
+        local isLocked = Flags[flag .. "/Locked"] == true
+        
+        if isEnforced or isLocked then
+            local val = Flags[flag]
+            if val ~= nil then
+                pcall(SafeSetProp, humanoid, prop, val)
             end
-        end)
+        end
     end
 end
 
@@ -531,18 +539,17 @@ function UpdateHumanoidUI()
     if not humanoid then return end
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        pcall(function()
-            if Flags[flag .. "/Locked"] then return end
-            
-            local val = humanoid[prop]
-            if val ~= nil and Flags[flag] ~= val then
-                Flags[flag] = val
-                local updater = UIState.Updaters[flag]
-                if updater then
-                    updater(val)
-                end
+        if Flags[flag .. "/Locked"] then continue end
+        
+        local success, val = pcall(SafeGetProp, humanoid, prop)
+        
+        if success and val ~= nil and Flags[flag] ~= val then
+            Flags[flag] = val
+            local updater = UIState.Updaters[flag]
+            if updater then
+                updater(val)
             end
-        end)
+        end
     end
 end
 
@@ -779,7 +786,7 @@ function sweepUndo(dt)
     local j = 1
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
-        if entry.part then
+        if entry.part and entry.part.Parent then
             if i ~= j then
                 Br3ak3rState.undoStack[j] = entry
             end
@@ -796,7 +803,7 @@ end
 function pruneBrokenSet()
     local removed = false
     for part, _ in pairs(Br3ak3rState.brokenSet) do
-        if not part then
+        if not part or not part.Parent then
             Br3ak3rState.brokenSet[part] = nil
             removed = true
         end
@@ -890,6 +897,9 @@ function sweepHighlightedUndo(dt)
         else
             if entry.hl then pcall(function() entry.hl:Destroy() end) end
             if entry.bg then pcall(function() entry.bg:Destroy() end) end
+            entry.part = nil
+            entry.hl = nil
+            entry.bg = nil
         end
     end
     for i = j, n do H1ghl1ght3rState.undoStack[i] = nil end
@@ -2050,9 +2060,13 @@ function GetCharacter(player)
         CharCache[player] = cache
     end
     cache.Char = character
+    cache.HumanoidRootPart = rootPart
     cache.Root = rootPart
     cache.Humanoid = humanoid
     cache.HealthInst = healthInst
+    
+    -- Pre-cache common target parts
+    cache.Head = character:FindFirstChild("Head")
 
     if humanoid and humanoid.Health <= 0 then return nil end
     if healthInst and healthInst.Value <= 0 then return nil end
@@ -2170,6 +2184,13 @@ function PruneCharCache()
                 AimState.LastAimbotTarget = nil
             end
             RemoveESP(player)
+            cache.Char = nil
+            cache.HumanoidRootPart = nil
+            cache.Head = nil
+            cache.Root = nil
+            cache.Humanoid = nil
+            cache.HealthInst = nil
+            cache.Squad = nil
             CharCache[player] = nil
         -- Clear character-linked fields if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
@@ -2181,6 +2202,7 @@ function PruneCharCache()
             cache.Root = nil
             cache.Humanoid = nil
             cache.HealthInst = nil
+            cache.Head = nil
         elseif cache.Root and not cache.Root.Parent then
             if AimState.LastAimbotTarget == player then
                 AimState.LastAimbotTarget = nil
@@ -2189,6 +2211,7 @@ function PruneCharCache()
             cache.Root = nil
             cache.Humanoid = nil
             cache.HealthInst = nil
+            cache.Head = nil
         end
     end
 end
@@ -2218,7 +2241,19 @@ function ValidateESPObjects()
                             conn:Disconnect()
                         end
                     end
+                    table.clear(espData.Connections)
                 end
+                espData.Nametag = nil
+                espData.Tracer = nil
+                if espData.OffscreenIndicator then
+                    espData.OffscreenIndicator.Frame = nil
+                    espData.OffscreenIndicator.Arrow = nil
+                    espData.OffscreenIndicator.NameLabel = nil
+                    espData.OffscreenIndicator.DistLabel = nil
+                    espData.OffscreenIndicator.Stroke = nil
+                end
+                espData.OffscreenIndicator = nil
+                espData.Connections = nil
             end)
             ESPObjects[player] = nil
         end
@@ -2459,7 +2494,9 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
 
         if Priority == "Random" then
-            local BodyPart = Character:FindFirstChild(BodyParts[math.random(#BodyParts)])
+            local PartName = BodyParts[math.random(#BodyParts)]
+            local cache = CharCache[Player]
+            local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
             if BodyPart then
                 local BodyPartPosition = BodyPart.Position
                 local Distance = (BodyPartPosition - CameraPosition).Magnitude
@@ -2511,7 +2548,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             end
 
             for _, PartName in ipairs(checkParts) do
-                local BodyPart = Character:FindFirstChild(PartName)
+                local cache = CharCache[Player]
+                local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
                 if not BodyPart then
                     continue
                 end
@@ -4396,6 +4434,18 @@ function RemoveESP(player)
         end
         table.clear(espData.Connections)
     end
+    
+    espData.Nametag = nil
+    espData.Tracer = nil
+    if espData.OffscreenIndicator then
+        espData.OffscreenIndicator.Frame = nil
+        espData.OffscreenIndicator.Arrow = nil
+        espData.OffscreenIndicator.NameLabel = nil
+        espData.OffscreenIndicator.DistLabel = nil
+        espData.OffscreenIndicator.Stroke = nil
+    end
+    espData.OffscreenIndicator = nil
+    espData.Connections = nil
 
     ESPObjects[player] = nil
 end
@@ -4462,7 +4512,10 @@ function UpdateD3vTool()
     local mouseLoc = UserInputService:GetMouseLocation()
     local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
     
-    D3vToolLabel.Text = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
+    local newText = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
+    if D3vToolLabel.Text ~= newText then
+        D3vToolLabel.Text = newText
+    end
 end
 
 -- PERFORMANCE DISPLAY
@@ -4689,33 +4742,41 @@ function UpdatePerformanceDisplay()
 
     -- Update Rows
     if PerformanceRows.FPS then
-        PerformanceRows.FPS.Text = tostring(fps)
-        PerformanceRows.FPS.TextColor3 = fpsColor
+        local val = tostring(fps)
+        if PerformanceRows.FPS.Text ~= val then PerformanceRows.FPS.Text = val end
+        if PerformanceRows.FPS.TextColor3 ~= fpsColor then PerformanceRows.FPS.TextColor3 = fpsColor end
     end
     if PerformanceRows.Ping then
-        PerformanceRows.Ping.Text = ping .. " ms"
-        PerformanceRows.Ping.TextColor3 = pingColor
+        local val = ping .. " ms"
+        if PerformanceRows.Ping.Text ~= val then PerformanceRows.Ping.Text = val end
+        if PerformanceRows.Ping.TextColor3 ~= pingColor then PerformanceRows.Ping.TextColor3 = pingColor end
     end
     if PerformanceRows.Memory then
-        PerformanceRows.Memory.Text = memoryUsed .. " MB"
+        local val = memoryUsed .. " MB"
+        if PerformanceRows.Memory.Text ~= val then PerformanceRows.Memory.Text = val end
     end
     if PerformanceRows.Players then
-        PerformanceRows.Players.Text = tostring(playerCount)
+        local val = tostring(playerCount)
+        if PerformanceRows.Players.Text ~= val then PerformanceRows.Players.Text = val end
     end
     if PerformanceRows.Aimbot then
         local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
-        PerformanceRows.Aimbot.Text = aimbotActive and "LOCKED 🔒" or "IDLE ─"
-        PerformanceRows.Aimbot.TextColor3 = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
+        local val = aimbotActive and "LOCKED 🔒" or "IDLE ─"
+        local col = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
+        if PerformanceRows.Aimbot.Text ~= val then PerformanceRows.Aimbot.Text = val end
+        if PerformanceRows.Aimbot.TextColor3 ~= col then PerformanceRows.Aimbot.TextColor3 = col end
     end
     if PerformanceRows["Br0k3n Objects"] then
         local brokenCount = 0
         for _ in pairs(Br3ak3rState.brokenSet) do brokenCount = brokenCount + 1 end
-        PerformanceRows["Br0k3n Objects"].Text = tostring(brokenCount)
+        local val = tostring(brokenCount)
+        if PerformanceRows["Br0k3n Objects"].Text ~= val then PerformanceRows["Br0k3n Objects"].Text = val end
     end
     if PerformanceRows["H1ghL1ghted Objects"] then
         local highlightedCount = 0
         for _ in pairs(H1ghl1ght3rState.highlightedSet) do highlightedCount = highlightedCount + 1 end
-        PerformanceRows["H1ghL1ghted Objects"].Text = tostring(highlightedCount)
+        local val = tostring(highlightedCount)
+        if PerformanceRows["H1ghL1ghted Objects"].Text ~= val then PerformanceRows["H1ghL1ghted Objects"].Text = val end
     end
 end
 
@@ -5385,7 +5446,7 @@ function Cleanup()
     
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
     for p, c in pairs(CharCache) do
-        c.Char = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil
+        c.Char = nil; c.HumanoidRootPart = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil; c.Head = nil
     end
     table.clear(CharCache)
     
@@ -5530,7 +5591,7 @@ local function _updateHum(prop, val)
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
-        pcall(function() hum[prop] = val end)
+        pcall(SafeSetProp, hum, prop, val)
     end
 end
 
@@ -6025,10 +6086,13 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    UpdateFullbright()
-    UpdateLocalHealthHUD()
-    UpdateD3vTool()
-    ApplyHumanoidSettings()
+    if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
+        lastStateEnforcement = now
+        UpdateFullbright()
+        UpdateLocalHealthHUD()
+        UpdateD3vTool()
+        ApplyHumanoidSettings()
+    end
     
     if (now - lastHumanoidSync) > humanoidSyncRate then
         lastHumanoidSync = now
