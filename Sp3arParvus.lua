@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.8" -- Added Lock toggle to each humanoid value
+local VERSION = "3.7.8" -- Fixed Fullbright 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -2289,7 +2289,7 @@ function SolveTrajectory(origin, velocity, time, gravity)
     end
     
     -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -gravity * time * time / AimState.GravityCorrection, 0)
+    local gravityVector = Vector3.new(0, -0.5 * gravity * AimState.GravityCorrection * time * time, 0)
     local predictedPosition = origin + velocity * time + gravityVector
     
     -- Sanity check: if predicted position is too far from origin, return original
@@ -2766,20 +2766,16 @@ function AimAt(Hitbox, Sensitivity)
     local deltaX = dx * Sensitivity
     local deltaY = dy * Sensitivity
 
-    local maxDeltaX = viewportSize.X * 0.15
-    local maxDeltaY = viewportSize.Y * 0.15
-    if abs(deltaX) > maxDeltaX or abs(deltaY) > maxDeltaY then
-        return
-    end
-
     if deltaX ~= deltaX or deltaY ~= deltaY then
         return
     end
 
-    local maxDelta = min(viewportSize.X, viewportSize.Y) * 0.3
-    if abs(deltaX) > maxDelta or abs(deltaY) > maxDelta then
-        return
-    end
+    -- Clamp movement to 50% of viewport size to keep target in view while ensuring continuous tracking
+    local maxClampX = viewportSize.X * 0.5
+    local maxClampY = viewportSize.Y * 0.5
+    
+    deltaX = math.clamp(deltaX, -maxClampX, maxClampX)
+    deltaY = math.clamp(deltaY, -maxClampY, maxClampY)
 
     mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
@@ -6088,11 +6084,12 @@ function UnifiedHeartbeat(dt)
 
     if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
         lastStateEnforcement = now
-        UpdateFullbright()
         UpdateLocalHealthHUD()
         UpdateD3vTool()
-        ApplyHumanoidSettings()
     end
+    
+    UpdateFullbright()
+    ApplyHumanoidSettings()
     
     if (now - lastHumanoidSync) > humanoidSyncRate then
         lastHumanoidSync = now
@@ -6133,7 +6130,7 @@ function UnifiedHeartbeat(dt)
         forceUpdateTarget = CachedTarget[1]
     end
 
-    if (shouldUpdateEsp or forceUpdateTarget) and Flags["ESP/Enabled"] then
+    if (shouldUpdateEsp or forceUpdateTarget) then
         if shouldUpdateEsp then
             lastEspUpdate = now
         end
@@ -6141,9 +6138,23 @@ function UnifiedHeartbeat(dt)
         -- Update ESP for all players
         local players = GetPlayersCache()
         local myPos = Camera.CFrame.Position
+        local espEnabled = Flags["ESP/Enabled"]
         
         for _, player in ipairs(players) do
             if player ~= LocalPlayer then
+                if not espEnabled then
+                    -- If ESP is disabled, ensure all elements are hidden immediately
+                    local espData = ESPObjects[player]
+                    if espData then
+                        if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+                        if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
+                        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
+                            espData.OffscreenIndicator.Frame.Visible = false
+                        end
+                    end
+                    RemovePlayerOutlines(player)
+                    continue
+                end
                 -- Optimization: Level of Detail (LoD) updates
                 -- Only update specific target if not in a full update cycle
                 local pChar, pRoot = GetCharacter(player)
