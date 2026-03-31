@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.7" -- Humanoid tab will now use LocalPlayer values instead of placeholders
+local VERSION = "3.7.8" -- Added Lock toggle to each humanoid value
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -362,23 +362,41 @@ local Flags = {
 
     -- Humanoid
     ["Humanoid/Archivable"] = true,
+    ["Humanoid/Archivable/Locked"] = false,
     ["Humanoid/BreakJointsOnDeath"] = true,
+    ["Humanoid/BreakJointsOnDeath/Locked"] = false,
     ["Humanoid/EvaluateStateMachine"] = true,
+    ["Humanoid/EvaluateStateMachine/Locked"] = false,
     ["Humanoid/RequiresNeck"] = true,
+    ["Humanoid/RequiresNeck/Locked"] = false,
     ["Humanoid/AutoRotate"] = true,
+    ["Humanoid/AutoRotate/Locked"] = false,
     ["Humanoid/PlatformStand"] = false,
+    ["Humanoid/PlatformStand/Locked"] = false,
     ["Humanoid/Sit"] = false,
+    ["Humanoid/Sit/Locked"] = false,
     ["Humanoid/Jump"] = false,
+    ["Humanoid/Jump/Locked"] = false,
     ["Humanoid/AutoJumpEnabled"] = false,
+    ["Humanoid/AutoJumpEnabled/Locked"] = false,
     ["Humanoid/JumpHeight"] = 7.2,
+    ["Humanoid/JumpHeight/Locked"] = false,
     ["Humanoid/JumpPower"] = 50,
+    ["Humanoid/JumpPower/Locked"] = false,
     ["Humanoid/UseJumpPower"] = true,
+    ["Humanoid/UseJumpPower/Locked"] = false,
     ["Humanoid/AutomaticScalingEnabled"] = true,
+    ["Humanoid/AutomaticScalingEnabled/Locked"] = false,
     ["Humanoid/Health"] = 100,
+    ["Humanoid/Health/Locked"] = false,
     ["Humanoid/MaxHealth"] = 100,
+    ["Humanoid/MaxHealth/Locked"] = false,
     ["Humanoid/HipHeight"] = 1.35,
+    ["Humanoid/HipHeight/Locked"] = false,
     ["Humanoid/MaxSlopeAngle"] = 89,
-    ["Humanoid/WalkSpeed"] = 16
+    ["Humanoid/MaxSlopeAngle/Locked"] = false,
+    ["Humanoid/WalkSpeed"] = 16,
+    ["Humanoid/WalkSpeed/Locked"] = false
 }
 
 local UIState = {
@@ -492,11 +510,16 @@ function ApplyHumanoidSettings()
         CaptureHumanoidSettings(humanoid)
     end
     
-    for flag, prop in pairs(HUMANOID_ENFORCED_PROPERTIES) do
+    for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         pcall(function()
-            local val = Flags[flag]
-            if val ~= nil and humanoid[prop] ~= val then
-                humanoid[prop] = val
+            local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
+            local isLocked = Flags[flag .. "/Locked"] == true
+            
+            if isEnforced or isLocked then
+                local val = Flags[flag]
+                if val ~= nil and humanoid[prop] ~= val then
+                    humanoid[prop] = val
+                end
             end
         end)
     end
@@ -509,6 +532,8 @@ function UpdateHumanoidUI()
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         pcall(function()
+            if Flags[flag .. "/Locked"] then return end
+            
             local val = humanoid[prop]
             if val ~= nil and Flags[flag] ~= val then
                 Flags[flag] = val
@@ -1612,7 +1637,7 @@ function UI.CreateSection(page, name)
     Label.Parent = Container
 end
 
-function UI.CreateToggle(page, text, flag, default, callback)
+function UI.CreateToggle(page, text, flag, default, callback, lockable)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, 0, 0, 36)
     Frame.BackgroundColor3 = UI_THEME.Element
@@ -1624,7 +1649,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
     corner.Parent = Frame
     
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.7, 0, 1, 0)
+    Label.Size = UDim2.new(0.7, lockable and -30 or 0, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
@@ -1633,6 +1658,25 @@ function UI.CreateToggle(page, text, flag, default, callback)
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
+
+    if lockable then
+        local LockBtn = Instance.new("TextButton")
+        LockBtn.Name = "Lock"
+        LockBtn.Size = UDim2.new(0, 24, 0, 24)
+        LockBtn.AnchorPoint = Vector2.new(1, 0.5)
+        LockBtn.Position = UDim2.new(1, -64, 0.5, 0)
+        LockBtn.BackgroundTransparency = 1
+        LockBtn.Text = "🔒"
+        LockBtn.Font = Enum.Font.GothamBold
+        LockBtn.TextSize = 14
+        LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+        LockBtn.Parent = Frame
+        
+        TrackConnection(LockBtn.MouseButton1Click:Connect(function()
+            Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
+            LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+        end))
+    end
     
     local Switch = Instance.new("Frame")
     Switch.Size = UDim2.new(0, 44, 0, 22)
@@ -1685,7 +1729,7 @@ function UI.CreateToggle(page, text, flag, default, callback)
     end))
 end
 
-function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, callback)
+function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, callback, lockable)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, 0, 0, 48)
     Frame.BackgroundColor3 = UI_THEME.Element
@@ -1697,7 +1741,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     corner.Parent = Frame
 
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.6, -12, 1, 0)
+    Label.Size = UDim2.new(0.6, lockable and -42 or -12, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
@@ -1706,6 +1750,25 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
+
+    if lockable then
+        local LockBtn = Instance.new("TextButton")
+        LockBtn.Name = "Lock"
+        LockBtn.Size = UDim2.new(0, 24, 0, 24)
+        LockBtn.AnchorPoint = Vector2.new(1, 0.5)
+        LockBtn.Position = UDim2.new(0.6, -12, 0.5, 0)
+        LockBtn.BackgroundTransparency = 1
+        LockBtn.Text = "🔒"
+        LockBtn.Font = Enum.Font.GothamBold
+        LockBtn.TextSize = 14
+        LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+        LockBtn.Parent = Frame
+        
+        TrackConnection(LockBtn.MouseButton1Click:Connect(function()
+            Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
+            LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+        end))
+    end
     
     local InputFrame = Instance.new("Frame")
     InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
@@ -5470,36 +5533,36 @@ local function _updateHum(prop, val)
 end
 
 UI.CreateSection(HumanoidTab, "Behavior")
-UI.CreateToggle(HumanoidTab, "Archivable", "Humanoid/Archivable", Flags["Humanoid/Archivable"], function(v) _updateHum("Archivable", v) end)
-UI.CreateToggle(HumanoidTab, "Break Joints On Death", "Humanoid/BreakJointsOnDeath", Flags["Humanoid/BreakJointsOnDeath"], function(v) _updateHum("BreakJointsOnDeath", v) end)
-UI.CreateToggle(HumanoidTab, "Evaluate State Machine", "Humanoid/EvaluateStateMachine", Flags["Humanoid/EvaluateStateMachine"], function(v) _updateHum("EvaluateStateMachine", v) end)
-UI.CreateToggle(HumanoidTab, "Requires Neck", "Humanoid/RequiresNeck", Flags["Humanoid/RequiresNeck"], function(v) _updateHum("RequiresNeck", v) end)
+UI.CreateToggle(HumanoidTab, "Archivable", "Humanoid/Archivable", Flags["Humanoid/Archivable"], function(v) _updateHum("Archivable", v) end, true)
+UI.CreateToggle(HumanoidTab, "Break Joints On Death", "Humanoid/BreakJointsOnDeath", Flags["Humanoid/BreakJointsOnDeath"], function(v) _updateHum("BreakJointsOnDeath", v) end, true)
+UI.CreateToggle(HumanoidTab, "Evaluate State Machine", "Humanoid/EvaluateStateMachine", Flags["Humanoid/EvaluateStateMachine"], function(v) _updateHum("EvaluateStateMachine", v) end, true)
+UI.CreateToggle(HumanoidTab, "Requires Neck", "Humanoid/RequiresNeck", Flags["Humanoid/RequiresNeck"], function(v) _updateHum("RequiresNeck", v) end, true)
 
 UI.CreateSection(HumanoidTab, "Control")
-UI.CreateToggle(HumanoidTab, "Auto Rotate", "Humanoid/AutoRotate", Flags["Humanoid/AutoRotate"], function(v) _updateHum("AutoRotate", v) end)
-UI.CreateToggle(HumanoidTab, "Platform Stand", "Humanoid/PlatformStand", Flags["Humanoid/PlatformStand"], function(v) _updateHum("PlatformStand", v) end)
-UI.CreateToggle(HumanoidTab, "Sit", "Humanoid/Sit", Flags["Humanoid/Sit"], function(v) _updateHum("Sit", v) end)
+UI.CreateToggle(HumanoidTab, "Auto Rotate", "Humanoid/AutoRotate", Flags["Humanoid/AutoRotate"], function(v) _updateHum("AutoRotate", v) end, true)
+UI.CreateToggle(HumanoidTab, "Platform Stand", "Humanoid/PlatformStand", Flags["Humanoid/PlatformStand"], function(v) _updateHum("PlatformStand", v) end, true)
+UI.CreateToggle(HumanoidTab, "Sit", "Humanoid/Sit", Flags["Humanoid/Sit"], function(v) _updateHum("Sit", v) end, true)
 UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v) 
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.Jump = v
     end
-end)
+end, true)
 
 UI.CreateSection(HumanoidTab, "Jump Settings")
-UI.CreateToggle(HumanoidTab, "Auto Jump Enabled", "Humanoid/AutoJumpEnabled", Flags["Humanoid/AutoJumpEnabled"], function(v) _updateHum("AutoJumpEnabled", v) end)
-UI.CreateNumericInput(HumanoidTab, "Jump Height", "Humanoid/JumpHeight", Flags["Humanoid/JumpHeight"], 0, 500, 0.1, nil, function(v) _updateHum("JumpHeight", v) end)
-UI.CreateNumericInput(HumanoidTab, "Jump Power", "Humanoid/JumpPower", Flags["Humanoid/JumpPower"], 0, 500, 1, nil, function(v) _updateHum("JumpPower", v) end)
-UI.CreateToggle(HumanoidTab, "Use Jump Power", "Humanoid/UseJumpPower", Flags["Humanoid/UseJumpPower"], function(v) _updateHum("UseJumpPower", v) end)
+UI.CreateToggle(HumanoidTab, "Auto Jump Enabled", "Humanoid/AutoJumpEnabled", Flags["Humanoid/AutoJumpEnabled"], function(v) _updateHum("AutoJumpEnabled", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Jump Height", "Humanoid/JumpHeight", Flags["Humanoid/JumpHeight"], 0, 500, 0.1, nil, function(v) _updateHum("JumpHeight", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Jump Power", "Humanoid/JumpPower", Flags["Humanoid/JumpPower"], 0, 500, 1, nil, function(v) _updateHum("JumpPower", v) end, true)
+UI.CreateToggle(HumanoidTab, "Use Jump Power", "Humanoid/UseJumpPower", Flags["Humanoid/UseJumpPower"], function(v) _updateHum("UseJumpPower", v) end, true)
 
 UI.CreateSection(HumanoidTab, "Game")
-UI.CreateToggle(HumanoidTab, "Automatic Scaling Enabled", "Humanoid/AutomaticScalingEnabled", Flags["Humanoid/AutomaticScalingEnabled"], function(v) _updateHum("AutomaticScalingEnabled", v) end)
-UI.CreateNumericInput(HumanoidTab, "Health", "Humanoid/Health", Flags["Humanoid/Health"], 0, 2000, 1, nil, function(v) _updateHum("Health", v) end)
-UI.CreateNumericInput(HumanoidTab, "Max Health", "Humanoid/MaxHealth", Flags["Humanoid/MaxHealth"], 0, 2000, 1, nil, function(v) _updateHum("MaxHealth", v) end)
-UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 0.01, nil, function(v) _updateHum("HipHeight", v) end)
-UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end)
-UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end)
+UI.CreateToggle(HumanoidTab, "Automatic Scaling Enabled", "Humanoid/AutomaticScalingEnabled", Flags["Humanoid/AutomaticScalingEnabled"], function(v) _updateHum("AutomaticScalingEnabled", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Health", "Humanoid/Health", Flags["Humanoid/Health"], 0, 2000, 1, nil, function(v) _updateHum("Health", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Max Health", "Humanoid/MaxHealth", Flags["Humanoid/MaxHealth"], 0, 2000, 1, nil, function(v) _updateHum("MaxHealth", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 0.01, nil, function(v) _updateHum("HipHeight", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end, true)
 
 -- MISC TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
