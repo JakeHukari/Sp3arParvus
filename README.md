@@ -56,6 +56,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Waypoint System**: Create and manage custom map markers, visible from anywhere.
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting.
 *   **Performance Monitor**: Real-time FPS, ping, and resource usage monitoring.
+*   **Humanoid Editor**: Edit LocalPlayer humanoid properties like walkspeed, jump power, max-slope-angle, health, etc.
 
 ## Shortcut Keys
 
@@ -63,6 +64,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Aimbot Clutch**: Aimbot is **ON** by default, holding `Ctrl` will disable any aim-lock, auto-shoot, or silent aim for the duration that `Ctrl` is being held   
 
 ### Visuals & ESP
+*   **Menu Minimize/Maximize**: `Ctrl + -`
 *   **Menu Visability**: `CapsLock`
 *   **Gh0st Mode**: `Ctrl + G`
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
