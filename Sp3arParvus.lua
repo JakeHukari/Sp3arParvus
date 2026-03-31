@@ -1666,7 +1666,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         LockBtn.AnchorPoint = Vector2.new(1, 0.5)
         LockBtn.Position = UDim2.new(1, -64, 0.5, 0)
         LockBtn.BackgroundTransparency = 1
-        LockBtn.Text = "🔒"
+        LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         LockBtn.Font = Enum.Font.GothamBold
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
@@ -1675,6 +1675,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+            LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
     end
     
@@ -1706,7 +1707,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Button.Size = UDim2.new(1, 0, 1, 0)
     Button.BackgroundTransparency = 1
     Button.Text = ""
-    Button.Parent = Frame
+    Button.Parent = Switch
     
     Flags[flag] = default
     
@@ -1758,7 +1759,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         LockBtn.AnchorPoint = Vector2.new(1, 0.5)
         LockBtn.Position = UDim2.new(0.6, -12, 0.5, 0)
         LockBtn.BackgroundTransparency = 1
-        LockBtn.Text = "🔒"
+        LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         LockBtn.Font = Enum.Font.GothamBold
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
@@ -1767,6 +1768,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
+            LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
     end
     
