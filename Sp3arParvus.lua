@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.8" -- Fixed Fullbright 
+local VERSION = "3.7.9" -- Fixed Br3ak3r StreamingEnabled Collision Reset 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -612,6 +612,56 @@ function GetFullPath(instance)
     return path
 end
 
+function GetUniquePath(instance)
+    local path = ""
+    local current = instance
+    while current and current ~= game do
+        local name = current.Name
+        local parent = current.Parent
+        local index = 1
+        if parent then
+            for _, child in ipairs(parent:GetChildren()) do
+                if child == current then break end
+                if child.Name == name then
+                    index = index + 1
+                end
+            end
+        end
+        path = name .. "[" .. index .. "]" .. (path == "" and "" or "\1" .. path)
+        current = parent
+    end
+    return path
+end
+
+function GetInstanceFromPath(uniquePath)
+    if type(uniquePath) ~= "string" then return nil end
+    local segments = string.split(uniquePath, "\1")
+    local current = game
+    for _, segment in ipairs(segments) do
+        local name, index = string.match(segment, "^(.*)%[(%d+)%]$")
+        if name and index then
+            index = tonumber(index)
+            local count = 0
+            local found = false
+            for _, child in ipairs(current:GetChildren()) do
+                if child.Name == name then
+                    count = count + 1
+                    if count == index then
+                        current = child
+                        found = true
+                        break
+                    end
+                end
+            end
+            if not found then return nil end
+        else
+            current = current:FindFirstChild(segment)
+            if not current then return nil end
+        end
+    end
+    return current
+end
+
 -- PERFORMANCE FIX: Cache filter type ONCE at startup
 Br3ak3rFilterType = (function()
     local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
@@ -634,7 +684,12 @@ function RebuildBrokenIgnore()
     end
     table.clear(Br3ak3rState.brokenIgnoreCache)
     local cacheIndex = 1
-    for part, _ in pairs(Br3ak3rState.brokenSet) do
+    for path, data in pairs(Br3ak3rState.brokenSet) do
+        local part = data.instance
+        if not part or not part.Parent then
+            part = GetInstanceFromPath(path)
+            if part then data.instance = part end
+        end
         if part and part:IsDescendantOf(Services.Workspace) then
             Br3ak3rState.brokenIgnoreCache[cacheIndex] = part
             cacheIndex = cacheIndex + 1
@@ -712,14 +767,16 @@ end
 -- Mark a part as broken (hide it)
 function markBroken(part)
     if not part or not part:IsA("BasePart") then return end
-    if Br3ak3rState.brokenSet[part] then return end
+    local path = GetUniquePath(part)
+    if Br3ak3rState.brokenSet[path] then return end
     
-    Br3ak3rState.brokenSet[part] = {cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
+    Br3ak3rState.brokenSet[path] = {instance = part, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
     Br3ak3rState.brokenCacheDirty = true
     
     -- Save original state for undo
     table.insert(Br3ak3rState.undoStack, {
-        part = part,
+        path = path,
+        instance = part,
         cc = part.CanCollide,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -739,31 +796,37 @@ end
 -- Undo the last broken part
 function unbreakLast()
     local entry = table.remove(Br3ak3rState.undoStack)
-    if not entry or not entry.part or not entry.part:IsDescendantOf(game) then
-        if entry and entry.part then
-            Br3ak3rState.brokenSet[entry.part] = nil
-            Br3ak3rState.brokenCacheDirty = true
-        end
-        return
+    if not entry or not entry.path then return end
+    
+    local path = entry.path
+    local part = entry.instance
+    if not part or not part.Parent then
+        part = GetInstanceFromPath(path)
     end
     
-    Br3ak3rState.brokenSet[entry.part] = nil
+    Br3ak3rState.brokenSet[path] = nil
     Br3ak3rState.brokenCacheDirty = true
     
-    -- Restore original state
-    entry.part.CanCollide = entry.cc
-    entry.part.LocalTransparencyModifier = entry.ltm
-    entry.part.Transparency = entry.t
+    if part then
+        -- Restore original state
+        part.CanCollide = entry.cc
+        part.LocalTransparencyModifier = entry.ltm
+        part.Transparency = entry.t
+    end
 end
 
 -- Clear all broken parts
 function unbreakAll()
-    for part, original in pairs(Br3ak3rState.brokenSet) do
+    for path, data in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
-            if part.Parent and type(original) == "table" then
-                part.CanCollide = original.cc
-                part.LocalTransparencyModifier = original.ltm
-                part.Transparency = original.t
+            local part = data.instance
+            if not part or not part.Parent then
+                part = GetInstanceFromPath(path)
+            end
+            if part and part.Parent and type(data) == "table" then
+                part.CanCollide = data.cc
+                part.LocalTransparencyModifier = data.ltm
+                part.Transparency = data.t
             end
         end)
     end
@@ -774,6 +837,7 @@ function unbreakAll()
 end
 
 -- Sweep undo stack (periodic cleanup of destroyed parts)
+-- Sweep undo stack (periodic cleanup)
 sweepAccum = 0
 function sweepUndo(dt)
     sweepAccum = sweepAccum + dt
@@ -784,9 +848,32 @@ function sweepUndo(dt)
     if n == 0 then return end
 
     local j = 1
+    local camPos = Camera and Camera.CFrame.Position
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
-        if entry.part and entry.part.Parent then
+        local keep = true
+        
+        local part = entry.instance
+        if not part or not part.Parent then
+            local resolved = GetInstanceFromPath(entry.path)
+            if resolved then
+                entry.instance = resolved
+                part = resolved
+            end
+        end
+
+        if not part or not part.Parent then
+            if part and camPos then
+                local success, dist = pcall(function() return (part.Position - camPos).Magnitude end)
+                if success and dist < 250 then
+                    keep = false
+                end
+            elseif not part then
+                keep = false
+            end
+        end
+
+        if keep then
             if i ~= j then
                 Br3ak3rState.undoStack[j] = entry
             end
@@ -801,11 +888,37 @@ end
 
 -- Prune broken set (remove parts that no longer exist)
 function pruneBrokenSet()
+    -- Path-based indexing allows objects to persist across streaming events.
+    -- To distinguish between streamed-out and destroyed, we check distance.
     local removed = false
-    for part, _ in pairs(Br3ak3rState.brokenSet) do
+    local camPos = Camera and Camera.CFrame.Position
+    for path, data in pairs(Br3ak3rState.brokenSet) do
+        local part = data.instance
         if not part or not part.Parent then
-            Br3ak3rState.brokenSet[part] = nil
-            removed = true
+            local resolved = GetInstanceFromPath(path)
+            if resolved then
+                data.instance = resolved
+                part = resolved
+            end
+        end
+        
+        if not part or not part.Parent then
+            -- Instance is missing from Workspace.
+            -- If we have an old reference, check its position to see if it should be streamed in.
+            if part and camPos then
+                pcall(function()
+                    local dist = (part.Position - camPos).Magnitude
+                    -- If we're within 250 studs and it's not here, it's likely destroyed.
+                    if dist < 250 then
+                        Br3ak3rState.brokenSet[path] = nil
+                        removed = true
+                    end
+                end)
+            elseif not part then
+                -- No instance reference and can't resolve by path.
+                Br3ak3rState.brokenSet[path] = nil
+                removed = true
+            end
         end
     end
     if removed then
@@ -969,7 +1082,7 @@ function UpdateBr3ak3rHover()
     if origin and direction then
         local result = WorldRaycastBr3ak3r(origin, direction, true)
         local part = result and result.Instance
-        local alreadyProcessed = Br3ak3rState.brokenSet[part] or H1ghl1ght3rState.highlightedSet[part]
+        local alreadyProcessed = (part and Br3ak3rState.brokenSet[GetUniquePath(part)]) or H1ghl1ght3rState.highlightedSet[part]
         
         if part and part:IsA("BasePart") and not alreadyProcessed then
             Br3ak3rState.hoverHL.Adornee = part
@@ -5362,12 +5475,16 @@ function Cleanup()
     table.clear(ActiveWaypoints)
 
     -- Cleanup Br3ak3r (restore all broken parts)
-    for part, original in pairs(Br3ak3rState.brokenSet) do
+    for path, data in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
-            if part.Parent and type(original) == "table" then
-                part.CanCollide = original.cc
-                part.LocalTransparencyModifier = original.ltm
-                part.Transparency = original.t
+            local part = data.instance
+            if not part or not part.Parent then
+                part = GetInstanceFromPath(path)
+            end
+            if part and part.Parent and type(data) == "table" then
+                part.CanCollide = data.cc
+                part.LocalTransparencyModifier = data.ltm
+                part.Transparency = data.t
             end
         end)
     end
@@ -6222,14 +6339,19 @@ function UnifiedHeartbeat(dt)
         lastStateEnforcement = now
 
         local enforcementMadeChange = false
-        for part, original in pairs(Br3ak3rState.brokenSet) do
-            if part.Parent then
+        for path, data in pairs(Br3ak3rState.brokenSet) do
+            local part = data.instance
+            if not part or not part.Parent then
+                part = GetInstanceFromPath(path)
+                if part then data.instance = part end
+            end
+            if part and part.Parent then
                 if part.CanCollide ~= false then 
                     part.CanCollide = false 
                     enforcementMadeChange = true
                 end
-                local targetT = (ghostMode and type(original) == "table") and original.t or 0.5
-                local targetLTM = (ghostMode and type(original) == "table") and original.ltm or 0.5
+                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
                 if part.Transparency ~= targetT then 
                     part.Transparency = targetT 
                     enforcementMadeChange = true
