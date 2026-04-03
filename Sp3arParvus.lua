@@ -328,7 +328,7 @@ local Flags = {
 
     -- Aimbot
     ["Aimbot/AimLock"] = true,
-    ["Aimbot/AutoFire"] = true,
+    ["Aimbot/AutoFire"] = false,
     ["Aimbot/AlwaysEnabled"] = true,
     ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
