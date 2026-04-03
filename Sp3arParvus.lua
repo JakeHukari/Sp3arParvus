@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.1" -- WorldHumanoidEditor Finalization
+local VERSION = "3.8.2" -- Unified Heartbeat fix
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -461,6 +461,7 @@ local HumanoidState = {
 
 local WorldHumState = {
     selectedHum = nil,
+    Page = nil,
     lockedProperties = {}, -- [path] = { propName = value }
     connections = {},
     updaters = {},
@@ -620,7 +621,9 @@ function UpdateWorldHumanoidEditorUI()
     if not hum.Parent then 
         WorldHumState.selectedHum = nil
         ClearWorldHumConnections()
-        ShowWorldHumList(WorldHumPage)
+        if WorldHumState.Page then
+            ShowWorldHumList(WorldHumState.Page)
+        end
         return 
     end
 
@@ -5692,10 +5695,11 @@ CreateClosestPlayerTracker()
 local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
-local WorldHumPage = UI.CreateTab("WorldHumanoids")
+WorldHumState.Page = UI.CreateTab("WorldHumanoids")
 local MiscTab = UI.CreateTab("Misc")
 
 function ShowWorldHumList(page)
+    if not page then return end
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -5863,7 +5867,7 @@ end
 for _, t in pairs(UIState.Tabs) do
     if t.Label.Text == "WorldHumanoids" then
         TrackConnection(t.Button.MouseButton1Click:Connect(function()
-            ShowWorldHumList(WorldHumPage)
+            ShowWorldHumList(WorldHumState.Page)
         end))
         break
     end
