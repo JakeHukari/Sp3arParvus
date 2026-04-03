@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.0" -- WorldHumanoidEditor 
+local VERSION = "3.8.1" -- WorldHumanoidEditor Finalization
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -464,6 +464,7 @@ local WorldHumState = {
     lockedProperties = {}, -- [path] = { propName = value }
     connections = {},
     updaters = {},
+    listEntries = {},
     selectionHighlight = nil
 }
 
@@ -619,6 +620,7 @@ function UpdateWorldHumanoidEditorUI()
     if not hum.Parent then 
         WorldHumState.selectedHum = nil
         ClearWorldHumConnections()
+        ShowWorldHumList(WorldHumPage)
         return 
     end
 
@@ -5701,6 +5703,7 @@ function ShowWorldHumList(page)
     end
     ClearWorldHumConnections()
     WorldHumState.selectedHum = nil
+    table.clear(WorldHumState.listEntries)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
     
     local layout = page:FindFirstChildOfClass("UIListLayout")
@@ -5739,21 +5742,40 @@ function ShowWorldHumList(page)
         lbl.Parent = page
         return
     end
-    
+
+    -- Sorting Logic
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+    local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+    local humDataList = {}
     for _, hum in ipairs(humanoids) do
+        local model = hum.Parent
+        local root = hum.RootPart or (model and model.PrimaryPart)
+        local dist = root and (root.Position - myPos).Magnitude or 999999
+        table.insert(humDataList, {hum = hum, dist = dist})
+    end
+
+    table.sort(humDataList, function(a, b)
+        return a.dist < b.dist
+    end)
+    
+    for _, data in ipairs(humDataList) do
+        local hum = data.hum
         local model = hum.Parent
         if not model then continue end
         
         local card = Instance.new("Frame")
-        card.Size = UDim2.new(1, 0, 0, 40)
+        card.Size = UDim2.new(1, 0, 0, 45)
         card.BackgroundColor3 = UI_THEME.Element
         card.BorderSizePixel = 0
+        card.LayoutOrder = math.floor(data.dist)
         card.Parent = page
         local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 6); cC.Parent = card
         
         local nameLabel = Instance.new("TextLabel")
-        nameLabel.Size = UDim2.new(1, -100, 1, 0)
-        nameLabel.Position = UDim2.new(0, 12, 0, 0)
+        nameLabel.Size = UDim2.new(1, -100, 0, 22)
+        nameLabel.Position = UDim2.new(0, 12, 0, 4)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = model.Name
         nameLabel.Font = Enum.Font.GothamMedium
@@ -5761,6 +5783,19 @@ function ShowWorldHumList(page)
         nameLabel.TextColor3 = UI_THEME.Text
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
         nameLabel.Parent = card
+
+        local distanceLabel = Instance.new("TextLabel")
+        distanceLabel.Size = UDim2.new(1, -100, 0, 16)
+        distanceLabel.Position = UDim2.new(0, 12, 0, 22)
+        distanceLabel.BackgroundTransparency = 1
+        distanceLabel.Text = math.floor(data.dist) .. " studs away"
+        distanceLabel.Font = Enum.Font.Gotham
+        distanceLabel.TextSize = 12
+        distanceLabel.TextColor3 = UI_THEME.TextDark
+        distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+        distanceLabel.Parent = card
+
+        table.insert(WorldHumState.listEntries, {hum = hum, card = card, label = distanceLabel})
         
         local selectionBtn = Instance.new("TextButton")
         selectionBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -6049,20 +6084,29 @@ function ShowWorldHumEditor(page, hum)
     UI.CreateSection(page, "Editor: " .. hum.Parent.Name)
     
     UI.CreateSection(page, "Behavior")
+    CreateWorldHumToggle(page, "Archivable", hum, "Archivable")
+    CreateWorldHumToggle(page, "Break Joints On Death", hum, "BreakJointsOnDeath")
+    CreateWorldHumToggle(page, "Evaluate State Machine", hum, "EvaluateStateMachine")
+    CreateWorldHumToggle(page, "Requires Neck", hum, "RequiresNeck")
+
+    UI.CreateSection(page, "Control")
     CreateWorldHumToggle(page, "Auto Rotate", hum, "AutoRotate")
     CreateWorldHumToggle(page, "Platform Stand", hum, "PlatformStand")
     CreateWorldHumToggle(page, "Sit", hum, "Sit")
 
-    UI.CreateSection(page, "Movement")
-    CreateWorldHumNumeric(page, "Walk Speed", hum, "WalkSpeed", 0, 1000, 1)
-    CreateWorldHumNumeric(page, "Jump Power", hum, "JumpPower", 0, 1000, 1)
-    CreateWorldHumNumeric(page, "Jump Height", hum, "JumpHeight", 0, 1000, 0.1)
+    UI.CreateSection(page, "Jump Settings")
+    CreateWorldHumToggle(page, "Auto Jump Enabled", hum, "AutoJumpEnabled")
+    CreateWorldHumNumeric(page, "Jump Height", hum, "JumpHeight", 0, 500, 0.1)
+    CreateWorldHumNumeric(page, "Jump Power", hum, "JumpPower", 0, 500, 1)
     CreateWorldHumToggle(page, "Use Jump Power", hum, "UseJumpPower")
 
-    UI.CreateSection(page, "Stats")
+    UI.CreateSection(page, "Game")
+    CreateWorldHumToggle(page, "Automatic Scaling Enabled", hum, "AutomaticScalingEnabled")
     CreateWorldHumNumeric(page, "Health", hum, "Health", 0, 100000, 1)
     CreateWorldHumNumeric(page, "Max Health", hum, "MaxHealth", 0, 100000, 1)
     CreateWorldHumNumeric(page, "Hip Height", hum, "HipHeight", 0, 100, 0.01)
+    CreateWorldHumNumeric(page, "Max Slope Angle", hum, "MaxSlopeAngle", 0, 90, 1)
+    CreateWorldHumNumeric(page, "Walk Speed", hum, "WalkSpeed", 0, 500, 1)
 end
 
 local WaypointsPage = UI.CreateTab("Waypoints")
@@ -6609,6 +6653,7 @@ lastStateEnforcement = 0
 stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
 lastHumanoidSync = 0
 humanoidSyncRate = 0.1 -- 10 FPS
+lastWorldHumListUpdate = 0
 lastGhostMode = nil
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
@@ -6677,6 +6722,30 @@ function UnifiedHeartbeat(dt)
         lastHumanoidSync = now
         UpdateHumanoidUI()
         UpdateWorldHumanoidEditorUI()
+    end
+
+    if UIState.CurrentTab == "WorldHumanoids" and not WorldHumState.selectedHum then
+        if (now - lastWorldHumListUpdate) > 1.0 then
+            lastWorldHumListUpdate = now
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+            local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+            for _, entry in ipairs(WorldHumState.listEntries) do
+                local hum = entry.hum
+                local card = entry.card
+                local label = entry.label
+                if hum and hum.Parent and card and label then
+                    local root = hum.RootPart or hum.Parent.PrimaryPart
+                    if root then
+                        local dist = (root.Position - myPos).Magnitude
+                        local distFloor = math.floor(dist)
+                        label.Text = distFloor .. " studs away"
+                        card.LayoutOrder = distFloor
+                    end
+                end
+            end
+        end
     end
     
     -- Update Waypoint Distances
