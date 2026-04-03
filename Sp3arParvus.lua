@@ -588,16 +588,8 @@ function GetNearbyHumanoids()
         local model = part:FindFirstAncestorOfClass("Model")
         local hum = model and model:FindFirstChildOfClass("Humanoid")
         if hum and model ~= myChar and not table.find(humanoids, hum) then
-            table.insert(humanoids, hum)
-        end
-    end
-    
-    -- Fallback: Scan players
-    for _, player in ipairs(GetPlayersCache()) do
-        if player ~= LocalPlayer then
-            local char = player.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum and not table.find(humanoids, hum) then
+            -- EXCLUDE REAL PLAYERS
+            if not Players:GetPlayerFromCharacter(model) then
                 table.insert(humanoids, hum)
             end
         end
@@ -622,7 +614,9 @@ end
 
 function UpdateWorldHumanoidEditorUI()
     local hum = WorldHumState.selectedHum
-    if not hum or not hum.Parent then 
+    if not hum then return end
+    
+    if not hum.Parent then 
         WorldHumState.selectedHum = nil
         ClearWorldHumConnections()
         return 
@@ -5700,18 +5694,39 @@ local WorldHumPage = UI.CreateTab("WorldHumanoids")
 local MiscTab = UI.CreateTab("Misc")
 
 function ShowWorldHumList(page)
-    page:ClearAllChildren()
+    for _, child in ipairs(page:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
     ClearWorldHumConnections()
     WorldHumState.selectedHum = nil
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
     
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 5)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = page
+    local layout = page:FindFirstChildOfClass("UIListLayout")
+    if not layout then
+        layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 5)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = page
+    end
     
     UI.CreateSection(page, "Nearby Humanoids")
     
+    local refreshBtn = Instance.new("TextButton")
+    refreshBtn.Size = UDim2.new(1, 0, 0, 30)
+    refreshBtn.BackgroundColor3 = UI_THEME.Element
+    refreshBtn.Text = "Refresh Scan"
+    refreshBtn.Font = Enum.Font.GothamBold
+    refreshBtn.TextSize = 13
+    refreshBtn.TextColor3 = UI_THEME.Accent
+    refreshBtn.Parent = page
+    local rC = Instance.new("UICorner"); rC.CornerRadius = UDim.new(0, 6); rC.Parent = refreshBtn
+    TrackWorldHumConnection(refreshBtn.MouseButton1Click:Connect(function()
+        ShowWorldHumList(page)
+    end))
+
     local humanoids = GetNearbyHumanoids()
     if #humanoids == 0 then
         local lbl = Instance.new("TextLabel")
@@ -5747,7 +5762,15 @@ function ShowWorldHumList(page)
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
         nameLabel.Parent = card
         
+        local selectionBtn = Instance.new("TextButton")
+        selectionBtn.Size = UDim2.new(1, 0, 1, 0)
+        selectionBtn.BackgroundTransparency = 1
+        selectionBtn.Text = ""
+        selectionBtn.ZIndex = 1
+        selectionBtn.Parent = card
+        
         local editBtn = Instance.new("TextButton")
+        editBtn.Name = "Edit"
         editBtn.Size = UDim2.new(0, 60, 0, 26)
         editBtn.Position = UDim2.new(1, -10, 0.5, 0)
         editBtn.AnchorPoint = Vector2.new(1, 0.5)
@@ -5757,26 +5780,23 @@ function ShowWorldHumList(page)
         editBtn.TextSize = 12
         editBtn.TextColor3 = Color3.new(1, 1, 1)
         editBtn.Visible = false
+        editBtn.ZIndex = 2
         editBtn.Parent = card
         local eC = Instance.new("UICorner"); eC.CornerRadius = UDim.new(0, 4); eC.Parent = editBtn
-        
-        local selectionBtn = Instance.new("TextButton")
-        selectionBtn.Size = UDim2.new(1, 0, 1, 0)
-        selectionBtn.BackgroundTransparency = 1
-        selectionBtn.Text = ""
-        selectionBtn.Parent = card
         
         TrackWorldHumConnection(selectionBtn.MouseButton1Click:Connect(function()
             -- Clear previous selection
             if WorldHumState.selectionHighlight then
-                WorldHumState.selectionHighlight:Destroy()
+                pcall(function() WorldHumState.selectionHighlight:Destroy() end)
                 WorldHumState.selectionHighlight = nil
             end
             
             -- Hide all other edit buttons
             for _, child in ipairs(page:GetChildren()) do
-                local btn = child:FindFirstChild("TextButton")
-                if btn then btn.Visible = false end
+                local eb = child:FindFirstChild("Edit") or child:FindFirstChild("TextButton")
+                if eb and eb:IsA("TextButton") and eb.Text == "Edit" then 
+                    eb.Visible = false 
+                end
             end
             
             -- Set selection
@@ -5787,7 +5807,7 @@ function ShowWorldHumList(page)
             hl.Name = "WorldHumSelectionHighlight"
             hl.Adornee = model
             hl.FillTransparency = 1
-            hl.OutlineColor = Color3.fromRGB(0, 170, 255) -- Blue
+            hl.OutlineColor = Color3.new(0, 0, 1) -- Blue
             hl.OutlineTransparency = 0
             hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             hl.Parent = model
