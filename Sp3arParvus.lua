@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.7.9" -- Fixed Br3ak3r StreamingEnabled Collision Reset 
+local VERSION = "3.8.0" -- WorldHumanoidEditor 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -459,6 +459,31 @@ local HumanoidState = {
     captured = false
 }
 
+local WorldHumState = {
+    selectedHum = nil,
+    lockedProperties = {}, -- [path] = { propName = value }
+    connections = {},
+    updaters = {},
+    selectionHighlight = nil
+}
+
+function TrackWorldHumConnection(connection)
+    if connection and typeof(connection) == "RBXScriptConnection" then
+        table.insert(WorldHumState.connections, connection)
+    end
+    return connection
+end
+
+function ClearWorldHumConnections()
+    for _, conn in ipairs(WorldHumState.connections) do
+        if conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    table.clear(WorldHumState.connections)
+    table.clear(WorldHumState.updaters)
+end
+
 function CaptureHumanoidSettings(humanoid)
     if not humanoid or HumanoidState.captured then return end
     
@@ -549,6 +574,69 @@ function UpdateHumanoidUI()
             if updater then
                 updater(val)
             end
+        end
+    end
+end
+
+function GetNearbyHumanoids()
+    local humanoids = {}
+    local myChar = LocalPlayer.Character
+    
+    -- Optimized spatial query
+    local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, 500)
+    for _, part in ipairs(parts) do
+        local model = part:FindFirstAncestorOfClass("Model")
+        local hum = model and model:FindFirstChildOfClass("Humanoid")
+        if hum and model ~= myChar and not table.find(humanoids, hum) then
+            table.insert(humanoids, hum)
+        end
+    end
+    
+    -- Fallback: Scan players
+    for _, player in ipairs(GetPlayersCache()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum and not table.find(humanoids, hum) then
+                table.insert(humanoids, hum)
+            end
+        end
+    end
+    
+    return humanoids
+end
+
+function ApplyWorldHumanoidSettings()
+    for path, props in pairs(WorldHumState.lockedProperties) do
+        local hum = GetInstanceFromPath(path)
+        if hum and hum:IsA("Humanoid") then
+            for prop, val in pairs(props) do
+                pcall(SafeSetProp, hum, prop, val)
+            end
+        else
+            -- Humanoid destroyed or gone, stop enforcing
+            WorldHumState.lockedProperties[path] = nil
+        end
+    end
+end
+
+function UpdateWorldHumanoidEditorUI()
+    local hum = WorldHumState.selectedHum
+    if not hum or not hum.Parent then 
+        WorldHumState.selectedHum = nil
+        ClearWorldHumConnections()
+        return 
+    end
+
+    local path = GetUniquePath(hum)
+    local lockedProps = WorldHumState.lockedProperties[path] or {}
+
+    for prop, updater in pairs(WorldHumState.updaters) do
+        if lockedProps[prop] ~= nil then continue end
+        
+        local success, val = pcall(SafeGetProp, hum, prop)
+        if success and val ~= nil then
+            updater(val)
         end
     end
 end
@@ -5511,6 +5599,15 @@ function Cleanup()
     table.clear(H1ghl1ght3rState.highlightedSet)
     table.clear(H1ghl1ght3rState.undoStack)
     H1ghl1ght3rState.SHIFT_HELD = false
+
+    -- Cleanup WorldHumanoidEditor
+    ClearWorldHumConnections()
+    if WorldHumState.selectionHighlight then
+        pcall(function() WorldHumState.selectionHighlight:Destroy() end)
+    end
+    table.clear(WorldHumState.lockedProperties)
+    WorldHumState.selectedHum = nil
+    WorldHumState.selectionHighlight = nil
     
     -- Cleanup hover highlight
     if Br3ak3rState.hoverHL then
@@ -5599,7 +5696,354 @@ CreateClosestPlayerTracker()
 local AimTab = UI.CreateTab("Aimbot")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
+local WorldHumPage = UI.CreateTab("WorldHumanoids")
 local MiscTab = UI.CreateTab("Misc")
+
+function ShowWorldHumList(page)
+    page:ClearAllChildren()
+    ClearWorldHumConnections()
+    WorldHumState.selectedHum = nil
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = page
+    
+    UI.CreateSection(page, "Nearby Humanoids")
+    
+    local humanoids = GetNearbyHumanoids()
+    if #humanoids == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 30)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "No non-local humanoids found."
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.TextDark
+        lbl.Parent = page
+        return
+    end
+    
+    for _, hum in ipairs(humanoids) do
+        local model = hum.Parent
+        if not model then continue end
+        
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, 0, 0, 40)
+        card.BackgroundColor3 = UI_THEME.Element
+        card.BorderSizePixel = 0
+        card.Parent = page
+        local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 6); cC.Parent = card
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -100, 1, 0)
+        nameLabel.Position = UDim2.new(0, 12, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = model.Name
+        nameLabel.Font = Enum.Font.GothamMedium
+        nameLabel.TextSize = 14
+        nameLabel.TextColor3 = UI_THEME.Text
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = card
+        
+        local editBtn = Instance.new("TextButton")
+        editBtn.Size = UDim2.new(0, 60, 0, 26)
+        editBtn.Position = UDim2.new(1, -10, 0.5, 0)
+        editBtn.AnchorPoint = Vector2.new(1, 0.5)
+        editBtn.BackgroundColor3 = UI_THEME.Accent
+        editBtn.Text = "Edit"
+        editBtn.Font = Enum.Font.GothamBold
+        editBtn.TextSize = 12
+        editBtn.TextColor3 = Color3.new(1, 1, 1)
+        editBtn.Visible = false
+        editBtn.Parent = card
+        local eC = Instance.new("UICorner"); eC.CornerRadius = UDim.new(0, 4); eC.Parent = editBtn
+        
+        local selectionBtn = Instance.new("TextButton")
+        selectionBtn.Size = UDim2.new(1, 0, 1, 0)
+        selectionBtn.BackgroundTransparency = 1
+        selectionBtn.Text = ""
+        selectionBtn.Parent = card
+        
+        TrackWorldHumConnection(selectionBtn.MouseButton1Click:Connect(function()
+            -- Clear previous selection
+            if WorldHumState.selectionHighlight then
+                WorldHumState.selectionHighlight:Destroy()
+                WorldHumState.selectionHighlight = nil
+            end
+            
+            -- Hide all other edit buttons
+            for _, child in ipairs(page:GetChildren()) do
+                local btn = child:FindFirstChild("TextButton")
+                if btn then btn.Visible = false end
+            end
+            
+            -- Set selection
+            WorldHumState.selectedHum = hum
+            editBtn.Visible = true
+            
+            local hl = Instance.new("Highlight")
+            hl.Name = "WorldHumSelectionHighlight"
+            hl.Adornee = model
+            hl.FillTransparency = 1
+            hl.OutlineColor = Color3.fromRGB(0, 170, 255) -- Blue
+            hl.OutlineTransparency = 0
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Parent = model
+            WorldHumState.selectionHighlight = hl
+        end))
+        
+        TrackWorldHumConnection(editBtn.MouseButton1Click:Connect(function()
+            if WorldHumState.selectionHighlight then
+                WorldHumState.selectionHighlight:Destroy()
+                WorldHumState.selectionHighlight = nil
+            end
+            ShowWorldHumEditor(page, hum)
+        end))
+    end
+end
+
+-- Refresh list when tab is opened
+for _, t in pairs(UIState.Tabs) do
+    if t.Label.Text == "WorldHumanoids" then
+        TrackConnection(t.Button.MouseButton1Click:Connect(function()
+            ShowWorldHumList(WorldHumPage)
+        end))
+        break
+    end
+end
+
+function CreateWorldHumToggle(page, text, targetHum, prop)
+    local path = GetUniquePath(targetHum)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 36)
+    Frame.BackgroundColor3 = UI_THEME.Element
+    Frame.BorderSizePixel = 0
+    Frame.Parent = page
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = Frame
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.7, -30, 1, 0)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+
+    local initialLocked = (WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil)
+    local LockBtn = Instance.new("TextButton")
+    LockBtn.Size = UDim2.new(0, 24, 0, 24)
+    LockBtn.AnchorPoint = Vector2.new(1, 0.5)
+    LockBtn.Position = UDim2.new(1, -64, 0.5, 0)
+    LockBtn.BackgroundTransparency = 1
+    LockBtn.Text = initialLocked and "🔒" or "🔓"
+    LockBtn.Font = Enum.Font.GothamBold
+    LockBtn.TextSize = 14
+    LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
+    LockBtn.Parent = Frame
+    
+    local Switch = Instance.new("Frame")
+    Switch.Size = UDim2.new(0, 44, 0, 22)
+    Switch.AnchorPoint = Vector2.new(1, 0.5)
+    Switch.Position = UDim2.new(1, -12, 0.5, 0)
+    Switch.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    Switch.Parent = Frame
+    local swCorner = Instance.new("UICorner"); swCorner.CornerRadius = UDim.new(1, 0); swCorner.Parent = Switch
+    
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.AnchorPoint = Vector2.new(0, 0.5)
+    Knob.Position = UDim2.new(0, 2, 0.5, 0)
+    Knob.BackgroundColor3 = Color3.new(1, 1, 1)
+    Knob.Parent = Switch
+    local kbCorner = Instance.new("UICorner"); kbCorner.CornerRadius = UDim.new(1, 0); kbCorner.Parent = Knob
+    
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(1, 0, 1, 0)
+    Button.BackgroundTransparency = 1
+    Button.Text = ""
+    Button.Parent = Switch
+    
+    local function updateVisuals(state)
+        TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)}):Play()
+        TweenService:Create(Knob, TWEENS.SMOOTH, {Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
+    end
+
+    WorldHumState.updaters[prop] = updateVisuals
+
+    TrackWorldHumConnection(LockBtn.MouseButton1Click:Connect(function()
+        local isLocked = not (WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil)
+        if isLocked then
+            if not WorldHumState.lockedProperties[path] then WorldHumState.lockedProperties[path] = {} end
+            WorldHumState.lockedProperties[path][prop] = targetHum[prop]
+        else
+            WorldHumState.lockedProperties[path][prop] = nil
+        end
+        LockBtn.Text = isLocked and "🔒" or "🔓"
+        LockBtn.TextColor3 = isLocked and UI_THEME.Accent or UI_THEME.TextDark
+    end))
+
+    TrackWorldHumConnection(Button.MouseButton1Click:Connect(function()
+        local newState = not targetHum[prop]
+        pcall(SafeSetProp, targetHum, prop, newState)
+        if WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil then
+            WorldHumState.lockedProperties[path][prop] = newState
+        end
+        updateVisuals(newState)
+    end))
+    
+    updateVisuals(targetHum[prop])
+end
+
+function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
+    local path = GetUniquePath(targetHum)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(1, 0, 0, 48)
+    Frame.BackgroundColor3 = UI_THEME.Element
+    Frame.BorderSizePixel = 0
+    Frame.Parent = page
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = Frame
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.6, -42, 1, 0)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+
+    local initialLocked = (WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil)
+    local LockBtn = Instance.new("TextButton")
+    LockBtn.Size = UDim2.new(0, 24, 0, 24)
+    LockBtn.AnchorPoint = Vector2.new(1, 0.5)
+    LockBtn.Position = UDim2.new(0.6, -12, 0.5, 0)
+    LockBtn.BackgroundTransparency = 1
+    LockBtn.Text = initialLocked and "🔒" or "🔓"
+    LockBtn.Font = Enum.Font.GothamBold
+    LockBtn.TextSize = 14
+    LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
+    LockBtn.Parent = Frame
+    
+    local InputFrame = Instance.new("Frame")
+    InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
+    InputFrame.Position = UDim2.new(1, -12, 0.5, 0)
+    InputFrame.AnchorPoint = Vector2.new(1, 0.5)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    InputFrame.Parent = Frame
+    local ifCorner = Instance.new("UICorner"); ifCorner.CornerRadius = UDim.new(0, 4); ifCorner.Parent = InputFrame
+
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.new(1, -50, 1, 0)
+    Input.Position = UDim2.new(0, 25, 0, 0)
+    Input.BackgroundTransparency = 1
+    Input.Text = tostring(math.floor(targetHum[prop] * 100) / 100)
+    Input.Font = Enum.Font.GothamBold
+    Input.TextSize = 13
+    Input.TextColor3 = UI_THEME.Accent
+    Input.ClearTextOnFocus = false
+    Input.Parent = InputFrame
+
+    local function updateValue(val)
+        val = math.clamp(tonumber(val) or targetHum[prop], min, max)
+        if step and step > 0 then val = math.floor(val / step + 0.5) * step end
+        pcall(SafeSetProp, targetHum, prop, val)
+        if WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil then
+            WorldHumState.lockedProperties[path][prop] = val
+        end
+        Input.Text = tostring(math.floor(val * 100) / 100)
+    end
+
+    WorldHumState.updaters[prop] = function(val)
+        if not Input:IsFocused() then
+            Input.Text = tostring(math.floor(val * 100) / 100)
+        end
+    end
+
+    TrackWorldHumConnection(LockBtn.MouseButton1Click:Connect(function()
+        local isLocked = not (WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil)
+        if isLocked then
+            if not WorldHumState.lockedProperties[path] then WorldHumState.lockedProperties[path] = {} end
+            WorldHumState.lockedProperties[path][prop] = targetHum[prop]
+        else
+            WorldHumState.lockedProperties[path][prop] = nil
+        end
+        LockBtn.Text = isLocked and "🔒" or "🔓"
+        LockBtn.TextColor3 = isLocked and UI_THEME.Accent or UI_THEME.TextDark
+    end))
+
+    TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+    
+    local mBtn = Instance.new("TextButton")
+    mBtn.Size = UDim2.new(0, 25, 1, 0)
+    mBtn.BackgroundTransparency = 1
+    mBtn.Text = "-"
+    mBtn.Font = Enum.Font.GothamBold
+    mBtn.TextSize = 16
+    mBtn.TextColor3 = UI_THEME.TextDark
+    mBtn.Parent = InputFrame
+    TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue(targetHum[prop] - (step or 1)) end))
+
+    local pBtn = Instance.new("TextButton")
+    pBtn.Size = UDim2.new(0, 25, 1, 0)
+    pBtn.Position = UDim2.new(1, -25, 0, 0)
+    pBtn.BackgroundTransparency = 1
+    pBtn.Text = "+"
+    pBtn.Font = Enum.Font.GothamBold
+    pBtn.TextSize = 16
+    pBtn.TextColor3 = UI_THEME.TextDark
+    pBtn.Parent = InputFrame
+    TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue(targetHum[prop] + (step or 1)) end))
+end
+
+function ShowWorldHumEditor(page, hum)
+    page:ClearAllChildren()
+    ClearWorldHumConnections()
+    WorldHumState.selectedHum = hum
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = page
+
+    local backBtn = Instance.new("TextButton")
+    backBtn.Size = UDim2.new(0, 80, 0, 24)
+    backBtn.BackgroundColor3 = UI_THEME.Element
+    backBtn.Text = "← Back"
+    backBtn.Font = Enum.Font.GothamBold
+    backBtn.TextSize = 12
+    backBtn.TextColor3 = UI_THEME.Text
+    backBtn.Parent = page
+    local bC = Instance.new("UICorner"); bC.CornerRadius = UDim.new(0, 4); bC.Parent = backBtn
+    TrackWorldHumConnection(backBtn.MouseButton1Click:Connect(function()
+        ShowWorldHumList(page)
+    end))
+
+    UI.CreateSection(page, "Editor: " .. hum.Parent.Name)
+    
+    UI.CreateSection(page, "Behavior")
+    CreateWorldHumToggle(page, "Auto Rotate", hum, "AutoRotate")
+    CreateWorldHumToggle(page, "Platform Stand", hum, "PlatformStand")
+    CreateWorldHumToggle(page, "Sit", hum, "Sit")
+
+    UI.CreateSection(page, "Movement")
+    CreateWorldHumNumeric(page, "Walk Speed", hum, "WalkSpeed", 0, 1000, 1)
+    CreateWorldHumNumeric(page, "Jump Power", hum, "JumpPower", 0, 1000, 1)
+    CreateWorldHumNumeric(page, "Jump Height", hum, "JumpHeight", 0, 1000, 0.1)
+    CreateWorldHumToggle(page, "Use Jump Power", hum, "UseJumpPower")
+
+    UI.CreateSection(page, "Stats")
+    CreateWorldHumNumeric(page, "Health", hum, "Health", 0, 100000, 1)
+    CreateWorldHumNumeric(page, "Max Health", hum, "MaxHealth", 0, 100000, 1)
+    CreateWorldHumNumeric(page, "Hip Height", hum, "HipHeight", 0, 100, 0.01)
+end
 
 local WaypointsPage = UI.CreateTab("Waypoints")
 
@@ -6207,10 +6651,12 @@ function UnifiedHeartbeat(dt)
     
     UpdateFullbright()
     ApplyHumanoidSettings()
+    ApplyWorldHumanoidSettings()
     
     if (now - lastHumanoidSync) > humanoidSyncRate then
         lastHumanoidSync = now
         UpdateHumanoidUI()
+        UpdateWorldHumanoidEditorUI()
     end
     
     -- Update Waypoint Distances
