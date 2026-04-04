@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.2" -- Unified Heartbeat fix
+local VERSION = "3.8.3" -- Targeting consistency issues
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -2206,8 +2206,8 @@ function GetCharacter(player)
         local char = cache.Char
         local root = cache.Root
         
-        -- Verify validity (parented)
-        if char and char.Parent and root and root.Parent then
+        -- Verify validity (parented) and ensure it's the current character
+        if char and char.Parent and char == player.Character and root and root.Parent then
             -- Standard Humanoid Check
             if cache.Humanoid then
                 if cache.Humanoid.Health > 0 then
@@ -2373,7 +2373,7 @@ function PruneCharCache()
     if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
     lastCharCachePrune = now
     
-    local players = GetPlayersCache()
+    local players = Players:GetPlayers()
     local playerMap = {}
     for i = 1, #players do playerMap[players[i]] = true end
 
@@ -4333,9 +4333,6 @@ function UpdateESP(now, player, isClosest)
         
         if not isValid then
             -- Recreate if missing
-             -- Fix: Capture connections to preserve them (prevents untracked CharacterAdded listeners)
-             local savedConnections = espData.Connections
-             
              if nametag then nametag:Destroy() end
              if espData.Tracer then espData.Tracer:Destroy() end 
              
@@ -4344,15 +4341,22 @@ function UpdateESP(now, player, isClosest)
                  espData.OffscreenIndicator.Frame:Destroy()
              end
              
+             -- Properly cleanup old connections before setting to nil
+             if espData.Connections then
+                 for _, conn in pairs(espData.Connections) do
+                     if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
+                         conn:Disconnect()
+                     end
+                 end
+                 table.clear(espData.Connections)
+             end
+
              ESPObjects[player] = nil
              espData = nil
              
-             -- Recreate immediately to restore connections
-             CreateESP(player)
+             -- Recreate immediately via SetupPlayerESP to ensure CharacterAdded is re-established
+             SetupPlayerESP(player)
              espData = ESPObjects[player]
-             if espData then
-                 espData.Connections = savedConnections
-             end
         else
             -- Ensure correctly parented if still valid
             local targetGui = EnsureScreenGui()
@@ -6857,6 +6861,7 @@ function UnifiedHeartbeat(dt)
     -- Periodic cleanup (throttled)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
         lastBr3ak3rCleanup = now
+        UpdatePlayerCache()
         pcall(pruneBrokenSet)
         pcall(pruneHighlightedSet)
         
