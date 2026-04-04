@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.3" -- Targeting consistency issues
+local VERSION = "3.8.4" -- Aiming Inconsistencies and Cache Logic in Sp3arParvus
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -69,7 +69,7 @@ local LocalCharReady = true
 function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
     -- Invalidate caches
-    _G.CharCache = {} 
+    table.clear(CharCache)
     
     -- Pause specifically for camera/PlayerModule setup
     task.wait(1.5) 
@@ -2230,6 +2230,7 @@ function GetCharacter(player)
              cache.Root = nil
              cache.Humanoid = nil
              cache.HealthInst = nil
+             cache.Head = nil
         end
     end
 
@@ -2619,15 +2620,6 @@ function ClearCandidateReferences()
         end
     end
     
-    -- Also clear ClosestResult to prevent stale references
-    if ClosestResult then
-        ClosestResult[1] = nil
-        ClosestResult[2] = nil
-        ClosestResult[3] = nil
-        ClosestResult[4] = 0
-        ClosestResult[5] = 0
-        ClosestResult[6] = nil
-    end
 end
 
 -- ClearSortCacheReferences - Clears cachedPlayerListForSort references
@@ -6333,6 +6325,37 @@ function SetupPlayerESP(player)
             end
         end)
         table.insert(espData.Connections, conn)
+        
+        -- Handle players whose character spawned before the event was hooked
+        if player.Character then
+            task.spawn(function()
+                local character = player.Character
+                
+                -- Invalidate character cache
+                CharCache[player] = nil
+                
+                -- Wait for character to be fully parented and have a root part
+                local attempts = 0
+                local root = nil
+                repeat
+                    task.wait(0.2)
+                    root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+                    attempts = attempts + 1
+                until root or attempts > 10
+                
+                if player.Parent and Sp3arParvus.Active then
+                    -- Reset cache to force full update
+                    espData.lastNickname = ""
+                    espData.lastUsername = ""
+                    espData.lastDistance = -1
+                    espData.lastTeamColor = nil
+                    espData.lastDistanceColor = nil
+                    
+                    EnsureScreenGui()
+                    UpdateESP(os.clock(), player, player == NearestPlayerRef)
+                end
+            end)
+        end
     end
 end
 
