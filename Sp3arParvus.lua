@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.4" -- Aiming Inconsistencies and Cache Logic in Sp3arParvus
+local VERSION = "3.8.5" --  Fixed 'label' Nameplate Issue in Gh0st Mode 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -1019,6 +1019,7 @@ function markHighlighted(part)
     if H1ghl1ght3rState.highlightedSet[part] then return end
     
     local hl = Instance.new("Highlight")
+    hl.Enabled = not Flags["Settings/GhostMode"]
     hl.Name = "H1ghl1ght3r_Highlight"
     hl.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
     hl.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -1028,6 +1029,7 @@ function markHighlighted(part)
     hl.Parent = part
     
     local bg = Instance.new("BillboardGui")
+    bg.Enabled = not Flags["Settings/GhostMode"]
     bg.Name = "H1ghl1ght3r_Nametag"
     bg.AlwaysOnTop = true
     bg.Size = UDim2.new(0, 200, 0, 50)
@@ -1323,6 +1325,7 @@ function CreateWaypoint(position)
     
     -- Create Billboard
     local bg = Instance.new("BillboardGui")
+    bg.Enabled = not Flags["Settings/GhostMode"]
     bg.AlwaysOnTop = true
     bg.Size = UDim2.new(0, 100, 0, 50)
     bg.StudsOffset = Vector3.new(0, 2, 0)
@@ -1341,6 +1344,7 @@ function CreateWaypoint(position)
     
     -- Create Pin (Dot)
     local pinBg = Instance.new("BillboardGui")
+    pinBg.Enabled = not Flags["Settings/GhostMode"]
     pinBg.AlwaysOnTop = true
     pinBg.Size = UDim2.new(0, 8, 0, 8)
     pinBg.Adornee = part
@@ -1454,6 +1458,7 @@ function EnsureScreenGui()
     end
 
     ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Enabled = not Flags["Settings/GhostMode"]
     ScreenGui.Name = "Sp3arParvusUI"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -3906,6 +3911,7 @@ local function CreateESP(player)
 
     -- Create nametag (BillboardGui) with Username, Nickname, and Distance
     local billboard = Instance.new("BillboardGui")
+    billboard.Enabled = false
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
     billboard.Size = UDim2.new(0, 200, 0, 90) -- Increased height for 5 lines
@@ -3929,6 +3935,7 @@ local function CreateESP(player)
 
     -- Display Name (Nickname) - Top line (colored by team)
     local nicknameLabel = Instance.new("TextLabel")
+    nicknameLabel.Text = ""
     nicknameLabel.Name = "NicknameLabel"
     nicknameLabel.Size = UDim2.new(1, 0, 0, 18)
     nicknameLabel.BackgroundTransparency = 1
@@ -3941,6 +3948,7 @@ local function CreateESP(player)
 
     -- Username (@name) - Middle line (colored by team)
     local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Text = ""
     usernameLabel.Name = "UsernameLabel"
     usernameLabel.Size = UDim2.new(1, 0, 0, 18)
     usernameLabel.BackgroundTransparency = 1
@@ -3953,6 +3961,7 @@ local function CreateESP(player)
 
     -- Distance label - Third line (colored by distance heat-map)
     local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Text = ""
     distanceLabel.Name = "DistanceLabel"
     distanceLabel.Size = UDim2.new(1, 0, 0, 18)
     distanceLabel.BackgroundTransparency = 1
@@ -4296,9 +4305,17 @@ end
 
 -- Update ESP for a player (optimized - uses cached closest player)
 function UpdateESP(now, player, isClosest)
-    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then return end
-
     local espData = ESPObjects[player]
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then
+        if espData then
+            if espData.Nametag then espData.Nametag.Enabled = false end
+            if espData.Tracer then espData.Tracer.Visible = false end
+            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
+                espData.OffscreenIndicator.Frame.Visible = false
+            end
+        end
+        return
+    end
     
     -- Check if ESP data exists and if the Nametag is still valid (not destroyed)
     if espData then
@@ -4645,6 +4662,7 @@ function CreateD3vToolHUD(parent)
 
     D3vToolLabel = Instance.new("TextLabel")
     D3vToolLabel.Name = "D3vToolLabel"
+    D3vToolLabel.Text = ""
     D3vToolLabel.BackgroundTransparency = 1
     D3vToolLabel.Font = Enum.Font.GothamBold
     D3vToolLabel.TextSize = 15
@@ -5826,6 +5844,7 @@ function ShowWorldHumList(page)
             editBtn.Visible = true
             
             local hl = Instance.new("Highlight")
+    hl.Enabled = not Flags["Settings/GhostMode"]
             hl.Name = "WorldHumSelectionHighlight"
             hl.Adornee = model
             hl.FillTransparency = 1
@@ -6680,45 +6699,19 @@ function UnifiedHeartbeat(dt)
     local ghostModeChanged = (ghostMode ~= lastGhostMode)
     lastGhostMode = ghostMode
 
-    if ghostModeChanged then
-        if ScreenGui then
-            ScreenGui.Enabled = not ghostMode
+    if ghostModeChanged and not ghostMode then
+        -- Restore visibility when Gh0st mode toggled off
+        if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
+            ClosestPlayerTrackerLabel.Visible = true
         end
-
-        if ghostMode then
-            for _, espData in pairs(ESPObjects) do
-                if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
-                if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
-                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
-                    espData.OffscreenIndicator.Frame.Visible = false
-                end
-            end
-
-            -- Ensure pooled objects are disabled during Gh0st mode
-            for _, obj in ipairs(PoolFolder:GetChildren()) do
-                pcall(function()
-                    if obj.Enabled then obj.Enabled = false end
-                end)
-            end
-
-            if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
-            if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
-            if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
-            if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
-        else
-            -- Restore visibility when Gh0st mode toggled off
-            if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
-                ClosestPlayerTrackerLabel.Visible = true
-            end
-            if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
-                PerformanceLabel.Visible = true
-            end
-            if LocalHealthHUD and not LocalHealthHUD.Visible then
-                LocalHealthHUD.Visible = true
-            end
-            if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
-                PlayerPanelFrame.Visible = true
-            end
+        if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
+            PerformanceLabel.Visible = true
+        end
+        if LocalHealthHUD and not LocalHealthHUD.Visible then
+            LocalHealthHUD.Visible = true
+        end
+        if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
+            PlayerPanelFrame.Visible = true
         end
     end
 
@@ -6887,6 +6880,32 @@ function UnifiedHeartbeat(dt)
     -- Periodic state enforcement for broken/highlighted parts (StreamingEnabled fix)
     if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
         lastStateEnforcement = now
+
+        if ScreenGui and ScreenGui.Enabled ~= (not ghostMode) then
+            ScreenGui.Enabled = not ghostMode
+        end
+
+        if ghostMode then
+            for _, espData in pairs(ESPObjects) do
+                if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
+                if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
+                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
+                    espData.OffscreenIndicator.Frame.Visible = false
+                end
+            end
+
+            -- Ensure pooled objects are disabled during Gh0st mode
+            for _, obj in ipairs(PoolFolder:GetChildren()) do
+                pcall(function()
+                    if obj.Enabled then obj.Enabled = false end
+                end)
+            end
+
+            if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
+            if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
+            if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
+            if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
+        end
 
         local enforcementMadeChange = false
         for path, data in pairs(Br3ak3rState.brokenSet) do
