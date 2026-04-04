@@ -2567,9 +2567,14 @@ function ObjectOccluded(Enabled, Origin, Position, Object)
     if typeof(Position) ~= "Vector3" then return false end
     
     -- Reuse filter table instead of creating new one every call
-    OcclusionFilter[1] = Object
-    OcclusionFilter[2] = LocalPlayer.Character
-    return Raycast(Origin, Position - Origin, OcclusionFilter)
+    OcclusionFilter[1] = LocalPlayer.Character
+    local hit = Raycast(Origin, Position - Origin, OcclusionFilter)
+    
+    if hit and hit.Instance and not hit.Instance:IsDescendantOf(Object) then
+        return true
+    end
+    
+    return false
 end
 
 -- OPTIMIZED: Reusable result table to avoid allocations per frame
@@ -2687,41 +2692,38 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        -- 3. VIEWPORT PRE-FILTER (Expensive, called only if in front and in range)
-        local _, rootOnScreen = Camera:WorldToViewportPoint(rootPos)
-        if not rootOnScreen then
-            continue
-        end
+        -- 3. VIEWPORT PRE-FILTER (Removed - allows targeting players when root is just off-screen)
 
         if Priority == "Random" then
             local PartName = BodyParts[math.random(#BodyParts)]
             local cache = CharCache[Player]
             local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
             if BodyPart then
-                local BodyPartPosition = BodyPart.Position
-                local Distance = (BodyPartPosition - CameraPosition).Magnitude
+                local ActualPosition = BodyPart.Position
+                local Distance = (ActualPosition - CameraPosition).Magnitude
 
                 if not DistanceCheck or Distance < DistanceLimit then
-                    if PredictionEnabled then
-                        local velocity = BodyPart.AssemblyLinearVelocity
-                        if typeof(velocity) ~= "Vector3" then
-                            velocity = Vector3.new(0, 0, 0)
-                        end
-                        BodyPartPosition = SolveTrajectory(
-                            BodyPartPosition,
-                            velocity,
-                            Distance / AimState.ProjectileSpeed,
-                            AimState.ProjectileGravity
-                        )
-                    end
-
-                    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(ActualPosition)
                     if OnScreen then
                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                         local dx, dy = screenX - crosshairX, screenY - crosshairY
                         local Magnitude = sqrt(dx * dx + dy * dy)
 
                         if Magnitude < FieldOfView then
+                            local TargetPosition = ActualPosition
+                            if PredictionEnabled then
+                                local velocity = BodyPart.AssemblyLinearVelocity
+                                if typeof(velocity) ~= "Vector3" then
+                                    velocity = Vector3.new(0, 0, 0)
+                                end
+                                TargetPosition = SolveTrajectory(
+                                    ActualPosition,
+                                    velocity,
+                                    Distance / AimState.ProjectileSpeed,
+                                    AimState.ProjectileGravity
+                                )
+                            end
+
                             if CandidateCount < maxCandsLimit then
                                 CandidateCount = CandidateCount + 1
                                 local entry = CandidateList[CandidateCount]
@@ -2735,7 +2737,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                                 entry.part = BodyPart
                                 entry.sx = screenX
                                 entry.sy = screenY
-                                entry.pos = BodyPartPosition
+                                entry.pos = TargetPosition
+                                entry.realPos = ActualPosition
                             end
                         end
                     end
@@ -2754,33 +2757,34 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     continue
                 end
 
-                local BodyPartPosition = BodyPart.Position
-                local Distance = (BodyPartPosition - CameraPosition).Magnitude
+                local ActualPosition = BodyPart.Position
+                local Distance = (ActualPosition - CameraPosition).Magnitude
 
                 if DistanceCheck and Distance >= DistanceLimit then
                     continue
                 end
 
-                if PredictionEnabled then
-                    local velocity = BodyPart.AssemblyLinearVelocity
-                    if typeof(velocity) ~= "Vector3" then
-                        velocity = Vector3.new(0, 0, 0)
-                    end
-                    BodyPartPosition = SolveTrajectory(
-                        BodyPartPosition,
-                        velocity,
-                        Distance / AimState.ProjectileSpeed,
-                        AimState.ProjectileGravity
-                    )
-                end
-
-                local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(BodyPartPosition)
+                local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(ActualPosition)
                 if OnScreen then
                     local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                     local dx, dy = screenX - crosshairX, screenY - crosshairY
                     local Magnitude = sqrt(dx * dx + dy * dy)
 
                     if Magnitude < FieldOfView then
+                        local TargetPosition = ActualPosition
+                        if PredictionEnabled then
+                            local velocity = BodyPart.AssemblyLinearVelocity
+                            if typeof(velocity) ~= "Vector3" then
+                                velocity = Vector3.new(0, 0, 0)
+                            end
+                            TargetPosition = SolveTrajectory(
+                                ActualPosition,
+                                velocity,
+                                Distance / AimState.ProjectileSpeed,
+                                AimState.ProjectileGravity
+                            )
+                        end
+
                         if CandidateCount < maxCandsLimit then
                             CandidateCount = CandidateCount + 1
                             local entry = CandidateList[CandidateCount]
@@ -2794,7 +2798,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                             entry.part = BodyPart
                             entry.sx = screenX
                             entry.sy = screenY
-                            entry.pos = BodyPartPosition
+                            entry.pos = TargetPosition
+                            entry.realPos = ActualPosition
                         end
                     end
                 end
@@ -2828,7 +2833,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
-                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
                     ClosestResult[3] = entry.part
@@ -2850,7 +2855,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.pos, entry.char) then
+        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
             continue
         end
 
@@ -2889,8 +2894,6 @@ function AimAt(Hitbox, Sensitivity)
         AimState.LastMouseMode = currentMode
         AimState.LastOriginX = nil
         AimState.LastOriginY = nil
-        AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
-        return
     end
 
     local currentTarget = Hitbox[1]
@@ -2898,8 +2901,6 @@ function AimAt(Hitbox, Sensitivity)
         AimState.LastAimbotTarget = currentTarget
         AimState.LastOriginX = nil
         AimState.LastOriginY = nil
-        AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
-        return
     end
 
     local targetPos = targetPart.Position
@@ -2940,20 +2941,6 @@ function AimAt(Hitbox, Sensitivity)
     AimState.LastOriginX = originX
     AimState.LastOriginY = originY
 
-    if lastOriginX and lastOriginY then
-        local jumpX = abs(originX - lastOriginX)
-        local jumpY = abs(originY - lastOriginY)
-
-        if jumpX > (viewportSize.X * AIM_ORIGIN_JUMP_RATIO) or jumpY > (viewportSize.Y * AIM_ORIGIN_JUMP_RATIO) then
-            AimState.AcquiringFrames = AIM_ACQUIRE_STABILIZE_FRAMES
-            return
-        end
-    end
-
-    if AimState.AcquiringFrames > 0 then
-        AimState.AcquiringFrames = AimState.AcquiringFrames - 1
-        return
-    end
 
     local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
     local dx, dy = targetX - originX, targetY - originY
@@ -6155,8 +6142,8 @@ UI.CreateNumericInput(AimTab, "FOV Radius", "Aimbot/FOV/Radius", Flags["Aimbot/F
 
 UI.CreateSection(AimTab, "Ballistics")
 UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateNumericInput(AimTab, "Bullet Speed", "Prediction/Velocity", Flags["Prediction/Velocity"], 100, 5000, 50, " st/s", function(v) ProjectileSpeed = v end)
-UI.CreateNumericInput(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", Flags["Prediction/GravityMultiplier"], 0, 5, 0.1, "x", function(v) GravityCorrection = v end)
+UI.CreateNumericInput(AimTab, "Bullet Speed", "Prediction/Velocity", Flags["Prediction/Velocity"], 100, 5000, 50, " st/s", function(v) AimState.ProjectileSpeed = v end)
+UI.CreateNumericInput(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", Flags["Prediction/GravityMultiplier"], 0, 5, 0.1, "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -6564,10 +6551,6 @@ function UpdateAimbot()
         return
     end
 
-    if Br3ak3rState.LEFT_CTRL_HELD then
-        ClearAimLockState(false)
-        return
-    end
 
     local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
     if not aimbotActive then
