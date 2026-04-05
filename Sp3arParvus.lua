@@ -6102,7 +6102,7 @@ function ShowWorldHumEditor(page, hum)
 
     UI.CreateSection(page, "Jump Settings")
     CreateWorldHumToggle(page, "Auto Jump Enabled", hum, "AutoJumpEnabled")
-    CreateWorldHumNumeric(page, "Jump Height", hum, "JumpHeight", 0, 500, 0.1)
+    CreateWorldHumNumeric(page, "Jump Height", hum, "JumpHeight", 0, 500, 1)
     CreateWorldHumNumeric(page, "Jump Power", hum, "JumpPower", 0, 500, 1)
     CreateWorldHumToggle(page, "Use Jump Power", hum, "UseJumpPower")
 
@@ -6110,7 +6110,7 @@ function ShowWorldHumEditor(page, hum)
     CreateWorldHumToggle(page, "Automatic Scaling Enabled", hum, "AutomaticScalingEnabled")
     CreateWorldHumNumeric(page, "Health", hum, "Health", 0, 100000, 1)
     CreateWorldHumNumeric(page, "Max Health", hum, "MaxHealth", 0, 100000, 1)
-    CreateWorldHumNumeric(page, "Hip Height", hum, "HipHeight", 0, 100, 0.01)
+    CreateWorldHumNumeric(page, "Hip Height", hum, "HipHeight", 0, 100, 1)
     CreateWorldHumNumeric(page, "Max Slope Angle", hum, "MaxSlopeAngle", 0, 90, 1)
     CreateWorldHumNumeric(page, "Walk Speed", hum, "WalkSpeed", 0, 500, 1)
 end
