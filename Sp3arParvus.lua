@@ -6242,7 +6242,7 @@ end, true)
 
 UI.CreateSection(HumanoidTab, "Jump Settings")
 UI.CreateToggle(HumanoidTab, "Auto Jump Enabled", "Humanoid/AutoJumpEnabled", Flags["Humanoid/AutoJumpEnabled"], function(v) _updateHum("AutoJumpEnabled", v) end, true)
-UI.CreateNumericInput(HumanoidTab, "Jump Height", "Humanoid/JumpHeight", Flags["Humanoid/JumpHeight"], 0, 500, 0.1, nil, function(v) _updateHum("JumpHeight", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Jump Height", "Humanoid/JumpHeight", Flags["Humanoid/JumpHeight"], 0, 500, 1, nil, function(v) _updateHum("JumpHeight", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Jump Power", "Humanoid/JumpPower", Flags["Humanoid/JumpPower"], 0, 500, 1, nil, function(v) _updateHum("JumpPower", v) end, true)
 UI.CreateToggle(HumanoidTab, "Use Jump Power", "Humanoid/UseJumpPower", Flags["Humanoid/UseJumpPower"], function(v) _updateHum("UseJumpPower", v) end, true)
 
@@ -6250,7 +6250,7 @@ UI.CreateSection(HumanoidTab, "Game")
 UI.CreateToggle(HumanoidTab, "Automatic Scaling Enabled", "Humanoid/AutomaticScalingEnabled", Flags["Humanoid/AutomaticScalingEnabled"], function(v) _updateHum("AutomaticScalingEnabled", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Health", "Humanoid/Health", Flags["Humanoid/Health"], 0, 2000, 1, nil, function(v) _updateHum("Health", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Max Health", "Humanoid/MaxHealth", Flags["Humanoid/MaxHealth"], 0, 2000, 1, nil, function(v) _updateHum("MaxHealth", v) end, true)
-UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 0.01, nil, function(v) _updateHum("HipHeight", v) end, true)
+UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 1, nil, function(v) _updateHum("HipHeight", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end, true)
 
