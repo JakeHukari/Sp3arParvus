@@ -42,41 +42,51 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Silent Aim**: Hit your targets without snapping your camera.
 *   **TriggerBot**: Automatic firing when a target is detected.
 *   **Physics Prediction**: Advanced velocity and gravity correction for projectiles (3155 velocity default).
+*   **Target Indicators**: Dynamic head and root dots that turn **Red** when locked-on by the aimbot.
 
 ### Visuals & ESP
 *   **Gh0st Mode**: Turns off all UI elements while still allowing functions like aimbot and br3ak3r.
 *   **Player ESP**: Full hitbox, nametag, distance tracking, team tracking, and tracer support.
-*   **Offscreen Indicators**: Never get snuck again.
+    *   **Distance-based Coloring**: Color-coded proximity: **Pink** (Closest), **Red** (≤2000 studs), **Yellow** (≤4000 studs), and **Green** (>4000 studs).
+    *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
+*   **Player Panel**: View the Top 10 closest players with names, distances, and 2D direction arrows.
+*   **Offscreen Indicators**: Customizable arrows that point to off-screen targets with distance and name info.
 *   **Fullbright**: Complete control over workspace lighting and sky hues.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
 
 ### Developer Utilities
+*   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC in the game.
 *   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls.
 *   **H1ghL1ghter**: Highlight parts and get full workspace path nametags.
+*   **D3v Tool**: Real-time HUD displaying World Time, Local Player Coordinates (LPC), and Mouse Coordinates (LMC).
 *   **Waypoint System**: Create and manage custom map markers, visible from anywhere.
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting.
-*   **Performance Monitor**: Real-time FPS, ping, and resource usage monitoring.
+*   **Performance Monitor**: Real-time FPS, ping, memory usage, and object counts (Broken/Highlighted).
 *   **Humanoid Editor**: Edit LocalPlayer humanoid properties like walkspeed, jump power, max-slope-angle, health, etc.
 
 ## Shortcut Keys
 
+### UI & Configuration
+*   **Menu Visibility**: `CapsLock`
+*   **Menu Minimize/Maximize**: `Ctrl + -`
+*   **Gh0st Mode**: `Ctrl + G`
+*   **Rejoin Server**: `Ctrl + R`
+*   **Unload Sp3arParvus**: `Ctrl + U`
+
 ### Combat & Accuracy
-*   **Aimbot Clutch**: Aimbot is **ON** by default, holding `Ctrl` will disable any aim-lock, auto-shoot, or silent aim for the duration that `Ctrl` is being held   
+*   **Aimbot Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
 
 ### Visuals & ESP
-*   **Menu Minimize/Maximize**: `Ctrl + -`
-*   **Menu Visability**: `CapsLock`
-*   **Gh0st Mode**: `Ctrl + G`
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
 *   **Fullbright**: `Ctrl + F`
 *   **Free-cam**: `Ctrl + P`
-*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**  
+*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**
 
 ### Developer Utilities
-*   **Br3ak3r**: `Ctrl + Left Click` to **Br3ak** local objects, `Ctrl + Z` to **Undo** object **Br3aks** in sequence, `Ctrl + X` to **Undo** ALL **Br3aks** instantly 
-*   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, 'Ctrl + Shift + Z' to undo
-*   **Rejoin Server**: `Ctrl + R`
-*   **Unload Sp3arParvus**: `Ctrl + U`  
+*   **D3v Tool**: `Ctrl + .` (Period)
+*   **Br3ak3r**: `Ctrl + Left Click` to **Br3ak** objects, `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
+*   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, `Ctrl + Shift + Z` to **Undo** last highlight
+
 
 ## Community & Contributing
 
