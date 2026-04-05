@@ -5848,7 +5848,7 @@ function ShowWorldHumList(page)
             hl.Name = "WorldHumSelectionHighlight"
             hl.Adornee = model
             hl.FillTransparency = 1
-            hl.OutlineColor = Color3.new(0, 0, 1) -- Blue
+            hl.OutlineColor = Color3.new(255, 255, 255) -- White
             hl.OutlineTransparency = 0
             hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             hl.Parent = model
