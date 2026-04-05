@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.5" --  Fixed 'label' Nameplate Issue in Gh0st Mode 
+local VERSION = "3.8.6" --  Ui enhancement 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
