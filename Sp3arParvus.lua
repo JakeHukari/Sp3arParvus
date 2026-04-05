@@ -5844,7 +5844,7 @@ function ShowWorldHumList(page)
             editBtn.Visible = true
             
             local hl = Instance.new("Highlight")
-    hl.Enabled = not Flags["Settings/GhostMode"]
+            hl.Enabled = not Flags["Settings/GhostMode"]
             hl.Name = "WorldHumSelectionHighlight"
             hl.Adornee = model
             hl.FillTransparency = 1
