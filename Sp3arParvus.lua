@@ -2206,11 +2206,12 @@ function UpdateLighting()
         end
     elseif fullDark then
         -- FullDark: ClockTime 0 (midnight), others original
+        Services.Lighting.ClockTime = 0
+        
         if FullbrightState.originalSettings then
             Services.Lighting.Ambient = FullbrightState.originalSettings.Ambient
             Services.Lighting.OutdoorAmbient = FullbrightState.originalSettings.OutdoorAmbient
             Services.Lighting.Brightness = FullbrightState.originalSettings.Brightness
-            Services.Lighting.ClockTime = 0
             Services.Lighting.FogEnd = FullbrightState.originalSettings.FogEnd
             Services.Lighting.GlobalShadows = FullbrightState.originalSettings.GlobalShadows
             
@@ -6772,13 +6773,13 @@ function UnifiedHeartbeat(dt)
         end
     end
 
+    UpdateLighting()
+
     if (now - lastStateEnforcement) > 0.1 or ghostModeChanged then
         lastStateEnforcement = now
         UpdateLocalHealthHUD()
         UpdateD3vTool()
     end
-    
-    UpdateLighting()
     ApplyHumanoidSettings()
     ApplyWorldHumanoidSettings()
     
