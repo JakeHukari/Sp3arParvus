@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.7" -- Fix StreamingEnabled Collision & State Persistence  
+local VERSION = "3.8.8" -- FullDark Lighting Management  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -353,6 +353,7 @@ local Flags = {
 
     -- Visuals
     ["Visuals/Fullbright"] = false,
+    ["Visuals/FullDark"] = false,
 
     -- Performance
     ["Performance/Enabled"] = true,
@@ -2145,23 +2146,28 @@ end))
 
 
 -- FULLBRIGHT SYSTEM
+-- LIGHTING MANAGEMENT SYSTEM (Fullbright / FullDark)
 
-function UpdateFullbright()
-    local currentState = Flags["Visuals/Fullbright"]
+function UpdateLighting()
+    local fullbright = Flags["Visuals/Fullbright"]
+    local fullDark = Flags["Visuals/FullDark"]
+    local currentState = fullbright or fullDark
     
     if currentState ~= FullbrightState.lastState then
         if currentState then
-            -- Store original settings
-            local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-            FullbrightState.originalSettings = {
-                Ambient = Services.Lighting.Ambient,
-                OutdoorAmbient = Services.Lighting.OutdoorAmbient,
-                Brightness = Services.Lighting.Brightness,
-                ClockTime = Services.Lighting.ClockTime,
-                FogEnd = Services.Lighting.FogEnd,
-                GlobalShadows = Services.Lighting.GlobalShadows,
-                AtmosphereDensity = atmosphere and atmosphere.Density or nil
-            }
+            -- Store original settings if not already stored
+            if not FullbrightState.originalSettings then
+                local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+                FullbrightState.originalSettings = {
+                    Ambient = Services.Lighting.Ambient,
+                    OutdoorAmbient = Services.Lighting.OutdoorAmbient,
+                    Brightness = Services.Lighting.Brightness,
+                    ClockTime = Services.Lighting.ClockTime,
+                    FogEnd = Services.Lighting.FogEnd,
+                    GlobalShadows = Services.Lighting.GlobalShadows,
+                    AtmosphereDensity = atmosphere and atmosphere.Density or nil
+                }
+            end
         else
             -- Restore original settings
             if FullbrightState.originalSettings then
@@ -2186,16 +2192,35 @@ function UpdateFullbright()
 
     if not currentState then return end
     
-    Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-    Services.Lighting.Brightness = 2
-    Services.Lighting.ClockTime = 12
-    Services.Lighting.FogEnd = 1e5
-    Services.Lighting.GlobalShadows = false
-    
-    local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
-    if atmosphere then
-        atmosphere.Density = 0
+    if fullbright then
+        Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Services.Lighting.Brightness = 2
+        Services.Lighting.ClockTime = 12
+        Services.Lighting.FogEnd = 1e5
+        Services.Lighting.GlobalShadows = false
+        
+        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere then
+            atmosphere.Density = 0
+        end
+    elseif fullDark then
+        -- FullDark: ClockTime 0 (midnight), others original
+        if FullbrightState.originalSettings then
+            Services.Lighting.Ambient = FullbrightState.originalSettings.Ambient
+            Services.Lighting.OutdoorAmbient = FullbrightState.originalSettings.OutdoorAmbient
+            Services.Lighting.Brightness = FullbrightState.originalSettings.Brightness
+            Services.Lighting.ClockTime = 0
+            Services.Lighting.FogEnd = FullbrightState.originalSettings.FogEnd
+            Services.Lighting.GlobalShadows = FullbrightState.originalSettings.GlobalShadows
+            
+            if FullbrightState.originalSettings.AtmosphereDensity then
+                local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = FullbrightState.originalSettings.AtmosphereDensity
+                end
+            end
+        end
     end
 end
 
@@ -5620,10 +5645,11 @@ function Cleanup()
         Br3ak3rState.hoverHL = nil
     end
 
-    -- Restore Fullbright if active
+    -- Restore Lighting if active
     if FullbrightState.lastState then
         Flags["Visuals/Fullbright"] = false
-        pcall(UpdateFullbright)
+        Flags["Visuals/FullDark"] = false
+        pcall(UpdateLighting)
     end
 
     -- Restore Humanoid settings
@@ -6211,7 +6237,20 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
         table.clear(PlayerOutlineObjects)
     end
 end)
-UI.CreateToggle(VisualsTab, "Fullbright (Remove Shadows/Fog)", "Visuals/Fullbright", Flags["Visuals/Fullbright"])
+UI.CreateToggle(VisualsTab, "Fullbright (Remove Shadows/Fog)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
+    if state then
+        Flags["Visuals/FullDark"] = false
+        local updater = UIState.Updaters["Visuals/FullDark"]
+        if updater then updater(false) end
+    end
+end)
+UI.CreateToggle(VisualsTab, "FullDark (Peaceful Night)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
+    if state then
+        Flags["Visuals/Fullbright"] = false
+        local updater = UIState.Updaters["Visuals/Fullbright"]
+        if updater then updater(false) end
+    end
+end)
 
 UI.CreateSection(VisualsTab, "Waypoints Settings")
 UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
@@ -6523,6 +6562,19 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.F then
             -- Ctrl+F: Toggle Fullbright
             Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
+            if Flags["Visuals/Fullbright"] then
+                Flags["Visuals/FullDark"] = false
+                local updater = UIState.Updaters["Visuals/FullDark"]
+                if updater then updater(false) end
+            end
+        elseif input.KeyCode == Enum.KeyCode.N then
+            -- Ctrl+N: Toggle FullDark
+            Flags["Visuals/FullDark"] = not Flags["Visuals/FullDark"]
+            if Flags["Visuals/FullDark"] then
+                Flags["Visuals/Fullbright"] = false
+                local updater = UIState.Updaters["Visuals/Fullbright"]
+                if updater then updater(false) end
+            end
         elseif input.KeyCode == Enum.KeyCode.G then
             -- Ctrl+G: Toggle Gh0st Mode
             Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
@@ -6726,7 +6778,7 @@ function UnifiedHeartbeat(dt)
         UpdateD3vTool()
     end
     
-    UpdateFullbright()
+    UpdateLighting()
     ApplyHumanoidSettings()
     ApplyWorldHumanoidSettings()
     
@@ -6779,6 +6831,14 @@ function UnifiedHeartbeat(dt)
             if wpData.Billboard then wpData.Billboard.Enabled = false end
             if wpData.PinBg then wpData.PinBg.Enabled = false end
         end
+    end
+    
+    -- Mutual Exclusivity Enforcement for Lighting
+    if Flags["Visuals/Fullbright"] and Flags["Visuals/FullDark"] then
+        -- This shouldn't happen if UI logic is correct, but let's be safe
+        Flags["Visuals/FullDark"] = false
+        local updater = UIState.Updaters["Visuals/FullDark"]
+        if updater then updater(false) end
     end
 
     local now = os.clock()
