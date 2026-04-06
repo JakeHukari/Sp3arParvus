@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.6" --  Ui enhancement 
+local VERSION = "3.8.7" -- Fix StreamingEnabled Collision & State Persistence  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -673,6 +673,7 @@ local Br3ak3rState = {
     CTRL_HELD = false,
     LEFT_CTRL_HELD = false,
     RIGHT_CTRL_HELD = false,
+    lastEnforcement = 0,
     br3akerRaycastParams = RaycastParams.new()
 }
 Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
@@ -857,13 +858,14 @@ function markBroken(part)
     local path = GetUniquePath(part)
     if Br3ak3rState.brokenSet[path] then return end
     
-    Br3ak3rState.brokenSet[path] = {instance = part, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
+    Br3ak3rState.brokenSet[path] = {instance = part, pos = part.Position, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
     Br3ak3rState.brokenCacheDirty = true
     
     -- Save original state for undo
     table.insert(Br3ak3rState.undoStack, {
         path = path,
         instance = part,
+        pos = part.Position,
         cc = part.CanCollide,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -950,12 +952,19 @@ function sweepUndo(dt)
         end
 
         if not part or not part.Parent then
-            if part and camPos then
-                local success, dist = pcall(function() return (part.Position - camPos).Magnitude end)
-                if success and dist < 250 then
+            local lastPos = entry.pos
+            if not lastPos and part then
+                pcall(function() lastPos = part.Position end)
+            end
+
+            if lastPos and camPos then
+                local dist = (lastPos - camPos).Magnitude
+                -- If we're within 250 studs and it still cannot be resolved, it's likely destroyed.
+                if dist < 250 then
                     keep = false
                 end
-            elseif not part then
+            elseif not lastPos then
+                -- No instance reference, no stored position, and can't resolve by path.
                 keep = false
             end
         end
@@ -991,18 +1000,21 @@ function pruneBrokenSet()
         
         if not part or not part.Parent then
             -- Instance is missing from Workspace.
-            -- If we have an old reference, check its position to see if it should be streamed in.
-            if part and camPos then
-                pcall(function()
-                    local dist = (part.Position - camPos).Magnitude
-                    -- If we're within 250 studs and it's not here, it's likely destroyed.
-                    if dist < 250 then
-                        Br3ak3rState.brokenSet[path] = nil
-                        removed = true
-                    end
-                end)
-            elseif not part then
-                -- No instance reference and can't resolve by path.
+            -- Use last known position for pruning check.
+            local lastPos = data.pos
+            if not lastPos and part then
+                pcall(function() lastPos = part.Position end)
+            end
+
+            if lastPos and camPos then
+                local dist = (lastPos - camPos).Magnitude
+                -- If we're within 250 studs and it still cannot be resolved, it's likely destroyed.
+                if dist < 250 then
+                    Br3ak3rState.brokenSet[path] = nil
+                    removed = true
+                end
+            elseif not lastPos then
+                -- No instance reference, no stored position, and can't resolve by path.
                 Br3ak3rState.brokenSet[path] = nil
                 removed = true
             end
@@ -6715,7 +6727,7 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
+    if (now - lastStateEnforcement) > 0.1 or ghostModeChanged then
         lastStateEnforcement = now
         UpdateLocalHealthHUD()
         UpdateD3vTool()
@@ -6878,8 +6890,8 @@ function UnifiedHeartbeat(dt)
     sweepHighlightedUndo(dt)
 
     -- Periodic state enforcement for broken/highlighted parts (StreamingEnabled fix)
-    if (now - lastStateEnforcement) > stateEnforcementRate or ghostModeChanged then
-        lastStateEnforcement = now
+    if (now - Br3ak3rState.lastEnforcement) > 0.1 or ghostModeChanged then
+        Br3ak3rState.lastEnforcement = now
 
         if ScreenGui and ScreenGui.Enabled ~= (not ghostMode) then
             ScreenGui.Enabled = not ghostMode
