@@ -858,7 +858,7 @@ function markBroken(part)
     local path = GetUniquePath(part)
     if Br3ak3rState.brokenSet[path] then return end
     
-    Br3ak3rState.brokenSet[path] = {instance = part, pos = part.Position, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
+    Br3ak3rState.brokenSet[path] = {instance = part, pos = part.Position, name = part.Name, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
     Br3ak3rState.brokenCacheDirty = true
     
     -- Save original state for undo
@@ -866,6 +866,7 @@ function markBroken(part)
         path = path,
         instance = part,
         pos = part.Position,
+        name = part.Name,
         cc = part.CanCollide,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -953,10 +954,6 @@ function sweepUndo(dt)
 
         if not part or not part.Parent then
             local lastPos = entry.pos
-            if not lastPos and part then
-                pcall(function() lastPos = part.Position end)
-            end
-
             if lastPos and camPos then
                 local dist = (lastPos - camPos).Magnitude
                 -- If we're within 250 studs and it still cannot be resolved, it's likely destroyed.
@@ -964,7 +961,7 @@ function sweepUndo(dt)
                     keep = false
                 end
             elseif not lastPos then
-                -- No instance reference, no stored position, and can't resolve by path.
+                -- No instance reference and no stored position.
                 keep = false
             end
         end
@@ -1000,21 +997,17 @@ function pruneBrokenSet()
         
         if not part or not part.Parent then
             -- Instance is missing from Workspace.
-            -- Use last known position for pruning check.
+            -- To distinguish between streamed-out and destroyed, we check distance.
             local lastPos = data.pos
-            if not lastPos and part then
-                pcall(function() lastPos = part.Position end)
-            end
-
             if lastPos and camPos then
                 local dist = (lastPos - camPos).Magnitude
-                -- If we're within 250 studs and it still cannot be resolved, it's likely destroyed.
+                -- If we're within 250 studs and it's not here, it's likely destroyed.
                 if dist < 250 then
                     Br3ak3rState.brokenSet[path] = nil
                     removed = true
                 end
             elseif not lastPos then
-                -- No instance reference, no stored position, and can't resolve by path.
+                -- No instance reference and no stored position.
                 Br3ak3rState.brokenSet[path] = nil
                 removed = true
             end
@@ -6890,7 +6883,7 @@ function UnifiedHeartbeat(dt)
     sweepHighlightedUndo(dt)
 
     -- Periodic state enforcement for broken/highlighted parts (StreamingEnabled fix)
-    if (now - Br3ak3rState.lastEnforcement) > 0.1 or ghostModeChanged then
+    if (now - Br3ak3rState.lastEnforcement) > stateEnforcementRate or ghostModeChanged then
         Br3ak3rState.lastEnforcement = now
 
         if ScreenGui and ScreenGui.Enabled ~= (not ghostMode) then
@@ -6923,9 +6916,26 @@ function UnifiedHeartbeat(dt)
         for path, data in pairs(Br3ak3rState.brokenSet) do
             local part = data.instance
             if not part or not part.Parent then
-                part = GetInstanceFromPath(path)
-                if part then data.instance = part end
+                -- Throttle re-resolution to once every 2 seconds
+                if not data.nextResolve or now > data.nextResolve then
+                    data.nextResolve = now + 2.0
+                    part = GetInstanceFromPath(path)
+                    
+                    -- Robust Fallback: Search nearby by name if path fails
+                    if not part and data.pos and data.name then
+                        local parts = Services.Workspace:GetPartBoundsInRadius(data.pos, 5)
+                        for _, p in ipairs(parts) do
+                            if p.Name == data.name and p:IsA("BasePart") then
+                                part = p
+                                break
+                            end
+                        end
+                    end
+                    
+                    if part then data.instance = part end
+                end
             end
+            
             if part and part.Parent then
                 if part.CanCollide ~= false then 
                     part.CanCollide = false 
