@@ -51,7 +51,8 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
 *   **Player Panel**: View the Top 10 closest players with names, distances, and 2D direction arrows.
 *   **Offscreen Indicators**: Customizable arrows that point to off-screen targets with distance and name info.
-*   **Fullbright**: Complete control over workspace lighting and sky hues.
+*   **Fullbright**: Sets the workspace lighting to maximum brightness & removes shadows, fog, and other ambient lighting effects.
+*   **FullDark**: Sets the workspace lighting to minimum brightness.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
 
 ### Developer Utilities
@@ -79,6 +80,7 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 ### Visuals & ESP
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
 *   **Fullbright**: `Ctrl + F`
+*   **FullDark**: `Ctrl + N`
 *   **Free-cam**: `Ctrl + P`
 *   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**
 
