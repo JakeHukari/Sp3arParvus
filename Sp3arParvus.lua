@@ -64,13 +64,148 @@ print("[Sp3arParvus] PlayerScripts ready!")
 task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
+-- STATE MANAGEMENT
+local CharCache = {}
+local AimState = {
+    Aimbot = false,
+    Trigger = false,
+    ProjectileSpeed = 3155,
+    ProjectileGravity = 196.2,
+    GravityCorrection = 2,
+    LastAimbotTarget = nil,
+    LastMouseMode = nil,
+    LastOriginX = nil,
+    LastOriginY = nil,
+    AcquiringFrames = 0
+}
+local Flags = {
+    ["Prediction/Velocity"] = 3155,
+    ["Prediction/GravityForce"] = 196.2,
+    ["Prediction/GravityMultiplier"] = 2,
+    ["Aimbot/AimLock"] = true,
+    ["Aimbot/AutoFire"] = false,
+    ["Aimbot/AlwaysEnabled"] = true,
+    ["Aimbot/Prediction"] = true,
+    ["Aimbot/TeamCheck"] = false,
+    ["Aimbot/VisibilityCheck"] = true,
+    ["Aimbot/Sensitivity"] = 15,
+    ["Aimbot/FOV/Radius"] = 100,
+    ["Aimbot/Priority"] = "Head",
+    ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
+    ["Trigger/AlwaysEnabled"] = false,
+    ["Trigger/HoldMouseButton"] = true,
+    ["Trigger/Delay"] = 0,
+    ["Trigger/FOV/Radius"] = 25,
+    ["ESP/Enabled"] = true,
+    ["ESP/Nametags"] = true,
+    ["ESP/Tracers"] = false,
+    ["ESP/OffscreenIndicators"] = false,
+    ["ESP/PlayerPanel"] = false,
+    ["ESP/PlayerOutlines"] = true,
+    ["Visuals/Fullbright"] = false,
+    ["Visuals/FullDark"] = false,
+    ["Performance/Enabled"] = true,
+    ["Br3ak3r/Enabled"] = true,
+    ["Waypoints/Enabled"] = true,
+    ["Settings/Freecam Toggle"] = true,
+    ["Settings/GhostMode"] = false,
+    ["Misc/D3vTool"] = true,
+    ["Humanoid/Archivable"] = true,
+    ["Humanoid/Archivable/Locked"] = false,
+    ["Humanoid/BreakJointsOnDeath"] = true,
+    ["Humanoid/BreakJointsOnDeath/Locked"] = false,
+    ["Humanoid/EvaluateStateMachine"] = true,
+    ["Humanoid/EvaluateStateMachine/Locked"] = false,
+    ["Humanoid/RequiresNeck"] = true,
+    ["Humanoid/RequiresNeck/Locked"] = false,
+    ["Humanoid/AutoRotate"] = true,
+    ["Humanoid/AutoRotate/Locked"] = false,
+    ["Humanoid/PlatformStand"] = false,
+    ["Humanoid/PlatformStand/Locked"] = false,
+    ["Humanoid/Sit"] = false,
+    ["Humanoid/Sit/Locked"] = false,
+    ["Humanoid/Jump"] = false,
+    ["Humanoid/Jump/Locked"] = false,
+    ["Humanoid/AutoJumpEnabled"] = false,
+    ["Humanoid/AutoJumpEnabled/Locked"] = false,
+    ["Humanoid/JumpHeight"] = 7.2,
+    ["Humanoid/JumpHeight/Locked"] = false,
+    ["Humanoid/JumpPower"] = 50,
+    ["Humanoid/JumpPower/Locked"] = false,
+    ["Humanoid/UseJumpPower"] = true,
+    ["Humanoid/UseJumpPower/Locked"] = false,
+    ["Humanoid/AutomaticScalingEnabled"] = true,
+    ["Humanoid/AutomaticScalingEnabled/Locked"] = false,
+    ["Humanoid/Health"] = 100,
+    ["Humanoid/Health/Locked"] = false,
+    ["Humanoid/MaxHealth"] = 100,
+    ["Humanoid/MaxHealth/Locked"] = false,
+    ["Humanoid/HipHeight"] = 1.35,
+    ["Humanoid/HipHeight/Locked"] = false,
+    ["Humanoid/MaxSlopeAngle"] = 89,
+    ["Humanoid/MaxSlopeAngle/Locked"] = false,
+    ["Humanoid/WalkSpeed"] = 16,
+    ["Humanoid/WalkSpeed/Locked"] = false
+}
+local UIState = {
+    MainFrame = nil,
+    Tabs = {},
+    CurrentTab = nil,
+    Visible = true,
+    ToggleMinimize = nil,
+    DraggableFrames = {},
+    Updaters = {},
+    ActiveDraggedFrame = nil,
+    DragStart = nil,
+    StartAbsPos = nil
+}
+local HumanoidState = {
+    originalSettings = {},
+    captured = false
+}
+local WorldHumState = {
+    selectedHum = nil,
+    Page = nil,
+    lockedProperties = {},
+    connections = {},
+    updaters = {},
+    listEntries = {},
+    selectionHighlight = nil
+}
+local Br3ak3rState = {
+    FilterDirty = true,
+    CLICKBREAK_ENABLED = true,
+    brokenSet = {},
+    brokenIgnoreCache = {},
+    scratchIgnore = {},
+    brokenCacheDirty = true,
+    undoStack = {},
+    hoverHL = nil,
+    CTRL_HELD = false,
+    LEFT_CTRL_HELD = false,
+    RIGHT_CTRL_HELD = false,
+    lastEnforcement = 0,
+    br3akerRaycastParams = RaycastParams.new()
+}
+Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
+local H1ghl1ght3rState = {
+    ENABLED = true,
+    highlightedSet = {},
+    undoStack = {},
+    SHIFT_HELD = false
+}
+local FullbrightState = {
+    lastState = false,
+    originalSettings = nil
+}
+
 -- RESPAWN HANDLING
 local LocalCharReady = true
 function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
-    Br3ak3rState.FilterDirty = true
+    if Br3ak3rState then Br3ak3rState.FilterDirty = true end
     -- Invalidate caches
-    table.clear(CharCache)
+    if CharCache then table.clear(CharCache) end
     
     -- Pause specifically for camera/PlayerModule setup
     task.wait(1.5) 
@@ -270,19 +405,6 @@ SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 -- CONFIG
 
 
--- Aimbot state variables
-local AimState = {
-    Aimbot = false,
-    Trigger = false,
-    ProjectileSpeed = 3155,
-    ProjectileGravity = 196.2,
-    GravityCorrection = 2,
-    LastAimbotTarget = nil,
-    LastMouseMode = nil,
-    LastOriginX = nil,
-    LastOriginY = nil,
-    AcquiringFrames = 0
-}
 
 local AIM_ACQUIRE_STABILIZE_FRAMES = 2
 local AIM_ORIGIN_JUMP_RATIO = 0.25
@@ -338,106 +460,6 @@ KnownBodyParts = {
     "Head", "HumanoidRootPart"
 }
 
--- Settings/Flags storage
-local Flags = {
-    -- Ballistics
-    ["Prediction/Velocity"] = 3155,
-    ["Prediction/GravityForce"] = 196.2,
-    ["Prediction/GravityMultiplier"] = 2,
-
-    -- Aimbot
-    ["Aimbot/AimLock"] = true,
-    ["Aimbot/AutoFire"] = false,
-    ["Aimbot/AlwaysEnabled"] = true,
-    ["Aimbot/Prediction"] = true,
-    ["Aimbot/TeamCheck"] = false,
-    ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 15,
-    ["Aimbot/FOV/Radius"] = 100,
-    ["Aimbot/Priority"] = "Head",
-    ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
-
-    ["Trigger/AlwaysEnabled"] = false,
-    ["Trigger/HoldMouseButton"] = true,
-    ["Trigger/Delay"] = 0,
-    ["Trigger/FOV/Radius"] = 25,
-
-    -- ESP
-    ["ESP/Enabled"] = true,
-    ["ESP/Nametags"] = true,
-    ["ESP/Tracers"] = false,
-    ["ESP/OffscreenIndicators"] = false, -- Off by default for performance
-    ["ESP/PlayerPanel"] = false, -- Top 10 closest players panel
-    ["ESP/PlayerOutlines"] = true, -- Player body part outlines (off by default for performance)
-
-    -- Visuals
-    ["Visuals/Fullbright"] = false,
-    ["Visuals/FullDark"] = false,
-
-    -- Performance
-    ["Performance/Enabled"] = true,
-    
-    -- Br3ak3r (Object Breaking Tool)
-    ["Br3ak3r/Enabled"] = true,
-    
-    -- Waypoints
-    ["Waypoints/Enabled"] = true,
-
-    -- Freecam
-    ["Settings/Freecam Toggle"] = true,
-    ["Settings/GhostMode"] = false,
-
-    -- Misc
-    ["Misc/D3vTool"] = true,
-
-    -- Humanoid
-    ["Humanoid/Archivable"] = true,
-    ["Humanoid/Archivable/Locked"] = false,
-    ["Humanoid/BreakJointsOnDeath"] = true,
-    ["Humanoid/BreakJointsOnDeath/Locked"] = false,
-    ["Humanoid/EvaluateStateMachine"] = true,
-    ["Humanoid/EvaluateStateMachine/Locked"] = false,
-    ["Humanoid/RequiresNeck"] = true,
-    ["Humanoid/RequiresNeck/Locked"] = false,
-    ["Humanoid/AutoRotate"] = true,
-    ["Humanoid/AutoRotate/Locked"] = false,
-    ["Humanoid/PlatformStand"] = false,
-    ["Humanoid/PlatformStand/Locked"] = false,
-    ["Humanoid/Sit"] = false,
-    ["Humanoid/Sit/Locked"] = false,
-    ["Humanoid/Jump"] = false,
-    ["Humanoid/Jump/Locked"] = false,
-    ["Humanoid/AutoJumpEnabled"] = false,
-    ["Humanoid/AutoJumpEnabled/Locked"] = false,
-    ["Humanoid/JumpHeight"] = 7.2,
-    ["Humanoid/JumpHeight/Locked"] = false,
-    ["Humanoid/JumpPower"] = 50,
-    ["Humanoid/JumpPower/Locked"] = false,
-    ["Humanoid/UseJumpPower"] = true,
-    ["Humanoid/UseJumpPower/Locked"] = false,
-    ["Humanoid/AutomaticScalingEnabled"] = true,
-    ["Humanoid/AutomaticScalingEnabled/Locked"] = false,
-    ["Humanoid/Health"] = 100,
-    ["Humanoid/Health/Locked"] = false,
-    ["Humanoid/MaxHealth"] = 100,
-    ["Humanoid/MaxHealth/Locked"] = false,
-    ["Humanoid/HipHeight"] = 1.35,
-    ["Humanoid/HipHeight/Locked"] = false,
-    ["Humanoid/MaxSlopeAngle"] = 89,
-    ["Humanoid/MaxSlopeAngle/Locked"] = false,
-    ["Humanoid/WalkSpeed"] = 16,
-    ["Humanoid/WalkSpeed/Locked"] = false
-}
-
-local UIState = {
-    MainFrame = nil,
-    Tabs = {},
-    CurrentTab = nil,
-    Visible = true,
-    ToggleMinimize = nil,
-    DraggableFrames = {},
-    Updaters = {}
-}
 
 local HUMANOID_PROPERTY_MAPPING = {
     ["Humanoid/Archivable"] = "Archivable",
@@ -474,20 +496,6 @@ local HUMANOID_ENFORCED_PROPERTIES = {
     ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle"
 }
 
-local HumanoidState = {
-    originalSettings = {},
-    captured = false
-}
-
-local WorldHumState = {
-    selectedHum = nil,
-    Page = nil,
-    lockedProperties = {}, -- [path] = { propName = value }
-    connections = {},
-    updaters = {},
-    listEntries = {},
-    selectionHighlight = nil
-}
 
 function TrackWorldHumConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
@@ -681,34 +689,6 @@ WaypointConnections = {}
 UNDO_LIMIT = 50
 RAYCAST_MAX_DISTANCE = 3000
 
--- Br3ak3r state
-local Br3ak3rState = {
-    CLICKBREAK_ENABLED = true,
-    brokenSet = {},
-    brokenIgnoreCache = {},
-    scratchIgnore = {},
-    brokenCacheDirty = true,
-    undoStack = {},
-    hoverHL = nil,
-    CTRL_HELD = false,
-    LEFT_CTRL_HELD = false,
-    RIGHT_CTRL_HELD = false,
-    lastEnforcement = 0,
-    br3akerRaycastParams = RaycastParams.new()
-}
-Br3ak3rState.br3akerRaycastParams.IgnoreWater = true
-
-local H1ghl1ght3rState = {
-    ENABLED = true,
-    highlightedSet = {},
-    undoStack = {},
-    SHIFT_HELD = false
-}
-
-local FullbrightState = {
-    lastState = false,
-    originalSettings = nil
-}
 
 function GetFullPath(instance)
     local path = instance.Name
@@ -1650,20 +1630,22 @@ function UI.CreateWindow(title)
         local delta = input.Position - UIState.DragStart
         local newAbsPos = UIState.StartAbsPos + Vector2new(delta.X, delta.Y)
         
-        local viewportSize = Camera.ViewportSize
+        local screenGui = Frame:FindFirstAncestorOfClass("ScreenGui")
+        local screenSize = screenGui and screenGui.AbsoluteSize or Camera.ViewportSize
+        
         local absoluteSize = Frame.AbsoluteSize
         local anchor = Frame.AnchorPoint
         
         local minX = anchor.X * absoluteSize.X
-        local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
+        local maxX = screenSize.X - (1 - anchor.X) * absoluteSize.X
         local minY = anchor.Y * absoluteSize.Y
-        local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
+        local maxY = screenSize.Y - (1 - anchor.Y) * absoluteSize.Y
         
         local clampedX = math.clamp(newAbsPos.X, minX, maxX)
         local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
         
         pcall(function()
-            Frame.Position = UDim2new(clampedX / viewportSize.X, 0, clampedY / viewportSize.Y, 0)
+            Frame.Position = UDim2new(clampedX / screenSize.X, 0, clampedY / screenSize.Y, 0)
         end)
     end))
 
@@ -1679,9 +1661,20 @@ function UI.CreateWindow(title)
         
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                UIState.ActiveDraggedFrame = Frame
-                UIState.DragStart = input.Position
-                UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
+                local absoluteSize = Frame.AbsoluteSize
+                local anchor = Frame.AnchorPoint
+                local minX = anchor.X * absoluteSize.X
+                local maxX = Camera.ViewportSize.X - (1 - anchor.X) * absoluteSize.X
+                local minY = anchor.Y * absoluteSize.Y
+                local maxY = Camera.ViewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
+                
+                local mouseLoc = UserInputService:GetMouseLocation()
+                if mouseLoc.X >= (Frame.AbsolutePosition.X) and mouseLoc.X <= (Frame.AbsolutePosition.X + absoluteSize.X) and
+                   mouseLoc.Y >= (Frame.AbsolutePosition.Y) and mouseLoc.Y <= (Frame.AbsolutePosition.Y + absoluteSize.Y) then
+                    UIState.ActiveDraggedFrame = Frame
+                    UIState.DragStart = input.Position
+                    UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
+                end
             end
         end))
     end
@@ -2248,7 +2241,6 @@ end
 
 -- Check if player is on enemy team
 -- Get character and check health (Heavily Optimized with Cache)
-CharCache = {} -- [Player] = {Char, Root, Humanoid, HealthInst, Squad}
 
 function GetCharacter(player)
     if not player then return nil end
@@ -6940,11 +6932,8 @@ function UnifiedHeartbeat(dt)
     end
     
     -- 2. Br3ak3r Updates
-    -- Update hover highlight (throttled to 30fps)
-    if (now - lastHoverUpdate) > hoverUpdateRate then
-        lastHoverUpdate = now
-        UpdateBr3ak3rHover()
-    end
+    -- Update hover highlight (Per-frame for responsiveness)
+    UpdateBr3ak3rHover()
     
     -- Periodic cleanup (throttled)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
