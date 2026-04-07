@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.0" -- Luau Performance & Memory Leak  
+local VERSION = "3.9.0" -- Memory Leak  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -1466,11 +1466,25 @@ function EnsureScreenGui()
         return ScreenGui
     end
 
-    -- Re-create if missing or parented to nil
+    -- PERFORMANCE FIX: If ScreenGui exists but Parent is nil, try to reparent instead of destroying
+    -- This prevents all children (ESP, UI) from being destroyed and recreated
     if ScreenGui then
-        pcall(function() ScreenGui:Destroy() end)
+        local success = pcall(function()
+            if gethui then
+                ScreenGui.Parent = gethui()
+            elseif syn and syn.protect_gui then
+                syn.protect_gui(ScreenGui)
+                ScreenGui.Parent = game.CoreGui
+            else
+                ScreenGui.Parent = game.CoreGui
+            end
+        end)
+        if success and ScreenGui.Parent then
+            return ScreenGui
+        end
     end
 
+    -- Truly recreate if missing or destroyed
     ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Enabled = not Flags["Settings/GhostMode"]
     ScreenGui.Name = "Sp3arParvusUI"
@@ -2470,10 +2484,27 @@ ClearSortCacheReferences = nil
 -- This is a safety net in case PlayerRemoving didn't fire properly
 -- Note: ESPObjects is declared later in file, so we need nil check
 function ValidateESPObjects()
+    -- Cleanup orphaned outlines first
+    if PlayerOutlineObjects then
+        for player, _ in pairs(PlayerOutlineObjects) do
+            if not player or not player.Parent then
+                pcall(RemovePlayerOutlines, player)
+            end
+        end
+    end
+
     if not ESPObjects then return end -- Safety: ESPObjects declared later in file
     for player, espData in pairs(ESPObjects) do
         -- Check if player is gone or orphaned
         if not player or not player.Parent then
+            -- Reset global references if this player was the target
+            if NearestPlayerRef == player then NearestPlayerRef = nil end
+            if AimState.LastAimbotTarget == player then AimState.LastAimbotTarget = nil end
+            if ClosestResult[1] == player then table.clear(ClosestResult) end
+
+            -- Also cleanup outlines for this player
+            pcall(RemovePlayerOutlines, player)
+            
             -- Cleanup the orphaned ESP
             pcall(function()
                 if espData.Nametag then espData.Nametag:Destroy() end
@@ -2662,6 +2693,7 @@ function ClearCandidateReferences()
             entry.char = nil
             entry.part = nil
             entry.pos = nil
+            entry.realPos = nil
         end
     end
     
@@ -4361,15 +4393,20 @@ function UpdateESP(now, player, isClosest)
     if espData then
         -- Check if nametag is valid
         local nametag = espData.Nametag
-        local isValid = nametag and nametag.Parent ~= nil
+        local targetGui = EnsureScreenGui()
         
-        if isValid and (not espData.NicknameLabel or not espData.NicknameLabel.Parent) then
+        -- PERFORMANCE FIX: Instead of checking if Parent is nil, check if it's NOT targetGui
+        -- If it's valid but unparented (or parented elsewhere), just fix the parentage
+        local isActuallyDestroyed = nametag and not pcall(function() return nametag.Parent end)
+        local isValid = nametag and not isActuallyDestroyed
+        
+        if isValid and (not espData.NicknameLabel or not pcall(function() return espData.NicknameLabel.Parent end)) then
             isValid = false
         end
         
         if not isValid then
             -- Recreate if missing
-             if nametag then nametag:Destroy() end
+             if nametag then pcall(function() nametag:Destroy() end) end
              if espData.Tracer then espData.Tracer:Destroy() end 
              
              -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
@@ -4395,7 +4432,6 @@ function UpdateESP(now, player, isClosest)
              espData = ESPObjects[player]
         else
             -- Ensure correctly parented if still valid
-            local targetGui = EnsureScreenGui()
             if nametag.Parent ~= targetGui then
                 nametag.Parent = targetGui
             end
@@ -6375,6 +6411,10 @@ function SetupPlayerESP(player)
             -- FIX: Invalidate character cache immediately on spawn
             CharCache[player] = nil
             
+            -- THREAD ACCUMULATION FIX: Check if wait-loop already active
+            if espData.waitingForChar then return end
+            espData.waitingForChar = true
+
             -- Wait for character to be fully parented and have a root part
             local attempts = 0
             local root = nil
@@ -6383,6 +6423,8 @@ function SetupPlayerESP(player)
                 root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                 attempts = attempts + 1
             until root or attempts > 10
+            
+            espData.waitingForChar = nil
             
             if player.Parent and Sp3arParvus.Active then
                 -- Force ESP update for this player when their character spawns
@@ -6407,6 +6449,9 @@ function SetupPlayerESP(player)
         
         -- Handle players whose character spawned before the event was hooked
         if player.Character then
+            if espData.waitingForChar then return end
+            espData.waitingForChar = true
+
             task.spawn(function()
                 local character = player.Character
                 
@@ -6421,6 +6466,8 @@ function SetupPlayerESP(player)
                     root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                     attempts = attempts + 1
                 until root or attempts > 10
+                
+                espData.waitingForChar = nil
                 
                 if player.Parent and Sp3arParvus.Active then
                     -- Reset cache to force full update
