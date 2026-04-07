@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.9" -- Br3ak3r Tool Persistence and Cache Limit Fix  
+local VERSION = "3.9.0" -- Luau Performance & Memory Leak  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -68,6 +68,7 @@ print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - i
 local LocalCharReady = true
 function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
+    Br3ak3rState.FilterDirty = true
     -- Invalidate caches
     table.clear(CharCache)
     
@@ -184,8 +185,11 @@ end
 local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- Math shortcuts
-abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+-- Performance Localization
+local Vector3new, Vector2new, CFramenew, UDim2new, Instancenew, RaycastParamsnew, Color3fromRGB, Color3new = 
+    Vector3.new, Vector2.new, CFrame.new, UDim2.new, Instance.new, RaycastParams.new, Color3.fromRGB, Color3.new
+local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
+local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 local function SafeSetProp(obj, prop, val)
     if obj[prop] ~= val then
@@ -196,7 +200,6 @@ end
 local function SafeGetProp(obj, prop)
     return obj[prop]
 end
-deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
@@ -207,6 +210,22 @@ local TWEENS = {
     BACK = TweenInfo.new(0.3, Enum.EasingStyle.Back),
     DRAG = TweenInfo.new(0.05)
 }
+
+-- Per-frame Viewport Point Caching
+local ViewportCache = {}
+TrackConnection(RunService.RenderStepped:Connect(function()
+    table.clear(ViewportCache)
+end))
+
+local function GetViewportPoint(worldPos)
+    if ViewportCache[worldPos] then
+        local entry = ViewportCache[worldPos]
+        return entry[1], entry[2]
+    end
+    local screenPos, onScreen = Camera:WorldToViewportPoint(worldPos)
+    ViewportCache[worldPos] = {screenPos, onScreen}
+    return screenPos, onScreen
+end
 
 -- Cached players list (Event-based caching prevents allocation per frame)
 local cachedPlayersList = {}
@@ -701,7 +720,9 @@ function GetFullPath(instance)
     return path
 end
 
+local PathCache = setmetatable({}, {__mode = "k"})
 function GetUniquePath(instance)
+    if PathCache[instance] then return PathCache[instance] end
     local path = ""
     local current = instance
     while current and current ~= game do
@@ -719,6 +740,7 @@ function GetUniquePath(instance)
         path = name .. "[" .. index .. "]" .. (path == "" and "" or "\1" .. path)
         current = parent
     end
+    PathCache[instance] = path
     return path
 end
 
@@ -766,6 +788,7 @@ end
 
 -- Rebuild the broken parts ignore cache for raycasts
 function RebuildBrokenIgnore()
+    Br3ak3rState.FilterDirty = true
     if not next(Br3ak3rState.brokenSet) then
         table.clear(Br3ak3rState.brokenIgnoreCache)
         Br3ak3rState.brokenCacheDirty = false
@@ -809,46 +832,41 @@ function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
         RebuildBrokenIgnore()
     end
     
-    local ignore = Br3ak3rState.scratchIgnore
-    -- Optimization: Instead of clearing and repopulating every frame, 
-    -- we manage the table indices directly if possible, or use table.clear
-    table.clear(ignore)
-    
-    local ignoreCount = 0
-    
-    -- Always prioritize ignoring the local character
-    if ignoreLocalChar then
-        local ch = LocalPlayer.Character
-        if ch then
-            ignoreCount = ignoreCount + 1
-            ignore[ignoreCount] = ch
+    if Br3ak3rState.FilterDirty or extraIgnore then
+        local ignore = Br3ak3rState.scratchIgnore
+        table.clear(ignore)
+        
+        local ignoreCount = 0
+        if ignoreLocalChar then
+            local ch = LocalPlayer.Character
+            if ch then
+                ignoreCount = ignoreCount + 1
+                ignore[ignoreCount] = ch
+            end
         end
-    end
-    
-    -- Add extra ignore items
-    if extraIgnore then
-        for i = 1, #extraIgnore do
-            local item = extraIgnore[i]
+        
+        if extraIgnore then
+            for i = 1, #extraIgnore do
+                local item = extraIgnore[i]
+                if item then
+                    ignoreCount = ignoreCount + 1
+                    ignore[ignoreCount] = item
+                end
+            end
+        end
+        
+        local brokenCacheLen = #Br3ak3rState.brokenIgnoreCache
+        for i = 1, brokenCacheLen do
+            local item = Br3ak3rState.brokenIgnoreCache[i]
             if item then
                 ignoreCount = ignoreCount + 1
                 ignore[ignoreCount] = item
             end
         end
+        
+        Br3ak3rState.br3akerRaycastParams.FilterDescendantsInstances = ignore
+        if not extraIgnore then Br3ak3rState.FilterDirty = false end
     end
-    
-    -- Add broken parts to ignore list
-    -- Use cached length to avoid repeated table length lookups
-    local brokenCacheLen = #Br3ak3rState.brokenIgnoreCache
-    for i = 1, brokenCacheLen do
-        local item = Br3ak3rState.brokenIgnoreCache[i]
-        if item then
-            ignoreCount = ignoreCount + 1
-            ignore[ignoreCount] = item
-        end
-    end
-    
-    -- FilterType already set at initialization
-    Br3ak3rState.br3akerRaycastParams.FilterDescendantsInstances = ignore
     
     return Services.Workspace:Raycast(origin, direction, Br3ak3rState.br3akerRaycastParams)
 end
@@ -1069,7 +1087,12 @@ function markHighlighted(part)
     })
 
     if #H1ghl1ght3rState.undoStack > UNDO_LIMIT then
-        table.remove(H1ghl1ght3rState.undoStack, 1)
+        local evicted = table.remove(H1ghl1ght3rState.undoStack, 1)
+        if evicted then
+            if evicted.hl then pcall(function() evicted.hl:Destroy() end) end
+            if evicted.bg then pcall(function() evicted.bg:Destroy() end) end
+            if evicted.part then H1ghl1ght3rState.highlightedSet[evicted.part] = nil end
+        end
     end
 
     -- Force visibility so the Highlight is visible on transparent objects
@@ -1423,7 +1446,12 @@ function ReclampAllUI()
 end
 
 -- Listen for viewport changes to re-clamp UI
-TrackConnection(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(ReclampAllUI))
+local ViewportSizeConn = nil
+local function ConnectViewportSize()
+    if ViewportSizeConn then ViewportSizeConn:Disconnect() end
+    ViewportSizeConn = TrackConnection(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(ReclampAllUI))
+end
+ConnectViewportSize()
 
 -- Responsive sizing helpers
 function GetMainFrameSize()
@@ -1610,62 +1638,50 @@ function UI.CreateWindow(title)
     UIState.MainFrame = MainFrame
     UIState.ContentArea = ContentArea
     UIState.TabContainer = TabContainer
+    UIState.ActiveDraggedFrame = nil
+    UIState.DragStart = nil
+    UIState.StartAbsPos = nil
+
+    -- Centralized Dragging Handler
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        local Frame = UIState.ActiveDraggedFrame
+        if not Frame or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        
+        local delta = input.Position - UIState.DragStart
+        local newAbsPos = UIState.StartAbsPos + Vector2new(delta.X, delta.Y)
+        
+        local viewportSize = Camera.ViewportSize
+        local absoluteSize = Frame.AbsoluteSize
+        local anchor = Frame.AnchorPoint
+        
+        local minX = anchor.X * absoluteSize.X
+        local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
+        local minY = anchor.Y * absoluteSize.Y
+        local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
+        
+        local clampedX = math.clamp(newAbsPos.X, minX, maxX)
+        local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
+        
+        pcall(function()
+            Frame.Position = UDim2new(clampedX / viewportSize.X, 0, clampedY / viewportSize.Y, 0)
+        end)
+    end))
+
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            UIState.ActiveDraggedFrame = nil
+        end
+    end))
 
     -- Dragging Logic Helper
-    -- MEMORY LEAK FIX: Track ALL connections including frame-level ones
-    -- CRITICAL FIX: Don't create new Tweens every frame - only update position directly
-    -- RESPONSIVE FIX: Update to use Scale-based positioning and screen bounding
     local function MakeDraggable(Frame)
         table.insert(UIState.DraggableFrames, Frame)
-        local dragging, dragInput, dragStart, startAbsPos
         
-        -- Track frame-level connections for cleanup
         TrackConnection(Frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position
-                -- Store the initial anchor position in absolute pixels
-                startAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
-            end
-        end))
-        
-        TrackConnection(Frame.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end))
-        
-        TrackConnection(Frame.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                dragInput = input
-            end
-        end))
-        
-        -- CRITICAL MEMORY FIX: Update position DIRECTLY instead of creating new Tweens every frame
-        TrackConnection(UserInputService.InputChanged:Connect(function(input)
-            if input == dragInput and dragging then
-                local delta = input.Position - dragStart
-                local newAbsPos = startAbsPos + Vector2.new(delta.X, delta.Y)
-                
-                local viewportSize = Camera.ViewportSize
-                local absoluteSize = Frame.AbsoluteSize
-                local anchor = Frame.AnchorPoint
-                
-                -- MATHEMATICAL BOUNDING: Clamp against ViewportSize using AbsoluteSize and AnchorPoint
-                local minX = anchor.X * absoluteSize.X
-                local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
-                local minY = anchor.Y * absoluteSize.Y
-                local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
-                
-                local clampedX = math.clamp(newAbsPos.X, minX, maxX)
-                local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
-                
-                -- Update to SCALE for responsiveness
-                pcall(function()
-                    local clampedX = math.clamp(newAbsPos.X, minX, maxX)
-                    local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
-                    Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
-                end)
+                UIState.ActiveDraggedFrame = Frame
+                UIState.DragStart = input.Position
+                UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
             end
         end))
     end
@@ -2141,6 +2157,7 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     local newCamera = Workspace.CurrentCamera
     if newCamera then
         Camera = newCamera
+        if ConnectViewportSize then ConnectViewportSize() end
     end
 end))
 
@@ -2731,7 +2748,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local Distance = (ActualPosition - CameraPosition).Magnitude
 
                 if not DistanceCheck or Distance < DistanceLimit then
-                    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(ActualPosition)
+                    local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
                     if OnScreen then
                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                         local dx, dy = screenX - crosshairX, screenY - crosshairY
@@ -2792,7 +2809,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     continue
                 end
 
-                local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(ActualPosition)
+                local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
                 if OnScreen then
                     local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                     local dx, dy = screenX - crosshairX, screenY - crosshairY
@@ -2953,7 +2970,7 @@ function AimAt(Hitbox, Sensitivity)
         )
     end
 
-    local ScreenPosition, OnScreen = Camera:WorldToViewportPoint(targetPos)
+    local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
     if not OnScreen or ScreenPosition.Z <= 0 then
         return
     end
@@ -3098,10 +3115,10 @@ function GetEdgePosition(now, worldPosition)
     
     local viewportSize = cachedCameraData.viewportSize
     
-    -- Still need to call WorldToViewportPoint per-player (can't cache this)
+    -- Still need to call WorldToViewportPoint per-player (using centralized caching)
     if not Camera then Camera = Workspace.CurrentCamera end
     if not Camera then return nil, nil, nil, false end
-    local screenPos, onScreen = Camera:WorldToViewportPoint(worldPosition)
+    local screenPos, onScreen = GetViewportPoint(worldPosition)
     
     -- If on screen, return nil (use normal nametag)
     if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
@@ -4502,7 +4519,7 @@ function UpdateESP(now, player, isClosest)
 
     -- Update tracer (LOD: skip for distant players to save performance)
     if espData.Tracer and Flags["ESP/Tracers"] and distance <= 2000 then
-        local screenPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+        local screenPos, onScreen = GetViewportPoint(rootPart.Position)
         if onScreen then
             local tracerLine = espData.Tracer
             local viewportSize = Camera.ViewportSize
@@ -5043,6 +5060,7 @@ TrackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
 local newCamera = workspace.CurrentCamera
 if newCamera then
 Camera = newCamera
+if ConnectViewportSize then ConnectViewportSize() end
 end
 end))
 
@@ -5542,6 +5560,9 @@ function Cleanup()
     UIState.MainFrame = nil
     UIState.ContentArea = nil
     UIState.TabContainer = nil
+    UIState.ActiveDraggedFrame = nil
+    UIState.DragStart = nil
+    UIState.StartAbsPos = nil
     
     -- Cleanup ESP objects
     for player, espData in pairs(ESPObjects) do
@@ -5687,6 +5708,8 @@ function Cleanup()
     table.clear(PlayerPanelRows)
     
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
+    table.clear(PathCache)
+    table.clear(ViewportCache)
     for p, c in pairs(CharCache) do
         c.Char = nil; c.HumanoidRootPart = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil; c.Head = nil
     end
@@ -6495,7 +6518,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             
             local deleted = false
             for id, wpData in pairs(ActiveWaypoints) do
-                local screenPos, onScreen = Camera:WorldToViewportPoint(wpData.Position)
+                local screenPos, onScreen = GetViewportPoint(wpData.Position)
                 
                 -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
                 local screenClose = false
@@ -6779,9 +6802,9 @@ function UnifiedHeartbeat(dt)
         lastStateEnforcement = now
         UpdateLocalHealthHUD()
         UpdateD3vTool()
+        ApplyHumanoidSettings()
+        ApplyWorldHumanoidSettings()
     end
-    ApplyHumanoidSettings()
-    ApplyWorldHumanoidSettings()
     
     if (now - lastHumanoidSync) > humanoidSyncRate then
         lastHumanoidSync = now
