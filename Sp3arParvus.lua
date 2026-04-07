@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.8.8" -- FullDark Lighting Management  
+local VERSION = "3.8.9" -- Br3ak3r Tool Persistence and Cache Limit Fix  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -858,6 +858,11 @@ function markBroken(part)
     if not part or not part:IsA("BasePart") then return end
     local path = GetUniquePath(part)
     if Br3ak3rState.brokenSet[path] then return end
+
+    -- Reset all if limit reached before adding new break
+    if #Br3ak3rState.undoStack >= UNDO_LIMIT then
+        unbreakAll()
+    end
     
     Br3ak3rState.brokenSet[path] = {instance = part, pos = part.Position, name = part.Name, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
     Br3ak3rState.brokenCacheDirty = true
@@ -872,11 +877,6 @@ function markBroken(part)
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     })
-    
-    -- Limit undo stack size
-    if #Br3ak3rState.undoStack > UNDO_LIMIT then
-        table.remove(Br3ak3rState.undoStack, 1)
-    end
     
     -- Hide the part (semi-transparent)
     part.CanCollide = false
@@ -6998,20 +6998,22 @@ function UnifiedHeartbeat(dt)
             end
             
             if part and part.Parent then
-                if part.CanCollide ~= false then 
-                    part.CanCollide = false 
-                    enforcementMadeChange = true
-                end
-                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
-                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-                if part.Transparency ~= targetT then 
-                    part.Transparency = targetT 
-                    enforcementMadeChange = true
-                end
-                if part.LocalTransparencyModifier ~= targetLTM then 
-                    part.LocalTransparencyModifier = targetLTM 
-                    enforcementMadeChange = true
-                end
+                pcall(function()
+                    if part.CanCollide ~= false then 
+                        part.CanCollide = false 
+                        enforcementMadeChange = true
+                    end
+                    local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+                    local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+                    if part.Transparency ~= targetT then 
+                        part.Transparency = targetT 
+                        enforcementMadeChange = true
+                    end
+                    if part.LocalTransparencyModifier ~= targetLTM then 
+                        part.LocalTransparencyModifier = targetLTM 
+                        enforcementMadeChange = true
+                    end
+                end)
             end
         end
         if enforcementMadeChange then
