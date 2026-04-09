@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.2" -- Fix Broken Minimize Functionality  
+local VERSION = "3.9.2" -- GetSortedPlayersByDistance bug 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -97,6 +97,7 @@ local Flags = {
     ["Trigger/Delay"] = 0,
     ["Trigger/FOV/Radius"] = 25,
     ["ESP/Enabled"] = true,
+    ["ESP/MaxDistance"] = 5000,
     ["ESP/Nametags"] = true,
     ["ESP/Tracers"] = false,
     ["ESP/OffscreenIndicators"] = false,
@@ -6285,6 +6286,7 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
         end
     end
 end)
+UI.CreateNumericInput(VisualsTab, "Max ESP Distance", "ESP/MaxDistance", Flags["ESP/MaxDistance"], 100, 10000, 100, " studs")
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
 UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", Flags["ESP/Tracers"])
 UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", Flags["ESP/OffscreenIndicators"], function(state)
