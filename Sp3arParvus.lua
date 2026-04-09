@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.0" -- Memory Leak  
+local VERSION = "3.9.1" -- Br3ak3r Collision Property Persistence 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -862,7 +862,16 @@ function markBroken(part)
         unbreakAll()
     end
     
-    Br3ak3rState.brokenSet[path] = {instance = part, pos = part.Position, name = part.Name, cc = part.CanCollide, ltm = part.LocalTransparencyModifier, t = part.Transparency}
+    Br3ak3rState.brokenSet[path] = {
+        instance = part, 
+        pos = part.Position, 
+        name = part.Name, 
+        cc = part.CanCollide, 
+        ct = part.CanTouch,
+        cq = part.CanQuery,
+        ltm = part.LocalTransparencyModifier, 
+        t = part.Transparency
+    }
     Br3ak3rState.brokenCacheDirty = true
     
     -- Save original state for undo
@@ -872,12 +881,16 @@ function markBroken(part)
         pos = part.Position,
         name = part.Name,
         cc = part.CanCollide,
+        ct = part.CanTouch,
+        cq = part.CanQuery,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     })
     
     -- Hide the part (semi-transparent)
     part.CanCollide = false
+    pcall(function() part.CanTouch = false end)
+    pcall(function() part.CanQuery = false end)
     part.LocalTransparencyModifier = 0.5
     part.Transparency = 0.5
 end
@@ -899,6 +912,8 @@ function unbreakLast()
     if part then
         -- Restore original state
         part.CanCollide = entry.cc
+        pcall(function() part.CanTouch = entry.ct end)
+        pcall(function() part.CanQuery = entry.cq end)
         part.LocalTransparencyModifier = entry.ltm
         part.Transparency = entry.t
     end
@@ -914,6 +929,8 @@ function unbreakAll()
             end
             if part and part.Parent and type(data) == "table" then
                 part.CanCollide = data.cc
+                pcall(function() part.CanTouch = data.ct end)
+                pcall(function() part.CanQuery = data.cq end)
                 part.LocalTransparencyModifier = data.ltm
                 part.Transparency = data.t
             end
@@ -5651,6 +5668,8 @@ function Cleanup()
             end
             if part and part.Parent and type(data) == "table" then
                 part.CanCollide = data.cc
+                pcall(function() part.CanTouch = data.ct end)
+                pcall(function() part.CanQuery = data.cq end)
                 part.LocalTransparencyModifier = data.ltm
                 part.Transparency = data.t
             end
@@ -7057,13 +7076,31 @@ function UnifiedHeartbeat(dt)
             end
             
             if part and part.Parent then
+                -- Enforce collision properties (CanCollide, CanTouch, CanQuery)
                 pcall(function()
                     if part.CanCollide ~= false then 
                         part.CanCollide = false 
                         enforcementMadeChange = true
                     end
+                end)
+                pcall(function()
+                    if part.CanTouch ~= false then
+                        part.CanTouch = false
+                        enforcementMadeChange = true
+                    end
+                end)
+                pcall(function()
+                    if part.CanQuery ~= false then
+                        part.CanQuery = false
+                        enforcementMadeChange = true
+                    end
+                end)
+                
+                -- Enforce transparency properties
+                pcall(function()
                     local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
                     local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+                    
                     if part.Transparency ~= targetT then 
                         part.Transparency = targetT 
                         enforcementMadeChange = true
