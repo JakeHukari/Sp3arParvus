@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.1" -- Br3ak3r Collision Property Persistence 
+local VERSION = "3.9.2" -- Fix Broken Minimize Functionality  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -3324,6 +3324,7 @@ function CreateClosestPlayerTracker()
     ClosestPlayerTrackerLabel = Instance.new("Frame")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromScale(0.12, 0.08)
+    local OriginalSize = ClosestPlayerTrackerLabel.Size
     ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 0) -- Top Center
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
     
@@ -3422,12 +3423,16 @@ function CreateClosestPlayerTracker()
     TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         TrackerMinimized = not TrackerMinimized
         if TrackerMinimized then
-            ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 30)
-            textContainer.Visible = false
+            sizeConstraint.Parent = nil
+            TweenService:Create(ClosestPlayerTrackerLabel, TWEENS.SMOOTH, {Size = UDim2.fromOffset(220, 30)}):Play()
+            TrackerNameLabel.Visible = false
+            TrackerDistanceLabel.Visible = false
             minimizeBtn.Text = "+"
         else
-            ClosestPlayerTrackerLabel.Size = TrackerOriginalSize
-            textContainer.Visible = true
+            sizeConstraint.Parent = ClosestPlayerTrackerLabel
+            TweenService:Create(ClosestPlayerTrackerLabel, TWEENS.SMOOTH, {Size = OriginalSize}):Play()
+            TrackerNameLabel.Visible = true
+            TrackerDistanceLabel.Visible = true
             minimizeBtn.Text = "−"
         end
     end))
@@ -3604,6 +3609,7 @@ function CreatePlayerPanel()
     PlayerPanelFrame = Instance.new("Frame")
     PlayerPanelFrame.Name = "PlayerPanel"
     PlayerPanelFrame.Size = UDim2.fromScale(0.15, 0.45)
+    local OriginalSize = PlayerPanelFrame.Size
     PlayerPanelFrame.Position = UDim2.fromScale(0, 0.5) -- Left Center
     PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
     
@@ -3807,11 +3813,13 @@ function CreatePlayerPanel()
     TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         PlayerPanelMinimized = not PlayerPanelMinimized
         if PlayerPanelMinimized then
-            PlayerPanelFrame.Size = UDim2.fromOffset(320, 30)
+            sizeConstraint.Parent = nil
+            TweenService:Create(PlayerPanelFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(320, 30)}):Play()
             content.Visible = false
             minimizeBtn.Text = "+"
         else
-            PlayerPanelFrame.Size = UDim2.fromOffset(320, 340)
+            sizeConstraint.Parent = PlayerPanelFrame
+            TweenService:Create(PlayerPanelFrame, TWEENS.SMOOTH, {Size = OriginalSize}):Play()
             content.Visible = true
             minimizeBtn.Text = "−"
         end
@@ -4820,6 +4828,7 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel = Instance.new("Frame")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
+    local OriginalSize = PerformanceLabel.Size
     PerformanceLabel.Position = UDim2.new(1, -240, 0, 100) -- Next to player list
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
     
@@ -4929,12 +4938,14 @@ function CreatePerformanceDisplay(parent)
     TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         PerfMinimized = not PerfMinimized
         if PerfMinimized then
-            PerformanceLabel.Size = UDim2.fromOffset(180, 28)
+            sizeConstraint.Parent = nil
+            TweenService:Create(PerformanceLabel, TWEENS.SMOOTH, {Size = UDim2.fromOffset(180, 28)}):Play()
             container.Visible = false
             headerTitle.Text = "Performance Stats"
             minimizeBtn.Text = "+"
         else
-            PerformanceLabel.Size = PerfOriginalSize
+            sizeConstraint.Parent = PerformanceLabel
+            TweenService:Create(PerformanceLabel, TWEENS.SMOOTH, {Size = OriginalSize}):Play()
             container.Visible = true
             headerTitle.Text = "Performance"
             minimizeBtn.Text = "−"
