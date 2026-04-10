@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.2" -- GetSortedPlayersByDistance bug 
+local VERSION = "3.9.3" -- Fix for Collision Persistence on Chunk Reload 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -754,6 +754,25 @@ function GetInstanceFromPath(uniquePath)
     return current
 end
 
+function RobustResolvePart(path, data)
+    local part = GetInstanceFromPath(path)
+    if part and part.Parent and part:IsA("BasePart") then
+        if not data.pos or (part.Position - data.pos).Magnitude < 0.1 then
+            return part
+        end
+    end
+
+    if data.pos and data.name then
+        local parts = Services.Workspace:GetPartBoundsInRadius(data.pos, 0.5)
+        for _, p in ipairs(parts) do
+            if p.Name == data.name and p:IsA("BasePart") then
+                return p
+            end
+        end
+    end
+    return nil
+end
+
 -- PERFORMANCE FIX: Cache filter type ONCE at startup
 Br3ak3rFilterType = (function()
     local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
@@ -780,7 +799,7 @@ function RebuildBrokenIgnore()
     for path, data in pairs(Br3ak3rState.brokenSet) do
         local part = data.instance
         if not part or not part.Parent then
-            part = GetInstanceFromPath(path)
+            part = RobustResolvePart(path, data)
             if part then data.instance = part end
         end
         if part and part:IsDescendantOf(Services.Workspace) then
@@ -904,7 +923,7 @@ function unbreakLast()
     local path = entry.path
     local part = entry.instance
     if not part or not part.Parent then
-        part = GetInstanceFromPath(path)
+        part = RobustResolvePart(path, entry)
     end
     
     Br3ak3rState.brokenSet[path] = nil
@@ -926,7 +945,7 @@ function unbreakAll()
         pcall(function()
             local part = data.instance
             if not part or not part.Parent then
-                part = GetInstanceFromPath(path)
+                part = RobustResolvePart(path, data)
             end
             if part and part.Parent and type(data) == "table" then
                 part.CanCollide = data.cc
@@ -962,7 +981,7 @@ function sweepUndo(dt)
         
         local part = entry.instance
         if not part or not part.Parent then
-            local resolved = GetInstanceFromPath(entry.path)
+            local resolved = RobustResolvePart(entry.path, entry)
             if resolved then
                 entry.instance = resolved
                 part = resolved
@@ -1005,7 +1024,7 @@ function pruneBrokenSet()
     for path, data in pairs(Br3ak3rState.brokenSet) do
         local part = data.instance
         if not part or not part.Parent then
-            local resolved = GetInstanceFromPath(path)
+            local resolved = RobustResolvePart(path, data)
             if resolved then
                 data.instance = resolved
                 part = resolved
@@ -5676,7 +5695,7 @@ function Cleanup()
         pcall(function()
             local part = data.instance
             if not part or not part.Parent then
-                part = GetInstanceFromPath(path)
+                part = RobustResolvePart(path, data)
             end
             if part and part.Parent and type(data) == "table" then
                 part.CanCollide = data.cc
@@ -7065,26 +7084,20 @@ function UnifiedHeartbeat(dt)
         end
 
         local enforcementMadeChange = false
+        local camPos = Camera and Camera.CFrame.Position
         for path, data in pairs(Br3ak3rState.brokenSet) do
             local part = data.instance
             if not part or not part.Parent then
-                -- Throttle re-resolution to once every 2 seconds
-                if not data.nextResolve or now > data.nextResolve then
+                -- Throttle re-resolution to once every 2 seconds, but bypass if camera is close
+                local isClose = camPos and data.pos and (camPos - data.pos).Magnitude < 100
+                if isClose or not data.nextResolve or now > data.nextResolve then
                     data.nextResolve = now + 2.0
-                    part = GetInstanceFromPath(path)
+                    part = RobustResolvePart(path, data)
                     
-                    -- Robust Fallback: Search nearby by name if path fails
-                    if not part and data.pos and data.name then
-                        local parts = Services.Workspace:GetPartBoundsInRadius(data.pos, 5)
-                        for _, p in ipairs(parts) do
-                            if p.Name == data.name and p:IsA("BasePart") then
-                                part = p
-                                break
-                            end
-                        end
+                    if part then 
+                        data.instance = part 
+                        enforcementMadeChange = true
                     end
-                    
-                    if part then data.instance = part end
                 end
             end
             
