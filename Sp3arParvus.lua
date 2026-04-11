@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.3" -- Fix for Collision Persistence on Chunk Reload 
+local VERSION = "3.9.4" -- Remove Broken Distance-Based Aim Compensation  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -69,9 +69,6 @@ local CharCache = {}
 local AimState = {
     Aimbot = false,
     Trigger = false,
-    ProjectileSpeed = 3155,
-    ProjectileGravity = 196.2,
-    GravityCorrection = 2,
     LastAimbotTarget = nil,
     LastMouseMode = nil,
     LastOriginX = nil,
@@ -79,13 +76,9 @@ local AimState = {
     AcquiringFrames = 0
 }
 local Flags = {
-    ["Prediction/Velocity"] = 3155,
-    ["Prediction/GravityForce"] = 196.2,
-    ["Prediction/GravityMultiplier"] = 2,
     ["Aimbot/AimLock"] = true,
     ["Aimbot/AutoFire"] = false,
     ["Aimbot/AlwaysEnabled"] = true,
-    ["Aimbot/Prediction"] = true,
     ["Aimbot/TeamCheck"] = false,
     ["Aimbot/VisibilityCheck"] = true,
     ["Aimbot/Sensitivity"] = 15,
@@ -2578,45 +2571,6 @@ end
 -- PHYSICS & BALLISTICS
 
 
--- Maximum reasonable velocity magnitude (studs/second) - tries to prevents aim snapping to sky (fails) 
-MAX_TARGET_VELOCITY = 100 -- Most players can't move faster than this legitimately
-
--- Solve projectile trajectory with gravity (FIXED - clamps extreme values)
-function SolveTrajectory(origin, velocity, time, gravity)
-    -- Safety check for NaN in time
-    if time ~= time then return origin end
-
-    -- Safety check for NaN or zero velocity
-    local velocityMagnitude = velocity.Magnitude
-    if velocityMagnitude ~= velocityMagnitude or velocityMagnitude == 0 then
-        -- NaN check (NaN ~= NaN is true) or zero velocity - just return origin
-        return origin
-    end
-    
-    -- Clamp time to reasonable values (prevents extreme predictions at long range)
-    time = min(time, 1.0) -- Max 1 second of prediction
-    
-    -- Clamp velocity magnitude to prevent extreme predictions
-    if velocityMagnitude > MAX_TARGET_VELOCITY then
-        -- Scale down to max velocity while keeping direction
-        velocity = velocity.Unit * MAX_TARGET_VELOCITY
-    end
-    
-    -- Calculate predicted position
-    local gravityVector = Vector3.new(0, -0.5 * gravity * AimState.GravityCorrection * time * time, 0)
-    local predictedPosition = origin + velocity * time + gravityVector
-    
-    -- Sanity check: if predicted position is too far from origin, return original
-    local predictionOffset = (predictedPosition - origin).Magnitude
-    -- Fix: NaN check (NaN > 200 is false in Lua, so we must explicitly check for NaN)
-    if predictionOffset ~= predictionOffset or predictionOffset > 200 then 
-        return origin -- Fall back to actual position
-    end
-    
-    return predictedPosition
-end
-
-
 -- AIMBOT CORE (EXACT CODE FROM PARVUS)
 
 
@@ -2750,7 +2704,7 @@ function ClearSortCacheReferences()
 end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
-function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, PredictionEnabled, StickyTarget)
+function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, StickyTarget)
     if not Enabled then
         return nil
     end
@@ -2817,18 +2771,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
                         if Magnitude < FieldOfView then
                             local TargetPosition = ActualPosition
-                            if PredictionEnabled then
-                                local velocity = BodyPart.AssemblyLinearVelocity
-                                if typeof(velocity) ~= "Vector3" then
-                                    velocity = Vector3.new(0, 0, 0)
-                                end
-                                TargetPosition = SolveTrajectory(
-                                    ActualPosition,
-                                    velocity,
-                                    Distance / AimState.ProjectileSpeed,
-                                    AimState.ProjectileGravity
-                                )
-                            end
 
                             if CandidateCount < maxCandsLimit then
                                 CandidateCount = CandidateCount + 1
@@ -2878,18 +2820,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
                     if Magnitude < FieldOfView then
                         local TargetPosition = ActualPosition
-                        if PredictionEnabled then
-                            local velocity = BodyPart.AssemblyLinearVelocity
-                            if typeof(velocity) ~= "Vector3" then
-                                velocity = Vector3.new(0, 0, 0)
-                            end
-                            TargetPosition = SolveTrajectory(
-                                ActualPosition,
-                                velocity,
-                                Distance / AimState.ProjectileSpeed,
-                                AimState.ProjectileGravity
-                            )
-                        end
 
                         if CandidateCount < maxCandsLimit then
                             CandidateCount = CandidateCount + 1
@@ -3018,18 +2948,6 @@ function AimAt(Hitbox, Sensitivity)
         return
     end
 
-    if Flags["Aimbot/Prediction"] then
-        local velocity = targetPart.AssemblyLinearVelocity
-        if typeof(velocity) ~= "Vector3" then
-            velocity = Vector3.new(0, 0, 0)
-        end
-        targetPos = SolveTrajectory(
-            targetPos,
-            velocity,
-            dist / AimState.ProjectileSpeed,
-            AimState.ProjectileGravity
-        )
-    end
 
     local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
     if not OnScreen or ScreenPosition.Z <= 0 then
@@ -6284,10 +6202,6 @@ UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aim
 UI.CreateNumericInput(AimTab, "Smoothing", "Aimbot/Sensitivity", Flags["Aimbot/Sensitivity"], 0, 100, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aimbot/FOV/Radius", Flags["Aimbot/FOV/Radius"], 0, 500, 5, "px")
 
-UI.CreateSection(AimTab, "Ballistics")
-UI.CreateToggle(AimTab, "Predict Movement", "Aimbot/Prediction", Flags["Aimbot/Prediction"])
-UI.CreateNumericInput(AimTab, "Bullet Speed", "Prediction/Velocity", Flags["Prediction/Velocity"], 100, 5000, 50, " st/s", function(v) AimState.ProjectileSpeed = v end)
-UI.CreateNumericInput(AimTab, "Gravity Scale", "Prediction/GravityMultiplier", Flags["Prediction/GravityMultiplier"], 0, 5, 0.1, "x", function(v) AimState.GravityCorrection = v end)
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
@@ -6749,7 +6663,6 @@ function GetCachedTarget()
         max(Flags["Aimbot/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
         Flags["Aimbot/Priority"],
         Flags["Aimbot/BodyParts"],
-        Flags["Aimbot/Prediction"],
         AimState.LastAimbotTarget -- Sticky target support
     )
     CachedTargetTime = now
