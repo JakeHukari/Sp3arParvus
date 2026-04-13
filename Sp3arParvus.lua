@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.4" -- Remove Broken Distance-Based Aim Compensation  
+local VERSION = "3.9.5" -- Major Memory Leak  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -320,6 +320,44 @@ local Vector3new, Vector2new, CFramenew, UDim2new, Instancenew, RaycastParamsnew
 local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
+local function _setProp(obj, prop, val) obj[prop] = val end
+local function PcallSetProp(obj, prop, val)
+    return pcall(_setProp, obj, prop, val)
+end
+
+local function _safeSetProp(obj, prop, val)
+    if obj[prop] ~= val then
+        obj[prop] = val
+        return true
+    end
+    return false
+end
+local function PcallSafeSetProp(obj, prop, val)
+    local ok, changed = pcall(_safeSetProp, obj, prop, val)
+    return ok and changed
+end
+
+local function _destroy(obj) if obj then obj:Destroy() end end
+local function PcallDestroy(obj)
+    return pcall(_destroy, obj)
+end
+
+local function _setEnabled(obj, state) obj.Enabled = state end
+local function PcallSetEnabled(obj, state)
+    return pcall(_setEnabled, obj, state)
+end
+
+local function _disconnect(conn) if conn and conn.Connected then conn:Disconnect() end end
+local function PcallDisconnect(conn)
+    return pcall(_disconnect, conn)
+end
+
+local function _getParent(obj) return obj.Parent end
+local function PcallGetParent(obj)
+    local ok, res = pcall(_getParent, obj)
+    return ok and res or nil
+end
+
 local function SafeSetProp(obj, prop, val)
     if obj[prop] ~= val then
         obj[prop] = val
@@ -328,6 +366,18 @@ end
 
 local function SafeGetProp(obj, prop)
     return obj[prop]
+end
+
+local function BoundedInsertionSort(array, count, compare)
+    for i = 2, count do
+        local key = array[i]
+        local j = i - 1
+        while j > 0 and compare(key, array[j]) do
+            array[j + 1] = array[j]
+            j = j - 1
+        end
+        array[j + 1] = key
+    end
 end
 
 -- Cached TweenInfo objects (prevents creating new objects on every tween)
@@ -342,17 +392,23 @@ local TWEENS = {
 
 -- Per-frame Viewport Point Caching
 local ViewportCache = {}
+local ViewportPool = {}
 TrackConnection(RunService.RenderStepped:Connect(function()
-    table.clear(ViewportCache)
+    for pos, entry in pairs(ViewportCache) do
+        table.insert(ViewportPool, entry)
+        ViewportCache[pos] = nil
+    end
 end))
 
 local function GetViewportPoint(worldPos)
-    if ViewportCache[worldPos] then
-        local entry = ViewportCache[worldPos]
+    local entry = ViewportCache[worldPos]
+    if entry then
         return entry[1], entry[2]
     end
     local screenPos, onScreen = Camera:WorldToViewportPoint(worldPos)
-    ViewportCache[worldPos] = {screenPos, onScreen}
+    entry = table.remove(ViewportPool) or {}
+    entry[1], entry[2] = screenPos, onScreen
+    ViewportCache[worldPos] = entry
     return screenPos, onScreen
 end
 
@@ -2848,21 +2904,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     end
 
     local currentSize = #CandidateList
-    if currentSize > CandidateCount then
-        for i = CandidateCount + 1, currentSize do
-            local entry = CandidateList[i]
-            if entry then
-                entry.ply = nil
-                entry.char = nil
-                entry.part = nil
-                entry.pos = nil
-            end
-            CandidateList[i] = nil
-        end
-    end
-
     if CandidateCount > 1 then
-        table.sort(CandidateList, CandidateSortFn)
+        BoundedInsertionSort(CandidateList, CandidateCount, CandidateSortFn)
     end
 
     if StickyTarget then
@@ -3790,7 +3833,6 @@ function GetSortedPlayersByDistance()
     local myPos = myRoot.Position
     
     -- Reuse cached table instead of creating new one
-    table.clear(cachedPlayerListForSort)
     local insertIdx = 0
     
     for _, player in ipairs(currentPlayers) do
@@ -3817,12 +3859,13 @@ function GetSortedPlayersByDistance()
     -- Sort by distance (closest first)
     -- We only sort the active portion of the list
     if insertIdx > 1 then
-        table.sort(cachedPlayerListForSort, DistanceSortFn)
+        BoundedInsertionSort(cachedPlayerListForSort, insertIdx, DistanceSortFn)
     end
     
     -- Build result (reusing cached result table)
     table.clear(cachedSortedPlayers)
-    for i = 1, min(PLAYER_PANEL_MAX_ROWS, #cachedPlayerListForSort) do
+    local resultCount = min(PLAYER_PANEL_MAX_ROWS, insertIdx)
+    for i = 1, resultCount do
         cachedSortedPlayers[i] = cachedPlayerListForSort[i]
     end
     
@@ -4360,37 +4403,15 @@ function UpdateESP(now, player, isClosest)
         
         -- PERFORMANCE FIX: Instead of checking if Parent is nil, check if it's NOT targetGui
         -- If it's valid but unparented (or parented elsewhere), just fix the parentage
-        local isActuallyDestroyed = nametag and not pcall(function() return nametag.Parent end)
-        local isValid = nametag and not isActuallyDestroyed
+        local nametagParent = nametag and PcallGetParent(nametag)
+        local isValid = (nametagParent ~= nil)
         
-        if isValid and (not espData.NicknameLabel or not pcall(function() return espData.NicknameLabel.Parent end)) then
+        if isValid and (not espData.NicknameLabel or not PcallGetParent(espData.NicknameLabel)) then
             isValid = false
         end
         
         if not isValid then
-            -- Recreate if missing
-             if nametag then pcall(function() nametag:Destroy() end) end
-             if espData.Tracer then espData.Tracer:Destroy() end 
-             
-             -- Fix: Explicitly destroy OffscreenIndicator to prevent memory leak
-             if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                 espData.OffscreenIndicator.Frame:Destroy()
-             end
-             
-             -- Properly cleanup old connections before setting to nil
-             if espData.Connections then
-                 for _, conn in pairs(espData.Connections) do
-                     if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
-                         conn:Disconnect()
-                     end
-                 end
-                 table.clear(espData.Connections)
-             end
-
-             ESPObjects[player] = nil
-             espData = nil
-             
-             -- Recreate immediately via SetupPlayerESP to ensure CharacterAdded is re-established
+             RemoveESP(player)
              SetupPlayerESP(player)
              espData = ESPObjects[player]
         else
@@ -4650,22 +4671,20 @@ function RemoveESP(player)
     if not espData then return end
 
     if espData.Nametag then
-        espData.Nametag:Destroy()
+        PcallDestroy(espData.Nametag)
     end
     if espData.Tracer then
-        espData.Tracer:Destroy()
+        PcallDestroy(espData.Tracer)
     end
     -- Clean up off-screen indicator
     if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-        espData.OffscreenIndicator.Frame:Destroy()
+        PcallDestroy(espData.OffscreenIndicator.Frame)
     end
 
     -- Clean up player-specific connections
     if espData.Connections then
         for _, conn in pairs(espData.Connections) do
-            if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
-                conn:Disconnect()
-            end
+            PcallDisconnect(conn)
         end
         table.clear(espData.Connections)
     end
@@ -5590,7 +5609,7 @@ function Cleanup()
     -- Cleanup Object Pool
     for _, pool in pairs(ObjectPool) do
         for _, obj in ipairs(pool) do
-            pcall(function() obj:Destroy() end)
+            PcallDestroy(obj)
         end
         table.clear(pool)
     end
@@ -5706,18 +5725,19 @@ function Cleanup()
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
     table.clear(PathCache)
     table.clear(ViewportCache)
+    table.clear(ViewportPool)
     for p, c in pairs(CharCache) do
         c.Char = nil; c.HumanoidRootPart = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil; c.Head = nil
     end
     table.clear(CharCache)
     
     for _, entry in ipairs(CandidateList) do
-        entry.ply = nil; entry.char = nil; entry.part = nil; entry.pos = nil
+        entry.mag = nil; entry.ply = nil; entry.char = nil; entry.part = nil; entry.sx = nil; entry.sy = nil; entry.pos = nil; entry.realPos = nil
     end
     table.clear(CandidateList)
 
     for _, entry in ipairs(cachedPlayerListForSort) do
-        entry.player = nil; entry.position = nil
+        entry.player = nil; entry.distance = nil; entry.position = nil
     end
     table.clear(cachedPlayerListForSort)
     
@@ -6985,9 +7005,7 @@ function UnifiedHeartbeat(dt)
 
             -- Ensure pooled objects are disabled during Gh0st mode
             for _, obj in ipairs(PoolFolder:GetChildren()) do
-                pcall(function()
-                    if obj.Enabled then obj.Enabled = false end
-                end)
+                PcallSetEnabled(obj, false)
             end
 
             if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
@@ -7016,39 +7034,19 @@ function UnifiedHeartbeat(dt)
             
             if part and part.Parent then
                 -- Enforce collision properties (CanCollide, CanTouch, CanQuery)
-                pcall(function()
-                    if part.CanCollide ~= false then 
-                        part.CanCollide = false 
-                        enforcementMadeChange = true
-                    end
-                end)
-                pcall(function()
-                    if part.CanTouch ~= false then
-                        part.CanTouch = false
-                        enforcementMadeChange = true
-                    end
-                end)
-                pcall(function()
-                    if part.CanQuery ~= false then
-                        part.CanQuery = false
-                        enforcementMadeChange = true
-                    end
-                end)
+                if part.CanCollide ~= false then 
+                    part.CanCollide = false 
+                    enforcementMadeChange = true
+                end
+                if PcallSafeSetProp(part, "CanTouch", false) then enforcementMadeChange = true end
+                if PcallSafeSetProp(part, "CanQuery", false) then enforcementMadeChange = true end
                 
                 -- Enforce transparency properties
-                pcall(function()
-                    local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
-                    local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-                    
-                    if part.Transparency ~= targetT then 
-                        part.Transparency = targetT 
-                        enforcementMadeChange = true
-                    end
-                    if part.LocalTransparencyModifier ~= targetLTM then 
-                        part.LocalTransparencyModifier = targetLTM 
-                        enforcementMadeChange = true
-                    end
-                end)
+                local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
+                local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
+                
+                if PcallSafeSetProp(part, "Transparency", targetT) then enforcementMadeChange = true end
+                if PcallSafeSetProp(part, "LocalTransparencyModifier", targetLTM) then enforcementMadeChange = true end
             end
         end
         if enforcementMadeChange then
