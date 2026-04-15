@@ -218,18 +218,18 @@ function OnLocalCharacterAdded(newChar)
 end
 -- Prevent duplicate
 globalEnv = getgenv and getgenv() or _G
-if rawget(globalEnv, "Sp3arParvusV2") then
-    return warn("[Sp3arParvus v2] Already loaded! Use Shutdown button to cleanup first.")
+if rawget(globalEnv, "Sp3arParvus") then
+    return warn("[Sp3arParvus] Already loaded! Use Shutdown button to cleanup first.")
 end
 
 -- Init global
-globalEnv.Sp3arParvusV2 = {
+globalEnv.Sp3arParvus = {
     Active = true,
     Version = VERSION,
     Connections = {},
     Threads = {}
 }
-Sp3arParvus = globalEnv.Sp3arParvusV2
+Sp3arParvus = globalEnv.Sp3arParvus
 
 
 -- CONNECTION TRACKING (for proper cleanup)
@@ -5779,13 +5779,13 @@ function Cleanup()
     -- CRITICAL: Clear the global environment flag so script can be reloaded
     _G.StopFreecamFunc = nil
     local globalEnv = getgenv and getgenv() or _G
-    rawset(globalEnv, "Sp3arParvusV2", nil)
+    rawset(globalEnv, "Sp3arParvus", nil)
 
     warn("[Sp3arParvus] Script Unloaded! You can now reload the script.")
 end
 
 -- Create Main Window
-local Window = UI.CreateWindow("Sp3arParvusV2")
+local Window = UI.CreateWindow("Sp3arParvus")
 
 -- Initialize HUD Elements
 CreateD3vToolHUD(ScreenGui)
