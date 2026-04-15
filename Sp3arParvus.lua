@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.5" -- Major Memory Leak  
+local VERSION = "3.9.6" -- Add Equipped Item Identifier  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -2608,6 +2608,7 @@ function ValidateESPObjects()
                 end
                 espData.Nametag = nil
                 espData.Tracer = nil
+                espData.EquippedLabel = nil
                 if espData.OffscreenIndicator then
                     espData.OffscreenIndicator.Frame = nil
                     espData.OffscreenIndicator.Arrow = nil
@@ -3984,6 +3985,7 @@ local function CreateESP(player)
         lastDistance = -1,
         lastTeamColor = nil,
         lastDistanceColor = nil,
+        lastEquipped = "",
         Connections = {} -- Store player-specific connections here
     }
 
@@ -3992,7 +3994,7 @@ local function CreateESP(player)
     billboard.Enabled = false
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 200, 0, 90) -- Increased height for 5 lines
+    billboard.Size = UDim2.new(0, 200, 0, 110) -- Increased height for 6 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     EnsureScreenGui() -- Ensure parent exists
     billboard.Parent = ScreenGui
@@ -4081,6 +4083,19 @@ local function CreateESP(player)
     healthBarFill.Parent = healthBarBG
     local hbfCorner = Instance.new("UICorner"); hbfCorner.CornerRadius = UDim.new(1,0); hbfCorner.Parent = healthBarFill
 
+    -- Equipped Tool label - Sixth line
+    local equippedLabel = Instance.new("TextLabel")
+    equippedLabel.Text = ""
+    equippedLabel.Name = "EquippedLabel"
+    equippedLabel.Size = UDim2.new(1, 0, 0, 18)
+    equippedLabel.BackgroundTransparency = 1
+    equippedLabel.TextColor3 = COLORS.NORMAL
+    equippedLabel.TextStrokeTransparency = 0
+    equippedLabel.Font = Enum.Font.GothamBold
+    equippedLabel.TextSize = 14
+    equippedLabel.LayoutOrder = 6
+    equippedLabel.Parent = container
+
     espData.Nametag = billboard
     espData.NicknameLabel = nicknameLabel
     espData.UsernameLabel = usernameLabel
@@ -4088,6 +4103,7 @@ local function CreateESP(player)
     espData.HealthNumericalLabel = healthNumLabel
     espData.HealthBarContainer = healthBarBG
     espData.HealthBarFill = healthBarFill
+    espData.EquippedLabel = equippedLabel
 
     -- Create tracer (Frame based for AlwaysOnTop)
     -- Using a Frame instead of Drawing ensures it renders through walls
@@ -4499,7 +4515,22 @@ function UpdateESP(now, player, isClosest)
         if espData.lastDistanceColor ~= distanceColor then
             espData.DistanceLabel.TextColor3 = distanceColor
             espData.UsernameLabel.TextColor3 = distanceColor
+            if espData.EquippedLabel then
+                espData.EquippedLabel.TextColor3 = distanceColor
+            end
             espData.lastDistanceColor = distanceColor
+        end
+
+        -- Update Equipped Tool
+        if espData.EquippedLabel then
+            local equippedTool = character:FindFirstChildOfClass("Tool")
+            local toolName = equippedTool and equippedTool.Name or "Unarmed"
+            local equippedString = "[" .. toolName .. "]"
+            
+            if espData.lastEquipped ~= equippedString then
+                espData.EquippedLabel.Text = equippedString
+                espData.lastEquipped = equippedString
+            end
         end
 
         -- Update Health indicators visibility based on line-of-sight
@@ -4691,6 +4722,7 @@ function RemoveESP(player)
     
     espData.Nametag = nil
     espData.Tracer = nil
+    espData.EquippedLabel = nil
     if espData.OffscreenIndicator then
         espData.OffscreenIndicator.Frame = nil
         espData.OffscreenIndicator.Arrow = nil
