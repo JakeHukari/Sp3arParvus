@@ -1788,7 +1788,7 @@ function UI.CreateWindow(title)
     MinButton.Size = UDim2.new(0, 30, 0, 30)
     MinButton.Position = UDim2.new(1, -30, 0, 0)
     MinButton.BackgroundTransparency = 0
-    MinButton.BackgroundColor3 = Color3.fromRGB(255, 85, 127)
+    MinButton.BackgroundColor3 = Color3.fromRGB(252, 149, 175)
     MinButton.Text = "-"
     MinButton.Font = Enum.Font.GothamBold
     MinButton.TextSize = 20
