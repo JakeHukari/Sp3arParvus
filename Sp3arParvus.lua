@@ -1787,12 +1787,12 @@ function UI.CreateWindow(title)
     MinButton.Name = "Minimize"
     MinButton.Size = UDim2.new(0, 30, 0, 30)
     MinButton.Position = UDim2.new(1, -30, 0, 0)
-    MinButton.BackgroundTransparency = 0.1
+    MinButton.BackgroundTransparency = 0
     MinButton.BackgroundColor3 = Color3.fromRGB(255, 85, 127)
     MinButton.Text = "-"
     MinButton.Font = Enum.Font.GothamBold
     MinButton.TextSize = 20
-    MinButton.TextColor3 = UI_THEME.TextDark
+    MinButton.TextColor3 = Color3.fromRGB(0, 0, 0)
     MinButton.Parent = MainFrame
 
     local Minimized = false
