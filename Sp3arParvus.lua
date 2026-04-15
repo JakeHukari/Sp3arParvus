@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.6" -- Add Equipped Item Identifier  
+local VERSION = "3.9.6" -- Add Equipped Item Identifier
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -4089,7 +4089,7 @@ local function CreateESP(player)
     equippedLabel.Name = "EquippedLabel"
     equippedLabel.Size = UDim2.new(1, 0, 0, 18)
     equippedLabel.BackgroundTransparency = 1
-    equippedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    equippedLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Static white
     equippedLabel.TextStrokeTransparency = 0
     equippedLabel.Font = Enum.Font.GothamBold
     equippedLabel.TextSize = 14
@@ -4515,9 +4515,6 @@ function UpdateESP(now, player, isClosest)
         if espData.lastDistanceColor ~= distanceColor then
             espData.DistanceLabel.TextColor3 = distanceColor
             espData.UsernameLabel.TextColor3 = distanceColor
-            if espData.EquippedLabel then
-                espData.EquippedLabel.TextColor3 = distanceColor
-            end
             espData.lastDistanceColor = distanceColor
         end
 
