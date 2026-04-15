@@ -2159,7 +2159,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         return btn
     end
 
-    local minusBtn = createBtn("X", UDim2.new(0, 0, 0, 0))
+    local minusBtn = createBtn("-", UDim2.new(0, 0, 0, 0))
     local plusBtn = createBtn("+", UDim2.new(1, -25, 0, 0))
 
     TrackConnection(minusBtn.MouseButton1Click:Connect(function()
@@ -6145,7 +6145,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     local mBtn = Instance.new("TextButton")
     mBtn.Size = UDim2.new(0, 25, 1, 0)
     mBtn.BackgroundTransparency = 1
-    mBtn.Text = "X"
+    mBtn.Text = "-"
     mBtn.Font = Enum.Font.GothamBold
     mBtn.TextSize = 16
     mBtn.TextColor3 = UI_THEME.TextDark
