@@ -1789,7 +1789,7 @@ function UI.CreateWindow(title)
     MinButton.Position = UDim2.new(1, -30, 0, 0)
     MinButton.BackgroundTransparency = 0
     MinButton.BackgroundColor3 = Color3.fromRGB(252, 149, 175)
-    MinButton.Text = "x"
+    MinButton.Text = "X"
     MinButton.Font = Enum.Font.GothamBold
     MinButton.TextSize = 20
     MinButton.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -1843,7 +1843,7 @@ function UI.CreateWindow(title)
             task.wait(0.1)
             ContentArea.Visible = true
             Sidebar.Visible = true
-            MinButton.Text = "x"
+            MinButton.Text = "X"
         end
     end
     UIState.ToggleMinimize = ToggleMinimize
@@ -2159,7 +2159,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         return btn
     end
 
-    local minusBtn = createBtn("x", UDim2.new(0, 0, 0, 0))
+    local minusBtn = createBtn("X", UDim2.new(0, 0, 0, 0))
     local plusBtn = createBtn("+", UDim2.new(1, -25, 0, 0))
 
     TrackConnection(minusBtn.MouseButton1Click:Connect(function()
@@ -6145,7 +6145,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     local mBtn = Instance.new("TextButton")
     mBtn.Size = UDim2.new(0, 25, 1, 0)
     mBtn.BackgroundTransparency = 1
-    mBtn.Text = "x"
+    mBtn.Text = "X"
     mBtn.Font = Enum.Font.GothamBold
     mBtn.TextSize = 16
     mBtn.TextColor3 = UI_THEME.TextDark
