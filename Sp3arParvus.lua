@@ -4089,7 +4089,7 @@ local function CreateESP(player)
     equippedLabel.Name = "EquippedLabel"
     equippedLabel.Size = UDim2.new(1, 0, 0, 18)
     equippedLabel.BackgroundTransparency = 1
-    equippedLabel.TextColor3 = COLORS.NORMAL
+    equippedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     equippedLabel.TextStrokeTransparency = 0
     equippedLabel.Font = Enum.Font.GothamBold
     equippedLabel.TextSize = 14
