@@ -1534,7 +1534,7 @@ function GetPlayerPanelSize()
     return UDim2.fromOffset(width, height)
 end
 
--- UI Constants
+-- UI Color Constant Dictionary
 UI_THEME = {
     Background = Color3.fromRGB(18, 18, 18),
     Sidebar = Color3.fromRGB(25, 25, 25),
