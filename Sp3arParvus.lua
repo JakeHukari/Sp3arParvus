@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.6" -- Add Equipped Item Identifier
+local VERSION = "3.9.7" -- Zoom Unlocker
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -139,7 +139,8 @@ local Flags = {
     ["Humanoid/MaxSlopeAngle"] = 89,
     ["Humanoid/MaxSlopeAngle/Locked"] = false,
     ["Humanoid/WalkSpeed"] = 16,
-    ["Humanoid/WalkSpeed/Locked"] = false
+    ["Humanoid/WalkSpeed/Locked"] = false,
+    ["Misc/ScrollUnlocker"] = true
 }
 local UIState = {
     MainFrame = nil,
@@ -191,6 +192,12 @@ local H1ghl1ght3rState = {
 local FullbrightState = {
     lastState = false,
     originalSettings = nil
+}
+local ZoomState = {
+    OriginalMax = LocalPlayer.CameraMaxZoomDistance,
+    OriginalMin = LocalPlayer.CameraMinZoomDistance,
+    LastSetMax = nil,
+    LastSetMin = nil
 }
 
 -- RESPAWN HANDLING
@@ -5719,6 +5726,14 @@ function Cleanup()
         pcall(UpdateLighting)
     end
 
+    -- Restore Zoom Limits
+    if ZoomState.OriginalMax then
+        LocalPlayer.CameraMaxZoomDistance = ZoomState.OriginalMax
+    end
+    if ZoomState.OriginalMin then
+        LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
+    end
+
     -- Restore Humanoid settings
     if HumanoidState.captured then
         local character = LocalPlayer.Character
@@ -6400,6 +6415,18 @@ UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags[
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+.)", "Misc/D3vTool", Flags["Misc/D3vTool"])
+UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/ScrollUnlocker"], function(state)
+    if not state then
+        if ZoomState.OriginalMax then
+            LocalPlayer.CameraMaxZoomDistance = ZoomState.OriginalMax
+        end
+        if ZoomState.OriginalMin then
+            LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
+        end
+        ZoomState.LastSetMax = nil
+        ZoomState.LastSetMin = nil
+    end
+end)
 
 -- Helper to setup player ESP and connections
 function SetupPlayerESP(player)
@@ -6857,6 +6884,38 @@ function UnifiedHeartbeat(dt)
         UpdateD3vTool()
         ApplyHumanoidSettings()
         ApplyWorldHumanoidSettings()
+
+        -- Scroll Unlocker Logic
+        local currentMax = LocalPlayer.CameraMaxZoomDistance
+        local currentMin = LocalPlayer.CameraMinZoomDistance
+        
+        if currentMax ~= ZoomState.LastSetMax then
+            ZoomState.OriginalMax = currentMax
+        end
+        if currentMin ~= ZoomState.LastSetMin then
+            ZoomState.OriginalMin = currentMin
+        end
+
+        if Flags["Misc/ScrollUnlocker"] then
+            if Br3ak3rState.CTRL_HELD then
+                LocalPlayer.CameraMaxZoomDistance = 10000
+                LocalPlayer.CameraMinZoomDistance = 0
+                ZoomState.LastSetMax = 10000
+                ZoomState.LastSetMin = 0
+            else
+                local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
+                local targetMax = math.max(ZoomState.OriginalMax or 128, currentZoom)
+                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom)
+                
+                LocalPlayer.CameraMaxZoomDistance = targetMax
+                LocalPlayer.CameraMinZoomDistance = targetMin
+                ZoomState.LastSetMax = targetMax
+                ZoomState.LastSetMin = targetMin
+            end
+        else
+            ZoomState.LastSetMax = nil
+            ZoomState.LastSetMin = nil
+        end
     end
     
     if (now - lastHumanoidSync) > humanoidSyncRate then
