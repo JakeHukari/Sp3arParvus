@@ -861,7 +861,7 @@ end
 
 -- Get ray from mouse cursor position
 function GetMouseRay()
-    local mouseLocation = Services.UserInputService:GetMouseLocation()
+    local mouseLocation = Services.UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
     if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return nil end
     
@@ -1768,7 +1768,7 @@ function UI.CreateWindow(title)
                 local minY = anchor.Y * absoluteSize.Y
                 local maxY = Camera.ViewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
                 
-                local mouseLoc = UserInputService:GetMouseLocation()
+                local mouseLoc = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
                 if mouseLoc.X >= (Frame.AbsolutePosition.X) and mouseLoc.X <= (Frame.AbsolutePosition.X + absoluteSize.X) and
                    mouseLoc.Y >= (Frame.AbsolutePosition.Y) and mouseLoc.Y <= (Frame.AbsolutePosition.Y + absoluteSize.Y) then
                     UIState.ActiveDraggedFrame = Frame
@@ -4794,7 +4794,7 @@ function UpdateD3vTool()
     end
     
     -- LMC (Local Mouse Coordinates)
-    local mouseLoc = UserInputService:GetMouseLocation()
+    local mouseLoc = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
     local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
     
     local newText = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
@@ -6563,7 +6563,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
         if Flags["Waypoints/Enabled"] then
             -- First check for deletion (click on existing waypoint screen pos)
-            local mouseLoc = UserInputService:GetMouseLocation()
+            local mouseLoc = UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
             local origin, direction = GetMouseRay()
             local raycastHit = nil
             if origin and direction then
