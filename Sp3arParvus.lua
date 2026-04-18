@@ -717,16 +717,20 @@ end
 function ApplyWorldHumanoidSettings()
     -- Game-specific WorldHumanoid presets
     if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
-        local nearby = GetNearbyHumanoids()
-        for i = 1, #nearby do
-            local hum = nearby[i]
-            if hum.Name == "Horse" or (hum.Parent and hum.Parent.Name == "Horse") then
-                local path = GetUniquePath(hum)
-                if not WorldHumState.lockedProperties[path] then
-                    WorldHumState.lockedProperties[path] = {
-                        ["JumpPower"] = 70,
-                        ["MaxSlopeAngle"] = 89.9
-                    }
+        local now = os.clock()
+        if (now - lastWorldHumPresetScan) > 5.0 then
+            lastWorldHumPresetScan = now
+            local nearby = GetNearbyHumanoids()
+            for i = 1, #nearby do
+                local hum = nearby[i]
+                if hum.Name == "Horse" or (hum.Parent and hum.Parent.Name == "Horse") then
+                    local path = GetUniquePath(hum)
+                    if not WorldHumState.lockedProperties[path] then
+                        WorldHumState.lockedProperties[path] = {
+                            ["JumpPower"] = 70,
+                            ["MaxSlopeAngle"] = 89.9
+                        }
+                    end
                 end
             end
         end
@@ -6884,6 +6888,7 @@ stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
 lastHumanoidSync = 0
 humanoidSyncRate = 0.1 -- 10 FPS
 lastWorldHumListUpdate = 0
+lastWorldHumPresetScan = 0
 lastGhostMode = nil
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
