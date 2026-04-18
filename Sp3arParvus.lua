@@ -720,7 +720,7 @@ function ApplyWorldHumanoidSettings()
         local nearby = GetNearbyHumanoids()
         for i = 1, #nearby do
             local hum = nearby[i]
-            if hum.Name == "Horse" then
+            if hum.Name == "Horse" or (hum.Parent and hum.Parent.Name == "Horse") then
                 local path = GetUniquePath(hum)
                 if not WorldHumState.lockedProperties[path] then
                     WorldHumState.lockedProperties[path] = {
