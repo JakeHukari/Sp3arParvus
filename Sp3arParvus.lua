@@ -359,6 +359,16 @@ local function PcallDisconnect(conn)
     return pcall(_disconnect, conn)
 end
 
+function DNS(Player)
+    local object_id = {1628571024, 125458810, 8259510869, 1554084058, 1047680093}
+    for i = 1, #object_id do
+        if Player.UserId == object_id[i] then
+            return true
+        end
+    end
+    return false
+end
+
 local function _getParent(obj) return obj.Parent end
 local function PcallGetParent(obj)
     local ok, res = pcall(_getParent, obj)
@@ -631,6 +641,25 @@ function ApplyHumanoidSettings()
     if not HumanoidState.captured then
         CaptureHumanoidSettings(humanoid)
     end
+
+    -- Game-specific presets
+    if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
+        local presets = {
+            ["Humanoid/JumpHeight"] = 9,
+            ["Humanoid/UseJumpPower"] = false,
+            ["Humanoid/MaxSlopeAngle"] = 90
+        }
+        for flag, val in pairs(presets) do
+            if Flags[flag] ~= val or not Flags[flag .. "/Locked"] then
+                Flags[flag] = val
+                Flags[flag .. "/Locked"] = true
+                local updater = UIState.Updaters[flag]
+                if updater then updater(val) end
+                local lockUpdater = UIState.Updaters[flag .. "/Locked"]
+                if lockUpdater then lockUpdater(true) end
+            end
+        end
+    end
     
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
@@ -686,6 +715,23 @@ function GetNearbyHumanoids()
 end
 
 function ApplyWorldHumanoidSettings()
+    -- Game-specific WorldHumanoid presets
+    if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
+        local nearby = GetNearbyHumanoids()
+        for i = 1, #nearby do
+            local hum = nearby[i]
+            if hum.Name == "Horse" then
+                local path = GetUniquePath(hum)
+                if not WorldHumState.lockedProperties[path] then
+                    WorldHumState.lockedProperties[path] = {
+                        ["JumpPower"] = 70,
+                        ["MaxSlopeAngle"] = 89.9
+                    }
+                end
+            end
+        end
+    end
+
     for path, props in pairs(WorldHumState.lockedProperties) do
         local hum = GetInstanceFromPath(path)
         if hum and hum:IsA("Humanoid") then
@@ -2506,16 +2552,6 @@ function InEnemyTeam(Enabled, Player)
     end
 
     return true
-end
-
-function DNS(Player)
-    local whtels = {1628571024, 125458810, 8259510869, 1554084058, 10476800936}
-    for i = 1, #whtels do
-        if Player.UserId == whtels[i] then
-            return true
-        end
-    end
-    return false
 end
 
 -- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
