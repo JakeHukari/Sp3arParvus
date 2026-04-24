@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.7" -- Zoom Unlocker
+local VERSION = "3.9.8" -- Zoom Unlocker (Enhancement)
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -197,7 +197,9 @@ local ZoomState = {
     OriginalMax = LocalPlayer.CameraMaxZoomDistance,
     OriginalMin = LocalPlayer.CameraMinZoomDistance,
     LastSetMax = nil,
-    LastSetMin = nil
+    LastSetMin = nil,
+    Multiplier = 1,
+    WasFirstPerson = false
 }
 
 -- RESPAWN HANDLING
@@ -5773,6 +5775,10 @@ function Cleanup()
     if ZoomState.OriginalMin then
         LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
     end
+    if ZoomState.WasFirstPerson then
+        LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        ZoomState.WasFirstPerson = false
+    end
 
     -- Restore Humanoid settings
     if HumanoidState.captured then
@@ -6463,6 +6469,11 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         if ZoomState.OriginalMin then
             LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
         end
+        if ZoomState.WasFirstPerson then
+            LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+            ZoomState.WasFirstPerson = false
+        end
+        ZoomState.Multiplier = 1
         ZoomState.LastSetMax = nil
         ZoomState.LastSetMin = nil
     end
@@ -6938,22 +6949,47 @@ function UnifiedHeartbeat(dt)
         end
 
         if Flags["Misc/ScrollUnlocker"] then
+            -- Unlock First Person games
+            if LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
+                LocalPlayer.CameraMode = Enum.CameraMode.Classic
+                ZoomState.WasFirstPerson = true
+            end
+
+            local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
+
             if Br3ak3rState.CTRL_HELD then
                 LocalPlayer.CameraMaxZoomDistance = 10000
                 LocalPlayer.CameraMinZoomDistance = 0
                 ZoomState.LastSetMax = 10000
                 ZoomState.LastSetMin = 0
-            else
-                local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
-                local targetMax = math.max(ZoomState.OriginalMax or 128, currentZoom)
-                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom)
                 
+                -- Update multiplier based on current zoom relative to original max
+                -- Use a fallback of 0.5 for games that lock zoom at 0
+                local baseMax = math.max(ZoomState.OriginalMax or 0.5, 0.5)
+                ZoomState.Multiplier = currentZoom / baseMax
+            else
+                -- Apply multiplier to original limits
+                local baseMax = math.max(ZoomState.OriginalMax or 128, 0.5)
+                local baseMin = math.max(ZoomState.OriginalMin or 0.5, 0.1)
+                
+                local targetMax = baseMax * ZoomState.Multiplier
+                local targetMin = baseMin * ZoomState.Multiplier
+                
+                -- Ensure current zoom is within new limits to prevent snapping
+                targetMax = math.max(targetMax, currentZoom)
+                targetMin = math.min(targetMin, currentZoom)
+
                 LocalPlayer.CameraMaxZoomDistance = targetMax
                 LocalPlayer.CameraMinZoomDistance = targetMin
                 ZoomState.LastSetMax = targetMax
                 ZoomState.LastSetMin = targetMin
             end
         else
+            if ZoomState.WasFirstPerson then
+                LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+                ZoomState.WasFirstPerson = false
+            end
+            ZoomState.Multiplier = 1
             ZoomState.LastSetMax = nil
             ZoomState.LastSetMin = nil
         end
