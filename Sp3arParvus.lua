@@ -1,10 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.8" --  Script Performance Audit and Optimization 
-
--- Optimization: Localize frequently used globals
-local task, string, table, math, os = task, string, table, math, os
-local pairs, ipairs, typeof, pcall, tick, next, getgenv, warn, select = pairs, ipairs, typeof, pcall, tick, next, getgenv, warn, select
-
+local VERSION = "3.9.7" -- Zoom Unlocker
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -170,8 +165,7 @@ local WorldHumState = {
     connections = {},
     updaters = {},
     listEntries = {},
-    selectionHighlight = nil,
-    instanceCache = {}
+    selectionHighlight = nil
 }
 local Br3ak3rState = {
     FilterDirty = true,
@@ -330,7 +324,7 @@ local Mouse = LocalPlayer:GetMouse()
 -- Performance Localization
 local Vector3new, Vector2new, CFramenew, UDim2new, Instancenew, RaycastParamsnew, Color3fromRGB, Color3new = 
     Vector3.new, Vector2.new, CFrame.new, UDim2.new, Instance.new, RaycastParams.new, Color3.fromRGB, Color3.new
-local abs, floor, max, min, sqrt, clamp, random = math.abs, math.floor, math.max, math.min, math.sqrt, math.clamp, math.random
+local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
 
 local function _setProp(obj, prop, val) obj[prop] = val end
@@ -365,15 +359,14 @@ local function PcallDisconnect(conn)
     return pcall(_disconnect, conn)
 end
 
-local DNS_IDS = {
-    [1628571024] = true,
-    [125458810] = true,
-    [8259510869] = true,
-    [1554084058] = true,
-    [10476800936] = true
-}
 function DNS(Player)
-    return DNS_IDS[Player.UserId] == true
+    local object_id = {1628571024, 125458810, 8259510869, 1554084058, 10476800936}
+    for i = 1, #object_id do
+        if Player.UserId == object_id[i] then
+            return true
+        end
+    end
+    return false
 end
 
 local function _getParent(obj) return obj.Parent end
@@ -415,23 +408,24 @@ local TWEENS = {
 }
 
 -- Per-frame Viewport Point Caching
-local ViewportCachePos = {}
-local ViewportCacheOnScreen = {}
+local ViewportCache = {}
+local ViewportPool = {}
 TrackConnection(RunService.RenderStepped:Connect(function()
-    table.clear(ViewportCachePos)
-    table.clear(ViewportCacheOnScreen)
+    for pos, entry in pairs(ViewportCache) do
+        table.insert(ViewportPool, entry)
+        ViewportCache[pos] = nil
+    end
 end))
 
-local function GetViewportPoint(worldPos, key)
-    local cacheKey = key or worldPos
-    local cachedPos = ViewportCachePos[cacheKey]
-    if cachedPos ~= nil then
-        return cachedPos, ViewportCacheOnScreen[cacheKey]
+local function GetViewportPoint(worldPos)
+    local entry = ViewportCache[worldPos]
+    if entry then
+        return entry[1], entry[2]
     end
-
     local screenPos, onScreen = Camera:WorldToViewportPoint(worldPos)
-    ViewportCachePos[cacheKey] = screenPos
-    ViewportCacheOnScreen[cacheKey] = onScreen
+    entry = table.remove(ViewportPool) or {}
+    entry[1], entry[2] = screenPos, onScreen
+    ViewportCache[worldPos] = entry
     return screenPos, onScreen
 end
 
@@ -743,20 +737,14 @@ function ApplyWorldHumanoidSettings()
     end
 
     for path, props in pairs(WorldHumState.lockedProperties) do
-        local hum = WorldHumState.instanceCache[path]
-        if not hum or not hum.Parent then
-            hum = GetInstanceFromPath(path)
-            WorldHumState.instanceCache[path] = hum
-        end
-
-        if hum and hum:IsA("Humanoid") and hum.Parent then
+        local hum = GetInstanceFromPath(path)
+        if hum and hum:IsA("Humanoid") then
             for prop, val in pairs(props) do
                 pcall(SafeSetProp, hum, prop, val)
             end
         else
             -- Humanoid destroyed or gone, stop enforcing
             WorldHumState.lockedProperties[path] = nil
-            WorldHumState.instanceCache[path] = nil
         end
     end
 end
@@ -2838,7 +2826,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     -- Reset candidate list
     CandidateCount = 0
 
-    local FieldOfViewSq = FieldOfView * FieldOfView
     local players = GetPlayersCache()
     local lookVector = Camera.CFrame.LookVector
     local maxCandsLimit = MAX_CANDIDATES * 3
@@ -2881,13 +2868,13 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local Distance = (ActualPosition - CameraPosition).Magnitude
 
                 if not DistanceCheck or Distance < DistanceLimit then
-                    local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition, BodyPart)
+                    local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
                     if OnScreen then
                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                         local dx, dy = screenX - crosshairX, screenY - crosshairY
-                        local MagnitudeSq = dx * dx + dy * dy
+                        local Magnitude = sqrt(dx * dx + dy * dy)
 
-                        if MagnitudeSq < FieldOfViewSq then
+                        if Magnitude < FieldOfView then
                             local TargetPosition = ActualPosition
 
                             if CandidateCount < maxCandsLimit then
@@ -2897,7 +2884,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                                     entry = {}
                                     CandidateList[CandidateCount] = entry
                                 end
-                                entry.mag = MagnitudeSq
+                                entry.mag = Magnitude
                                 entry.ply = Player
                                 entry.char = Character
                                 entry.part = BodyPart
@@ -2930,13 +2917,13 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     continue
                 end
 
-                local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition, BodyPart)
+                local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
                 if OnScreen then
                     local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                     local dx, dy = screenX - crosshairX, screenY - crosshairY
-                    local MagnitudeSq = dx * dx + dy * dy
+                    local Magnitude = sqrt(dx * dx + dy * dy)
 
-                    if MagnitudeSq < FieldOfViewSq then
+                    if Magnitude < FieldOfView then
                         local TargetPosition = ActualPosition
 
                         if CandidateCount < maxCandsLimit then
@@ -2946,7 +2933,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                                 entry = {}
                                 CandidateList[CandidateCount] = entry
                             end
-                            entry.mag = MagnitudeSq
+                            entry.mag = Magnitude
                             entry.ply = Player
                             entry.char = Character
                             entry.part = BodyPart
@@ -3054,7 +3041,7 @@ function AimAt(Hitbox, Sensitivity)
     end
 
 
-    local ScreenPosition, OnScreen = GetViewportPoint(targetPos, targetPart)
+    local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
     if not OnScreen or ScreenPosition.Z <= 0 then
         return
     end
@@ -3193,21 +3180,16 @@ end
 -- Calculate screen edge position for off-screen indicator
 -- Returns the position clamped to screen edges and the angle toward the target
 -- PERFORMANCE: Uses cached camera data to avoid redundant property access
-function GetEdgePosition(now, worldPosition, key, cachedScreenPos, cachedOnScreen)
+function GetEdgePosition(now, worldPosition)
     -- Update camera cache (shared across all players per frame)
     if not UpdateCameraCache(now) then return nil, nil, nil, false end
     
     local viewportSize = cachedCameraData.viewportSize
     
-    local screenPos, onScreen
-    if cachedScreenPos ~= nil then
-        screenPos, onScreen = cachedScreenPos, cachedOnScreen
-    else
-        -- Still need to call WorldToViewportPoint per-player (using centralized caching)
-        if not Camera then Camera = Workspace.CurrentCamera end
-        if not Camera then return nil, nil, nil, false end
-        screenPos, onScreen = GetViewportPoint(worldPosition, key)
-    end
+    -- Still need to call WorldToViewportPoint per-player (using centralized caching)
+    if not Camera then Camera = Workspace.CurrentCamera end
+    if not Camera then return nil, nil, nil, false end
+    local screenPos, onScreen = GetViewportPoint(worldPosition)
     
     -- If on screen, return nil (use normal nametag)
     if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
@@ -4215,7 +4197,7 @@ end
 
 function _resetPooledObject(obj)
     obj.Adornee = nil
-    obj.Enabled = false
+    pcall(function() obj.Enabled = false end)
     obj.Parent = PoolFolder
 end
 
@@ -4223,7 +4205,6 @@ function ReturnPooledObject(obj)
     if not obj then return end
     
     -- PERFORMANCE FIX: O(1) check with argument-passing pcall to avoid closures
-    -- Inner pcall removed as the outer pcall handles property access safely
     local success = pcall(_resetPooledObject, obj)
     
     if not success then return end
@@ -4531,10 +4512,8 @@ function UpdateESP(now, player, isClosest)
         return
     end
 
-    -- Calculate distance and viewport position once
-    local rootPos = rootPart.Position
-    local distance = (rootPos - Camera.CFrame.Position).Magnitude
-    local rootScreenPos, rootOnScreen = GetViewportPoint(rootPos, rootPart)
+    -- Calculate distance
+    local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
     -- Distance culling REMOVED: All nametags visible at any distance
 
@@ -4628,14 +4607,15 @@ function UpdateESP(now, player, isClosest)
 
     -- Update tracer (LOD: skip for distant players to save performance)
     if espData.Tracer and Flags["ESP/Tracers"] and distance <= 2000 then
-        if rootOnScreen then
+        local screenPos, onScreen = GetViewportPoint(rootPart.Position)
+        if onScreen then
             local tracerLine = espData.Tracer
             local viewportSize = Camera.ViewportSize
             
             local originX = viewportSize.X / 2
             local originY = viewportSize.Y
-            local targetX = rootScreenPos.X
-            local targetY = rootScreenPos.Y
+            local targetX = screenPos.X
+            local targetY = screenPos.Y
             
             local diffX = targetX - originX
             local diffY = targetY - originY
@@ -4676,7 +4656,7 @@ function UpdateESP(now, player, isClosest)
     if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
         local indicator = espData.OffscreenIndicator
         -- MEMORY FIX: GetEdgePosition now returns raw numbers instead of Vector2
-        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(now, rootPos, rootPart, rootScreenPos, rootOnScreen)
+        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(now, rootPart.Position)
         
         -- Logic Fix: WorldToViewportPoint/GetEdgePosition and/or ternary bug prevention
         if edgeX == nil and isOnScreen == nil then
@@ -5770,7 +5750,6 @@ function Cleanup()
         pcall(function() WorldHumState.selectionHighlight:Destroy() end)
     end
     table.clear(WorldHumState.lockedProperties)
-    table.clear(WorldHumState.instanceCache)
     WorldHumState.selectedHum = nil
     WorldHumState.selectionHighlight = nil
     
@@ -6555,7 +6534,7 @@ function SetupPlayerESP(player)
             if espData.waitingForChar then return end
             espData.waitingForChar = true
 
-            TrackThread(task.spawn(function()
+            task.spawn(function()
                 local character = player.Character
                 
                 -- Invalidate character cache
@@ -6583,7 +6562,7 @@ function SetupPlayerESP(player)
                     EnsureScreenGui()
                     UpdateESP(os.clock(), player, player == NearestPlayerRef)
                 end
-            end))
+            end)
         end
     end
 end
@@ -6660,7 +6639,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             
             local deleted = false
             for id, wpData in pairs(ActiveWaypoints) do
-                local screenPos, onScreen = GetViewportPoint(wpData.Position, wpData.Part)
+                local screenPos, onScreen = GetViewportPoint(wpData.Position)
                 
                 -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
                 local screenClose = false
