@@ -3996,32 +3996,25 @@ function ShowAdvancedPlayerDetails(player)
     createButton("Spectate Player", function()
         local targetChar = player.Character
         local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+        local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
+        
         if targetHum then
             if AdvancedPlayerPanelState.Spectating == player then
                 -- Stop Spectating
                 AdvancedPlayerPanelState.Spectating = nil
                 Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if AdvancedPlayerPanelState.SpectateProxy then
-                    AdvancedPlayerPanelState.SpectateProxy:Destroy()
-                    AdvancedPlayerPanelState.SpectateProxy = nil
-                end
                 LocalPlayer.ReplicationFocus = nil
+                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
             else
                 AdvancedPlayerPanelState.Spectating = player
                 Camera.CameraSubject = targetHum
                 
-                -- Chunk Support Proxy
-                if not AdvancedPlayerPanelState.SpectateProxy then
-                    local proxy = Instance.new("Part")
-                    proxy.Name = "SpectateProxy"
-                    proxy.Anchored = true
-                    proxy.CanCollide = false
-                    proxy.Transparency = 1
-                    proxy.Size = Vector3.new(1, 1, 1)
-                    proxy.Parent = Services.Workspace
-                    AdvancedPlayerPanelState.SpectateProxy = proxy
+                -- Chunk Support
+                if targetRoot then
+                    LocalPlayer.ReplicationFocus = targetRoot
                 end
-                LocalPlayer.ReplicationFocus = AdvancedPlayerPanelState.SpectateProxy
+                -- Disable the annoying "Gameplay Paused" screen
+                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
             end
         end
     end)
@@ -6286,9 +6279,6 @@ function Cleanup()
     if AdvancedPlayerPanelUI.MainFrame then
         pcall(function() AdvancedPlayerPanelUI.MainFrame:Destroy() end)
     end
-    if AdvancedPlayerPanelState.SpectateProxy then
-        pcall(function() AdvancedPlayerPanelState.SpectateProxy:Destroy() end)
-    end
     AdvancedPlayerPanelState.Visible = false
     AdvancedPlayerPanelState.CurrentView = "List"
     AdvancedPlayerPanelState.SelectedPlayer = nil
@@ -6302,9 +6292,8 @@ function Cleanup()
     AdvancedPlayerPanelUI.SearchBox = nil
     table.clear(AdvancedPlayerPanelUI.Entries)
     table.clear(AdvancedPlayerPanelUI.DetailLabels)
-    if LocalPlayer.ReplicationFocus and LocalPlayer.ReplicationFocus.Name == "SpectateProxy" then
-        LocalPlayer.ReplicationFocus = nil
-    end
+    LocalPlayer.ReplicationFocus = nil
+    pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
     
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
     table.clear(PathCache)
@@ -7491,12 +7480,12 @@ function UnifiedHeartbeat(dt)
             UpdateAdvancedPlayerDetails()
         end
 
-        -- Update Spectate Proxy if active (independent of panel visibility)
+        -- Update Spectate focus if active (independent of panel visibility)
         local specPlayer = AdvancedPlayerPanelState.Spectating
-        if specPlayer and specPlayer.Parent and AdvancedPlayerPanelState.SpectateProxy then
+        if specPlayer and specPlayer.Parent then
             local _, specRoot = GetCharacter(specPlayer)
-            if specRoot then
-                AdvancedPlayerPanelState.SpectateProxy.CFrame = specRoot.CFrame
+            if specRoot and LocalPlayer.ReplicationFocus ~= specRoot then
+                LocalPlayer.ReplicationFocus = specRoot
             end
         end
     end
