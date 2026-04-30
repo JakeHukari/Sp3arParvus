@@ -1,7 +1,7 @@
 -- Sp3arParvus
 local VERSION = "3.9.8" -- Player Panel
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
-MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
+MAX_INIT_WAIT = 30
 initStartTime = tick()
 print("[Sp3arParvus] Waiting for game to load...")
 repeat task.wait() until game:IsLoaded()
@@ -159,7 +159,9 @@ local AdvancedPlayerPanelState = {
     Visible = false,
     CurrentView = "List", -- "List" or "Details"
     SelectedPlayer = nil,
-    Spectating = nil
+    Spectating = nil,
+    Whitelist = {},
+    Blacklist = {}
 }
 local AdvancedPlayerPanelUI = {
     MainFrame = nil,
@@ -2849,11 +2851,18 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
+        -- Whitelist Check
+        if AdvancedPlayerPanelState.Whitelist[Player.UserId] then
+            continue
+        end
+
+        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[Player.UserId]
+
         local Character, RootPart = GetCharacter(Player)
         if not Character or not RootPart then
             continue
         end
-        if not InEnemyTeam(TeamCheck, Player) then
+        if not isBlacklisted and not InEnemyTeam(TeamCheck, Player) then
             continue
         end
 
@@ -2861,13 +2870,13 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         local relPos = rootPos - CameraPosition
         
         -- 1. DOT PRODUCT PRE-FILTER (Cheap check to ensure target is in front)
-        if lookVector:Dot(relPos) < 0 then
+        if not isBlacklisted and lookVector:Dot(relPos) < 0 then
             continue
         end
 
         -- 2. DISTANCE PRE-FILTER
         local rootDist = relPos.Magnitude
-        if DistanceCheck and rootDist > (DistanceLimit + 50) then
+        if not isBlacklisted and DistanceCheck and rootDist > (DistanceLimit + 50) then
             continue
         end
 
@@ -2881,14 +2890,19 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local ActualPosition = BodyPart.Position
                 local Distance = (ActualPosition - CameraPosition).Magnitude
 
-                if not DistanceCheck or Distance < DistanceLimit then
+                if isBlacklisted or not DistanceCheck or Distance < DistanceLimit then
                     local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
                     if OnScreen then
                         local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
                         local dx, dy = screenX - crosshairX, screenY - crosshairY
                         local Magnitude = sqrt(dx * dx + dy * dy)
+                        
+                        -- Blacklist Prioritization
+                        if isBlacklisted then
+                            Magnitude = Magnitude - 10000 -- Force to front of sort
+                        end
 
-                        if Magnitude < FieldOfView then
+                        if isBlacklisted or Magnitude < FieldOfView then
                             local TargetPosition = ActualPosition
 
                             if CandidateCount < maxCandsLimit then
@@ -2927,7 +2941,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local ActualPosition = BodyPart.Position
                 local Distance = (ActualPosition - CameraPosition).Magnitude
 
-                if DistanceCheck and Distance >= DistanceLimit then
+                if not isBlacklisted and DistanceCheck and Distance >= DistanceLimit then
                     continue
                 end
 
@@ -2937,7 +2951,12 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     local dx, dy = screenX - crosshairX, screenY - crosshairY
                     local Magnitude = sqrt(dx * dx + dy * dy)
 
-                    if Magnitude < FieldOfView then
+                    -- Blacklist Prioritization
+                    if isBlacklisted then
+                        Magnitude = Magnitude - 10000 -- Force to front of sort
+                    end
+
+                    if isBlacklisted or Magnitude < FieldOfView then
                         local TargetPosition = ActualPosition
 
                         if CandidateCount < maxCandsLimit then
@@ -2975,7 +2994,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
-                if not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
+                local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[entry.ply.UserId]
+                if isSpecTargetBlacklisted or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
                     ClosestResult[3] = entry.part
@@ -2997,7 +3017,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        if ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
+        local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[entry.ply.UserId]
+        if not isEntryBlacklisted and ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
             continue
         end
 
@@ -3991,6 +4012,23 @@ function ShowAdvancedPlayerDetails(player)
     createLabel("Nearest Player 3", "---")
 
     createSection("Actions")
+    
+    local whitelistBtn = createButton(AdvancedPlayerPanelState.Whitelist[player.UserId] and "Unwhitelist Player" or "Whitelist Player", function() end)
+    TrackConnection(whitelistBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.Whitelist[player.UserId] = not AdvancedPlayerPanelState.Whitelist[player.UserId]
+        whitelistBtn.Text = AdvancedPlayerPanelState.Whitelist[player.UserId] and "Unwhitelist Player" or "Whitelist Player"
+        whitelistBtn.TextColor3 = AdvancedPlayerPanelState.Whitelist[player.UserId] and UI_THEME.Accent or UI_THEME.Text
+    end))
+    if AdvancedPlayerPanelState.Whitelist[player.UserId] then whitelistBtn.TextColor3 = UI_THEME.Accent end
+
+    local blacklistBtn = createButton(AdvancedPlayerPanelState.Blacklist[player.UserId] and "Unblacklist Player" or "Blacklist Player", function() end)
+    TrackConnection(blacklistBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.Blacklist[player.UserId] = not AdvancedPlayerPanelState.Blacklist[player.UserId]
+        blacklistBtn.Text = AdvancedPlayerPanelState.Blacklist[player.UserId] and "Unblacklist Player" or "Blacklist Player"
+        blacklistBtn.TextColor3 = AdvancedPlayerPanelState.Blacklist[player.UserId] and UI_THEME.Accent or UI_THEME.Text
+    end))
+    if AdvancedPlayerPanelState.Blacklist[player.UserId] then blacklistBtn.TextColor3 = UI_THEME.Accent end
+
     createButton("Teleport to Player", function()
         local myChar = LocalPlayer.Character
         local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
@@ -6290,6 +6328,8 @@ function Cleanup()
     AdvancedPlayerPanelState.CurrentView = "List"
     AdvancedPlayerPanelState.SelectedPlayer = nil
     AdvancedPlayerPanelState.Spectating = nil
+    table.clear(AdvancedPlayerPanelState.Whitelist)
+    table.clear(AdvancedPlayerPanelState.Blacklist)
     AdvancedPlayerPanelUI.MainFrame = nil
     AdvancedPlayerPanelUI.ListFrame = nil
     AdvancedPlayerPanelUI.DetailsFrame = nil
