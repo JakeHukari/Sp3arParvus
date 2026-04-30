@@ -5450,27 +5450,8 @@ local cameraFocus
 local cameraCFrame
 local cameraFieldOfView
 local screenGuis = {}
-local coreGuis = {
-Backpack = true,
-Chat = true,
-Health = true,
-PlayerList = true,
-}
-local setCores = {
-BadgesNotificationsActive = true,
-PointsNotificationsActive = true,
-}
-
 -- Save state and set up for freecam
 function PlayerState.Push()
-for name in pairs(coreGuis) do
-coreGuis[name] = StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType[name])
-StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType[name], false)
-end
-for name in pairs(setCores) do
-setCores[name] = StarterGui:GetCore(name)
-StarterGui:SetCore(name, false)
-end
 local playergui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
 if playergui then
 for _, gui in pairs(playergui:GetChildren()) do
@@ -5502,12 +5483,6 @@ end
 
 -- Restore state
 function PlayerState.Pop()
-for name, isEnabled in pairs(coreGuis) do
-StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType[name], isEnabled)
-end
-for name, isEnabled in pairs(setCores) do
-StarterGui:SetCore(name, isEnabled)
-end
 for _, gui in pairs(screenGuis) do
 if gui.Parent then
 gui.Enabled = true
