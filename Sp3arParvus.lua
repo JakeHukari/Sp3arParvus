@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.7" -- Zoom Unlocker
+local VERSION = "3.9.8" -- Player Panel
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30 -- Maximum seconds to wait for initialization (add more for super huge games)
 initStartTime = tick()
@@ -95,6 +95,7 @@ local Flags = {
     ["ESP/Tracers"] = false,
     ["ESP/OffscreenIndicators"] = false,
     ["ESP/PlayerPanel"] = false,
+    ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
@@ -153,6 +154,20 @@ local UIState = {
     ActiveDraggedFrame = nil,
     DragStart = nil,
     StartAbsPos = nil
+}
+local AdvancedPlayerPanelState = {
+    Visible = false,
+    CurrentView = "List", -- "List" or "Details"
+    SelectedPlayer = nil,
+    Spectating = nil,
+    SpectateProxy = nil
+}
+local AdvancedPlayerPanelUI = {
+    MainFrame = nil,
+    ListFrame = nil,
+    DetailsFrame = nil,
+    Entries = {},
+    DetailLabels = {}
 }
 local HumanoidState = {
     originalSettings = {},
@@ -3580,6 +3595,498 @@ function UpdateClosestPlayerTracker()
     end
 end
 
+-- ADVANCED PLAYER PANEL (Ctrl+K)
+
+function CreateAdvancedPlayerPanel()
+    if AdvancedPlayerPanelUI.MainFrame then return end
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "AdvancedPlayerPanel"
+    MainFrame.Size = UDim2.fromOffset(450, 350)
+    MainFrame.Position = UDim2.fromScale(0.5, 0.5)
+    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainFrame.BackgroundColor3 = UI_THEME.Background
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Visible = false
+    MainFrame.ClipsDescendants = true
+    EnsureScreenGui()
+    MainFrame.Parent = ScreenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = MainFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(60, 60, 60)
+    stroke.Thickness = 1
+    stroke.Parent = MainFrame
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 35)
+    header.BackgroundColor3 = UI_THEME.Sidebar
+    header.BorderSizePixel = 0
+    header.Parent = MainFrame
+
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 10)
+    headerFix.Position = UDim2.new(0, 0, 1, -10)
+    headerFix.BackgroundColor3 = UI_THEME.Sidebar
+    headerFix.BorderSizePixel = 0
+    headerFix.Parent = header
+
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -70, 1, 0)
+    title.Position = UDim2.fromOffset(12, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "👥 Player Panel"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 16
+    title.TextColor3 = UI_THEME.Accent
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "CloseBtn"
+    closeBtn.Size = UDim2.fromOffset(26, 26)
+    closeBtn.Position = UDim2.new(1, -31, 0.5, -13)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    closeBtn.BackgroundTransparency = 0.5
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Parent = header
+
+    local closeBtnCorner = Instance.new("UICorner")
+    closeBtnCorner.CornerRadius = UDim.new(0, 4)
+    closeBtnCorner.Parent = closeBtn
+
+    TrackConnection(closeBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.Visible = false
+        MainFrame.Visible = false
+        Flags["ESP/AdvancedPlayerPanel"] = false
+        local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
+        if updater then updater(false) end
+    end))
+
+    -- List View
+    local ListFrame = Instance.new("Frame")
+    ListFrame.Name = "ListFrame"
+    ListFrame.Size = UDim2.new(1, 0, 1, -35)
+    ListFrame.Position = UDim2.fromOffset(0, 35)
+    ListFrame.BackgroundTransparency = 1
+    ListFrame.Visible = true
+    ListFrame.Parent = MainFrame
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "SearchBox"
+    searchBox.Size = UDim2.new(1, -20, 0, 30)
+    searchBox.Position = UDim2.fromOffset(10, 10)
+    searchBox.BackgroundColor3 = UI_THEME.Element
+    searchBox.Text = ""
+    searchBox.PlaceholderText = "Search players..."
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextSize = 13
+    searchBox.TextColor3 = UI_THEME.Text
+    searchBox.PlaceholderColor3 = UI_THEME.TextDark
+    searchBox.Parent = ListFrame
+    local sbCorner = Instance.new("UICorner"); sbCorner.CornerRadius = UDim.new(0, 6); sbCorner.Parent = searchBox
+
+    local listContent = Instance.new("ScrollingFrame")
+    listContent.Name = "ListContent"
+    listContent.Size = UDim2.new(1, -10, 1, -50)
+    listContent.Position = UDim2.fromOffset(5, 45)
+    listContent.BackgroundTransparency = 1
+    listContent.BorderSizePixel = 0
+    listContent.ScrollBarThickness = 4
+    listContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    listContent.Parent = ListFrame
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 4)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = listContent
+
+    -- Details View
+    local DetailsFrame = Instance.new("Frame")
+    DetailsFrame.Name = "DetailsFrame"
+    DetailsFrame.Size = UDim2.new(1, 0, 1, -35)
+    DetailsFrame.Position = UDim2.fromOffset(0, 35)
+    DetailsFrame.BackgroundTransparency = 1
+    DetailsFrame.Visible = false
+    DetailsFrame.Parent = MainFrame
+
+    local backBtn = Instance.new("TextButton")
+    backBtn.Name = "BackBtn"
+    backBtn.Size = UDim2.fromOffset(70, 26)
+    backBtn.Position = UDim2.fromOffset(10, 10)
+    backBtn.BackgroundColor3 = UI_THEME.Element
+    backBtn.Text = "← Back"
+    backBtn.Font = Enum.Font.GothamBold
+    backBtn.TextSize = 12
+    backBtn.TextColor3 = UI_THEME.Text
+    backBtn.Parent = DetailsFrame
+    local bbCorner = Instance.new("UICorner"); bbCorner.CornerRadius = UDim.new(0, 4); bbCorner.Parent = backBtn
+
+    TrackConnection(backBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.CurrentView = "List"
+        DetailsFrame.Visible = false
+        ListFrame.Visible = true
+    end))
+
+    local detailsContent = Instance.new("ScrollingFrame")
+    detailsContent.Name = "DetailsContent"
+    detailsContent.Size = UDim2.new(1, -10, 1, -46)
+    detailsContent.Position = UDim2.fromOffset(5, 46)
+    detailsContent.BackgroundTransparency = 1
+    detailsContent.BorderSizePixel = 0
+    detailsContent.ScrollBarThickness = 4
+    detailsContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    detailsContent.Parent = DetailsFrame
+
+    local detailsLayout = Instance.new("UIListLayout")
+    detailsLayout.Padding = UDim.new(0, 6)
+    detailsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    detailsLayout.Parent = detailsContent
+    
+    local detailsPadding = Instance.new("UIPadding")
+    detailsPadding.PaddingLeft = UDim.new(0, 10)
+    detailsPadding.PaddingRight = UDim.new(0, 10)
+    detailsPadding.Parent = detailsContent
+
+    AdvancedPlayerPanelUI.MainFrame = MainFrame
+    AdvancedPlayerPanelUI.ListFrame = ListFrame
+    AdvancedPlayerPanelUI.DetailsFrame = DetailsFrame
+    AdvancedPlayerPanelUI.ListContent = listContent
+    AdvancedPlayerPanelUI.DetailsContent = detailsContent
+    AdvancedPlayerPanelUI.SearchBox = searchBox
+
+    if UI.MakeDraggable then
+        UI.MakeDraggable(MainFrame)
+    end
+end
+
+function UpdateAdvancedPlayerList()
+    if not AdvancedPlayerPanelUI.MainFrame or not AdvancedPlayerPanelUI.MainFrame.Visible then return end
+    if AdvancedPlayerPanelState.CurrentView ~= "List" then return end
+
+    local players = Players:GetPlayers()
+    local searchText = AdvancedPlayerPanelUI.SearchBox.Text:lower()
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+    local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+    -- Optimization: reuse entries
+    for player, entry in pairs(AdvancedPlayerPanelUI.Entries) do
+        if not player or not player.Parent then
+            entry.Frame:Destroy()
+            AdvancedPlayerPanelUI.Entries[player] = nil
+        end
+    end
+
+    for _, player in ipairs(players) do
+        local nickname = player.DisplayName or player.Name
+        local username = player.Name
+        
+        if searchText ~= "" and not nickname:lower():find(searchText) and not username:lower():find(searchText) then
+            if AdvancedPlayerPanelUI.Entries[player] then
+                AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
+            end
+            continue
+        end
+
+        local entry = AdvancedPlayerPanelUI.Entries[player]
+        if not entry then
+            entry = {}
+            local frame = Instance.new("Frame")
+            frame.Name = player.Name .. "_Entry"
+            frame.Size = UDim2.new(1, 0, 0, 50)
+            frame.BackgroundColor3 = UI_THEME.Element
+            frame.BorderSizePixel = 0
+            frame.Parent = AdvancedPlayerPanelUI.ListContent
+            local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = frame
+            
+            local avatar = Instance.new("ImageLabel")
+            avatar.Name = "Avatar"
+            avatar.Size = UDim2.fromOffset(40, 40)
+            avatar.Position = UDim2.fromOffset(5, 5)
+            avatar.BackgroundColor3 = UI_THEME.Background
+            avatar.Parent = frame
+            local aCorner = Instance.new("UICorner"); aCorner.CornerRadius = UDim.new(1, 0); aCorner.Parent = avatar
+            
+            task.spawn(function()
+                local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                if isReady then avatar.Image = content end
+            end)
+
+            local nickLbl = Instance.new("TextLabel")
+            nickLbl.Name = "Nickname"
+            nickLbl.Size = UDim2.new(1, -120, 0, 20)
+            nickLbl.Position = UDim2.fromOffset(55, 5)
+            nickLbl.BackgroundTransparency = 1
+            nickLbl.Text = nickname
+            nickLbl.Font = Enum.Font.GothamBold
+            nickLbl.TextSize = 14
+            nickLbl.TextColor3 = UI_THEME.Text
+            nickLbl.TextXAlignment = Enum.TextXAlignment.Left
+            nickLbl.Parent = frame
+
+            local userLbl = Instance.new("TextLabel")
+            userLbl.Name = "Username"
+            userLbl.Size = UDim2.new(1, -120, 0, 18)
+            userLbl.Position = UDim2.fromOffset(55, 25)
+            userLbl.BackgroundTransparency = 1
+            userLbl.Text = "@" .. username
+            userLbl.Font = Enum.Font.Gotham
+            userLbl.TextSize = 12
+            userLbl.TextColor3 = UI_THEME.TextDark
+            userLbl.TextXAlignment = Enum.TextXAlignment.Left
+            userLbl.Parent = frame
+
+            local distLbl = Instance.new("TextLabel")
+            distLbl.Name = "Distance"
+            distLbl.Size = UDim2.new(0, 60, 1, 0)
+            distLbl.Position = UDim2.new(1, -65, 0, 0)
+            distLbl.BackgroundTransparency = 1
+            distLbl.Text = "---"
+            distLbl.Font = Enum.Font.GothamBold
+            distLbl.TextSize = 12
+            distLbl.TextColor3 = UI_THEME.Accent
+            distLbl.TextXAlignment = Enum.TextXAlignment.Right
+            distLbl.Parent = frame
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 1, 0)
+            btn.BackgroundTransparency = 1
+            btn.Text = ""
+            btn.Parent = frame
+            
+            TrackConnection(btn.MouseButton1Click:Connect(function()
+                AdvancedPlayerPanelState.SelectedPlayer = player
+                AdvancedPlayerPanelState.CurrentView = "Details"
+                AdvancedPlayerPanelUI.ListFrame.Visible = false
+                AdvancedPlayerPanelUI.DetailsFrame.Visible = true
+                ShowAdvancedPlayerDetails(player)
+            end))
+
+            entry.Frame = frame
+            entry.DistanceLabel = distLbl
+            AdvancedPlayerPanelUI.Entries[player] = entry
+        end
+
+        entry.Frame.Visible = true
+        local char, root = GetCharacter(player)
+        if root then
+            local dist = (root.Position - myPos).Magnitude
+            entry.DistanceLabel.Text = math.floor(dist) .. "m"
+        else
+            entry.DistanceLabel.Text = "---"
+        end
+    end
+end
+
+function ShowAdvancedPlayerDetails(player)
+    local content = AdvancedPlayerPanelUI.DetailsContent
+    for _, child in ipairs(content:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
+    end
+    table.clear(AdvancedPlayerPanelUI.DetailLabels)
+
+    local function createSection(name)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 25)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = name:upper()
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 12
+        lbl.TextColor3 = UI_THEME.Accent
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = content
+    end
+
+    local function createLabel(name, initialValue)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 20)
+        frame.BackgroundTransparency = 1
+        frame.Parent = content
+        
+        local n = Instance.new("TextLabel")
+        n.Size = UDim2.new(0.4, 0, 1, 0)
+        n.BackgroundTransparency = 1
+        n.Text = name .. ":"
+        n.Font = Enum.Font.GothamMedium
+        n.TextSize = 13
+        n.TextColor3 = UI_THEME.TextDark
+        n.TextXAlignment = Enum.TextXAlignment.Left
+        n.Parent = frame
+        
+        local v = Instance.new("TextLabel")
+        v.Size = UDim2.new(0.6, 0, 1, 0)
+        v.Position = UDim2.new(0.4, 0, 0, 0)
+        v.BackgroundTransparency = 1
+        v.Text = initialValue
+        v.Font = Enum.Font.GothamBold
+        v.TextSize = 13
+        v.TextColor3 = UI_THEME.Text
+        v.TextXAlignment = Enum.TextXAlignment.Right
+        v.Parent = frame
+        
+        AdvancedPlayerPanelUI.DetailLabels[name] = v
+        return v
+    end
+
+    local function createButton(name, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.BackgroundColor3 = UI_THEME.Element
+        btn.Text = name
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 13
+        btn.TextColor3 = UI_THEME.Text
+        btn.Parent = content
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = btn
+        
+        TrackConnection(btn.MouseButton1Click:Connect(callback))
+        return btn
+    end
+
+    createSection("User Information")
+    createLabel("Display Name", player.DisplayName)
+    createLabel("Username", "@" .. player.Name)
+    
+    local creationDate = "Unknown"
+    pcall(function()
+        local t = os.time() - (player.AccountAge * 86400)
+        creationDate = os.date("%x", t)
+    end)
+    createLabel("Account Created", creationDate)
+    createLabel("Mutual Friends", "N/A") -- Roblox API limited on client for mutuals
+    createLabel("Is Friend", LocalPlayer:IsFriendsWith(player.UserId) and "Yes" or "No")
+
+    createSection("In-Game Information")
+    createLabel("Distance", "---")
+    createLabel("Coordinates", "---")
+    createLabel("Current Health", "---")
+    createLabel("Held Item", "---")
+
+    createSection("Proximity")
+    createLabel("Nearest Player 1", "---")
+    createLabel("Nearest Player 2", "---")
+    createLabel("Nearest Player 3", "---")
+
+    createSection("Actions")
+    createButton("Teleport to Player", function()
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+        local targetChar, targetRoot = GetCharacter(player)
+        if myRoot and targetRoot then
+            myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+        end
+    end)
+
+    createButton("Spectate Player", function()
+        local targetChar = player.Character
+        local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+        if targetHum then
+            if AdvancedPlayerPanelState.Spectating == player then
+                -- Stop Spectating
+                AdvancedPlayerPanelState.Spectating = nil
+                Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if AdvancedPlayerPanelState.SpectateProxy then
+                    AdvancedPlayerPanelState.SpectateProxy:Destroy()
+                    AdvancedPlayerPanelState.SpectateProxy = nil
+                end
+                LocalPlayer.ReplicationFocus = nil
+            else
+                AdvancedPlayerPanelState.Spectating = player
+                Camera.CameraSubject = targetHum
+                
+                -- Chunk Support Proxy
+                if not AdvancedPlayerPanelState.SpectateProxy then
+                    local proxy = Instance.new("Part")
+                    proxy.Name = "SpectateProxy"
+                    proxy.Anchored = true
+                    proxy.CanCollide = false
+                    proxy.Transparency = 1
+                    proxy.Size = Vector3.new(1, 1, 1)
+                    proxy.Parent = Services.Workspace
+                    AdvancedPlayerPanelState.SpectateProxy = proxy
+                end
+                LocalPlayer.ReplicationFocus = AdvancedPlayerPanelState.SpectateProxy
+            end
+        end
+    end)
+end
+
+function UpdateAdvancedPlayerDetails()
+    local player = AdvancedPlayerPanelState.SelectedPlayer
+    if not player or not player.Parent then return end
+    if AdvancedPlayerPanelState.CurrentView ~= "Details" then return end
+    
+    local labels = AdvancedPlayerPanelUI.DetailLabels
+    local char, root = GetCharacter(player)
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+    local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+    if root then
+        local dist = (root.Position - myPos).Magnitude
+        if labels["Distance"] then labels["Distance"].Text = math.floor(dist) .. "m" end
+        if labels["Coordinates"] then 
+            local p = root.Position
+            labels["Coordinates"].Text = string.format("%d, %d, %d", math.floor(p.X), math.floor(p.Y), math.floor(p.Z)) 
+        end
+    end
+
+    local h, mh = GetHealth(player)
+    if labels["Current Health"] then labels["Current Health"].Text = string.format("%d/%d", math.floor(h), math.floor(mh)) end
+
+    local heldItem = "None"
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then heldItem = tool.Name end
+    end
+    if labels["Held Item"] then labels["Held Item"].Text = heldItem end
+
+    -- Nearest Players to selected player
+    if root then
+        local targetPos = root.Position
+        local others = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player then
+                local _, r = GetCharacter(p)
+                if r then
+                    table.insert(others, {p = p, d = (r.Position - targetPos).Magnitude})
+                end
+            end
+        end
+        table.sort(others, function(a, b) return a.d < b.d end)
+        
+        for i = 1, 3 do
+            local key = "Nearest Player " .. i
+            if labels[key] then
+                local data = others[i]
+                if data then
+                    labels[key].Text = string.format("%s (%dm)", data.p.DisplayName or data.p.Name, math.floor(data.d))
+                else
+                    labels[key].Text = "---"
+                end
+            end
+        end
+    end
+
+end
+
 -- PLAYER PANEL (Top 10 Closest Players)
 
 PlayerPanelFrame = nil
@@ -5774,6 +6281,30 @@ function Cleanup()
     LocalHealthValueLabel = nil
     PlayerPanelFrame = nil
     table.clear(PlayerPanelRows)
+
+    -- Cleanup AdvancedPlayerPanel
+    if AdvancedPlayerPanelUI.MainFrame then
+        pcall(function() AdvancedPlayerPanelUI.MainFrame:Destroy() end)
+    end
+    if AdvancedPlayerPanelState.SpectateProxy then
+        pcall(function() AdvancedPlayerPanelState.SpectateProxy:Destroy() end)
+    end
+    AdvancedPlayerPanelState.Visible = false
+    AdvancedPlayerPanelState.CurrentView = "List"
+    AdvancedPlayerPanelState.SelectedPlayer = nil
+    AdvancedPlayerPanelState.Spectating = nil
+    AdvancedPlayerPanelState.SpectateProxy = nil
+    AdvancedPlayerPanelUI.MainFrame = nil
+    AdvancedPlayerPanelUI.ListFrame = nil
+    AdvancedPlayerPanelUI.DetailsFrame = nil
+    AdvancedPlayerPanelUI.ListContent = nil
+    AdvancedPlayerPanelUI.DetailsContent = nil
+    AdvancedPlayerPanelUI.SearchBox = nil
+    table.clear(AdvancedPlayerPanelUI.Entries)
+    table.clear(AdvancedPlayerPanelUI.DetailLabels)
+    if LocalPlayer.ReplicationFocus and LocalPlayer.ReplicationFocus.Name == "SpectateProxy" then
+        LocalPlayer.ReplicationFocus = nil
+    end
     
     -- MEMORY LEAK FIX: Clear all cache tables to release object references
     table.clear(PathCache)
@@ -6316,6 +6847,15 @@ UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", Flags["E
         PlayerPanelFrame.Visible = state
     end
 end)
+UI.CreateToggle(VisualsTab, "Advanced Player Panel (Ctrl+K)", "ESP/AdvancedPlayerPanel", Flags["ESP/AdvancedPlayerPanel"], function(state)
+    if state and not AdvancedPlayerPanelUI.MainFrame then
+        CreateAdvancedPlayerPanel()
+    end
+    if AdvancedPlayerPanelUI.MainFrame then
+        AdvancedPlayerPanelUI.MainFrame.Visible = state
+        AdvancedPlayerPanelState.Visible = state
+    end
+end)
 UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
     -- When disabled, remove all existing outlines immediately
     if not state then
@@ -6699,6 +7239,19 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             if UIState.ToggleMinimize then
                 UIState.ToggleMinimize()
             end
+        elseif input.KeyCode == Enum.KeyCode.K and Br3ak3rState.CTRL_HELD then
+            -- Ctrl+K: Toggle Advanced Player Panel
+            Flags["ESP/AdvancedPlayerPanel"] = not Flags["ESP/AdvancedPlayerPanel"]
+            local state = Flags["ESP/AdvancedPlayerPanel"]
+            if state and not AdvancedPlayerPanelUI.MainFrame then
+                CreateAdvancedPlayerPanel()
+            end
+            if AdvancedPlayerPanelUI.MainFrame then
+                AdvancedPlayerPanelUI.MainFrame.Visible = state
+                AdvancedPlayerPanelState.Visible = state
+            end
+            local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
+            if updater then updater(state) end
         end
     end
 end))
@@ -6931,6 +7484,21 @@ function UnifiedHeartbeat(dt)
         lastHumanoidSync = now
         UpdateHumanoidUI()
         UpdateWorldHumanoidEditorUI()
+        
+        -- Update Advanced Player Panel
+        if AdvancedPlayerPanelState.Visible then
+            UpdateAdvancedPlayerList()
+            UpdateAdvancedPlayerDetails()
+        end
+
+        -- Update Spectate Proxy if active (independent of panel visibility)
+        local specPlayer = AdvancedPlayerPanelState.Spectating
+        if specPlayer and specPlayer.Parent and AdvancedPlayerPanelState.SpectateProxy then
+            local _, specRoot = GetCharacter(specPlayer)
+            if specRoot then
+                AdvancedPlayerPanelState.SpectateProxy.CFrame = specRoot.CFrame
+            end
+        end
     end
 
     if UIState.CurrentTab == "WorldHumanoids" and not WorldHumState.selectedHum then
