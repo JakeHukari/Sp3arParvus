@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.9" -- Vertical Aim Offset in Third Person Free Mouse Mode
+local VERSION = "3.9.9" -- PlayerPanel Enhancement
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -163,6 +163,24 @@ local AdvancedPlayerPanelState = {
     Whitelist = {},
     Blacklist = {}
 }
+
+function ToggleWhitelist(player)
+    if not player then return end
+    local id = player.UserId
+    AdvancedPlayerPanelState.Whitelist[id] = not AdvancedPlayerPanelState.Whitelist[id]
+    if AdvancedPlayerPanelState.Whitelist[id] then
+        AdvancedPlayerPanelState.Blacklist[id] = nil
+    end
+end
+
+function ToggleBlacklist(player)
+    if not player then return end
+    local id = player.UserId
+    AdvancedPlayerPanelState.Blacklist[id] = not AdvancedPlayerPanelState.Blacklist[id]
+    if AdvancedPlayerPanelState.Blacklist[id] then
+        AdvancedPlayerPanelState.Whitelist[id] = nil
+    end
+end
 local AdvancedPlayerPanelUI = {
     MainFrame = nil,
     ListFrame = nil,
@@ -3857,7 +3875,7 @@ function UpdateAdvancedPlayerList()
 
             local nickLbl = Instance.new("TextLabel")
             nickLbl.Name = "Nickname"
-            nickLbl.Size = UDim2.new(1, -120, 0, 20)
+            nickLbl.Size = UDim2.new(1, -145, 0, 20)
             nickLbl.Position = UDim2.fromOffset(55, 5)
             nickLbl.BackgroundTransparency = 1
             nickLbl.Text = nickname
@@ -3869,7 +3887,7 @@ function UpdateAdvancedPlayerList()
 
             local userLbl = Instance.new("TextLabel")
             userLbl.Name = "Username"
-            userLbl.Size = UDim2.new(1, -120, 0, 18)
+            userLbl.Size = UDim2.new(1, -145, 0, 18)
             userLbl.Position = UDim2.fromOffset(55, 25)
             userLbl.BackgroundTransparency = 1
             userLbl.Text = "@" .. username
@@ -3895,6 +3913,7 @@ function UpdateAdvancedPlayerList()
             btn.Size = UDim2.new(1, 0, 1, 0)
             btn.BackgroundTransparency = 1
             btn.Text = ""
+            btn.ZIndex = 1
             btn.Parent = frame
             
             TrackConnection(btn.MouseButton1Click:Connect(function()
@@ -3905,6 +3924,41 @@ function UpdateAdvancedPlayerList()
                 ShowAdvancedPlayerDetails(player)
             end))
 
+            -- Whitelist/Blacklist Quick Buttons
+            local wBtn = Instance.new("TextButton")
+            wBtn.Name = "WBtn"
+            wBtn.Size = UDim2.fromOffset(25, 25)
+            wBtn.Position = UDim2.new(1, -100, 0.5, -12)
+            wBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            wBtn.Text = "W"
+            wBtn.Font = Enum.Font.GothamBold
+            wBtn.TextSize = 12
+            wBtn.TextColor3 = Color3.new(1, 1, 1)
+            wBtn.ZIndex = 2
+            wBtn.Parent = frame
+            local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(0, 4); wCorner.Parent = wBtn
+            
+            TrackConnection(wBtn.MouseButton1Click:Connect(function()
+                ToggleWhitelist(player)
+            end))
+
+            local bBtn = Instance.new("TextButton")
+            bBtn.Name = "BBtn"
+            bBtn.Size = UDim2.fromOffset(25, 25)
+            bBtn.Position = UDim2.new(1, -130, 0.5, -12)
+            bBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            bBtn.Text = "B"
+            bBtn.Font = Enum.Font.GothamBold
+            bBtn.TextSize = 12
+            bBtn.TextColor3 = Color3.new(1, 1, 1)
+            bBtn.ZIndex = 2
+            bBtn.Parent = frame
+            local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0, 4); bCorner.Parent = bBtn
+            
+            TrackConnection(bBtn.MouseButton1Click:Connect(function()
+                ToggleBlacklist(player)
+            end))
+
             entry.Frame = frame
             entry.DistanceLabel = distLbl
             AdvancedPlayerPanelUI.Entries[player] = entry
@@ -3912,11 +3966,26 @@ function UpdateAdvancedPlayerList()
 
         entry.Frame.Visible = true
         local char, root = GetCharacter(player)
+        local dist = 999999
         if root then
-            local dist = (root.Position - myPos).Magnitude
+            dist = (root.Position - myPos).Magnitude
             entry.DistanceLabel.Text = math.floor(dist) .. "m"
         else
             entry.DistanceLabel.Text = "---"
+        end
+        entry.Frame.LayoutOrder = math.floor(dist)
+
+        -- Update Status Colors
+        local id = player.UserId
+        local isWhitelisted = AdvancedPlayerPanelState.Whitelist[id]
+        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[id]
+
+        if isWhitelisted then
+            entry.Frame.BackgroundColor3 = UI_THEME.Success
+        elseif isBlacklisted then
+            entry.Frame.BackgroundColor3 = UI_THEME.Fail
+        else
+            entry.Frame.BackgroundColor3 = UI_THEME.Element
         end
     end
 end
@@ -4012,21 +4081,31 @@ function ShowAdvancedPlayerDetails(player)
 
     createSection("Actions")
     
-    local whitelistBtn = createButton(AdvancedPlayerPanelState.Whitelist[player.UserId] and "Unwhitelist Player" or "Whitelist Player", function() end)
-    TrackConnection(whitelistBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.Whitelist[player.UserId] = not AdvancedPlayerPanelState.Whitelist[player.UserId]
-        whitelistBtn.Text = AdvancedPlayerPanelState.Whitelist[player.UserId] and "Unwhitelist Player" or "Whitelist Player"
-        whitelistBtn.TextColor3 = AdvancedPlayerPanelState.Whitelist[player.UserId] and UI_THEME.Accent or UI_THEME.Text
-    end))
-    if AdvancedPlayerPanelState.Whitelist[player.UserId] then whitelistBtn.TextColor3 = UI_THEME.Accent end
+    local whitelistBtn = createButton("", function() end)
+    local blacklistBtn = createButton("", function() end)
 
-    local blacklistBtn = createButton(AdvancedPlayerPanelState.Blacklist[player.UserId] and "Unblacklist Player" or "Blacklist Player", function() end)
-    TrackConnection(blacklistBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.Blacklist[player.UserId] = not AdvancedPlayerPanelState.Blacklist[player.UserId]
-        blacklistBtn.Text = AdvancedPlayerPanelState.Blacklist[player.UserId] and "Unblacklist Player" or "Blacklist Player"
-        blacklistBtn.TextColor3 = AdvancedPlayerPanelState.Blacklist[player.UserId] and UI_THEME.Accent or UI_THEME.Text
+    local function updateDetailsButtons()
+        local isW = AdvancedPlayerPanelState.Whitelist[player.UserId]
+        local isB = AdvancedPlayerPanelState.Blacklist[player.UserId]
+        
+        whitelistBtn.Text = isW and "Unwhitelist Player" or "Whitelist Player"
+        whitelistBtn.TextColor3 = isW and UI_THEME.Accent or UI_THEME.Text
+        
+        blacklistBtn.Text = isB and "Unblacklist Player" or "Blacklist Player"
+        blacklistBtn.TextColor3 = isB and UI_THEME.Accent or UI_THEME.Text
+    end
+
+    TrackConnection(whitelistBtn.MouseButton1Click:Connect(function()
+        ToggleWhitelist(player)
+        updateDetailsButtons()
     end))
-    if AdvancedPlayerPanelState.Blacklist[player.UserId] then blacklistBtn.TextColor3 = UI_THEME.Accent end
+
+    TrackConnection(blacklistBtn.MouseButton1Click:Connect(function()
+        ToggleBlacklist(player)
+        updateDetailsButtons()
+    end))
+    
+    updateDetailsButtons()
 
     createButton("Teleport to Player", function()
         local myChar = LocalPlayer.Character
@@ -4328,7 +4407,7 @@ function CreatePlayerPanel()
         -- Name (nickname) - with team color
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Name = "Name"
-        nameLabel.Size = UDim2.new(0, 100, 1, 0)
+        nameLabel.Size = UDim2.new(0, 80, 1, 0)
         nameLabel.Position = UDim2.fromOffset(44, 0)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = ""
@@ -4343,8 +4422,8 @@ function CreatePlayerPanel()
         -- Username (@name)
         local usernameLabel = Instance.new("TextLabel")
         usernameLabel.Name = "Username"
-        usernameLabel.Size = UDim2.new(0, 80, 1, 0)
-        usernameLabel.Position = UDim2.fromOffset(148, 0)
+        usernameLabel.Size = UDim2.new(0, 60, 1, 0)
+        usernameLabel.Position = UDim2.fromOffset(126, 0)
         usernameLabel.BackgroundTransparency = 1
         usernameLabel.Text = ""
         usernameLabel.Font = Enum.Font.Gotham
@@ -4368,7 +4447,34 @@ function CreatePlayerPanel()
         distLabel.TextXAlignment = Enum.TextXAlignment.Right
         distLabel.ZIndex = 53
         distLabel.Parent = row
+
+        -- Whitelist/Blacklist Quick Buttons
+        local wBtn = Instance.new("TextButton")
+        wBtn.Name = "WBtn"
+        wBtn.Size = UDim2.fromOffset(20, 20)
+        wBtn.Position = UDim2.new(1, -90, 0.5, -10)
+        wBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        wBtn.Text = "W"
+        wBtn.Font = Enum.Font.GothamBold
+        wBtn.TextSize = 10
+        wBtn.TextColor3 = Color3.new(1, 1, 1)
+        wBtn.ZIndex = 54
+        wBtn.Parent = row
+        local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(0, 4); wCorner.Parent = wBtn
         
+        local bBtn = Instance.new("TextButton")
+        bBtn.Name = "BBtn"
+        bBtn.Size = UDim2.fromOffset(20, 20)
+        bBtn.Position = UDim2.new(1, -115, 0.5, -10)
+        bBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        bBtn.Text = "B"
+        bBtn.Font = Enum.Font.GothamBold
+        bBtn.TextSize = 10
+        bBtn.TextColor3 = Color3.new(1, 1, 1)
+        bBtn.ZIndex = 54
+        bBtn.Parent = row
+        local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0, 4); bCorner.Parent = bBtn
+
         PlayerPanelRows[i] = {
             Frame = row,
             Rank = rankLabel,
@@ -4535,6 +4641,36 @@ function UpdatePlayerPanel()
                 rowData.Distance.TextColor3 = distColor
                 
                 rowData.lastDist = distRounded
+            end
+
+            -- Whitelist/Blacklist logic
+            local wBtn = rowData.Frame:FindFirstChild("WBtn")
+            local bBtn = rowData.Frame:FindFirstChild("BBtn")
+            if wBtn and not rowData.wConn then
+                rowData.wConn = TrackConnection(wBtn.MouseButton1Click:Connect(function()
+                    ToggleWhitelist(rowData.lastPlayer)
+                end))
+            end
+            if bBtn and not rowData.bConn then
+                rowData.bConn = TrackConnection(bBtn.MouseButton1Click:Connect(function()
+                    ToggleBlacklist(rowData.lastPlayer)
+                end))
+            end
+
+            -- Update Status Colors
+            local id = player.UserId
+            local isWhitelisted = AdvancedPlayerPanelState.Whitelist[id]
+            local isBlacklisted = AdvancedPlayerPanelState.Blacklist[id]
+
+            if isWhitelisted then
+                rowData.Frame.BackgroundColor3 = UI_THEME.Success
+                rowData.Frame.BackgroundTransparency = 0.3
+            elseif isBlacklisted then
+                rowData.Frame.BackgroundColor3 = UI_THEME.Fail
+                rowData.Frame.BackgroundTransparency = 0.3
+            else
+                rowData.Frame.BackgroundColor3 = UI_THEME.Element
+                rowData.Frame.BackgroundTransparency = 0.5
             end
             
             -- Update direction arrow (always update since player/camera moves)
