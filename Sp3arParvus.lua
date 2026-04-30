@@ -159,8 +159,7 @@ local AdvancedPlayerPanelState = {
     Visible = false,
     CurrentView = "List", -- "List" or "Details"
     SelectedPlayer = nil,
-    Spectating = nil,
-    SpectateProxy = nil
+    Spectating = nil
 }
 local AdvancedPlayerPanelUI = {
     MainFrame = nil,
@@ -3715,6 +3714,10 @@ function CreateAdvancedPlayerPanel()
     listLayout.SortOrder = Enum.SortOrder.LayoutOrder
     listLayout.Parent = listContent
 
+    TrackConnection(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        listContent.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end))
+
     -- Details View
     local DetailsFrame = Instance.new("Frame")
     DetailsFrame.Name = "DetailsFrame"
@@ -3757,6 +3760,10 @@ function CreateAdvancedPlayerPanel()
     detailsLayout.SortOrder = Enum.SortOrder.LayoutOrder
     detailsLayout.Parent = detailsContent
     
+    TrackConnection(detailsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        detailsContent.CanvasSize = UDim2.new(0, 0, 0, detailsLayout.AbsoluteContentSize.Y)
+    end))
+
     local detailsPadding = Instance.new("UIPadding")
     detailsPadding.PaddingLeft = UDim.new(0, 10)
     detailsPadding.PaddingRight = UDim.new(0, 10)
@@ -6283,7 +6290,6 @@ function Cleanup()
     AdvancedPlayerPanelState.CurrentView = "List"
     AdvancedPlayerPanelState.SelectedPlayer = nil
     AdvancedPlayerPanelState.Spectating = nil
-    AdvancedPlayerPanelState.SpectateProxy = nil
     AdvancedPlayerPanelUI.MainFrame = nil
     AdvancedPlayerPanelUI.ListFrame = nil
     AdvancedPlayerPanelUI.DetailsFrame = nil
@@ -7482,10 +7488,19 @@ function UnifiedHeartbeat(dt)
 
         -- Update Spectate focus if active (independent of panel visibility)
         local specPlayer = AdvancedPlayerPanelState.Spectating
-        if specPlayer and specPlayer.Parent then
-            local _, specRoot = GetCharacter(specPlayer)
-            if specRoot and LocalPlayer.ReplicationFocus ~= specRoot then
-                LocalPlayer.ReplicationFocus = specRoot
+        if specPlayer then
+            if specPlayer.Parent then
+                local _, specRoot = GetCharacter(specPlayer)
+                if specRoot and LocalPlayer.ReplicationFocus ~= specRoot then
+                    LocalPlayer.ReplicationFocus = specRoot
+                end
+            else
+                -- Player left
+                AdvancedPlayerPanelState.Spectating = nil
+                local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if myHum then Camera.CameraSubject = myHum end
+                LocalPlayer.ReplicationFocus = nil
+                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
             end
         end
     end
