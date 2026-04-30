@@ -5443,7 +5443,6 @@ end
 ------------------------------------------------------------------------
 
 local PlayerState = {} do
-local mouseIconEnabled
 local cameraSubject
 local cameraType
 local cameraFocus
@@ -5474,9 +5473,6 @@ Camera.CameraSubject = nil
 cameraCFrame = Camera.CFrame
 cameraFocus = Camera.Focus
 
-mouseIconEnabled = UserInputService.MouseIconEnabled
-UserInputService.MouseIconEnabled = false
-
 mouseBehavior = UserInputService.MouseBehavior
 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
@@ -5503,9 +5499,6 @@ cameraCFrame = nil
 
 Camera.Focus = cameraFocus
 cameraFocus = nil
-
-UserInputService.MouseIconEnabled = mouseIconEnabled
-mouseIconEnabled = nil
 
 UserInputService.MouseBehavior = mouseBehavior
 mouseBehavior = nil
