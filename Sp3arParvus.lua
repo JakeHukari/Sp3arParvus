@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "3.9.9" -- PlayerPanel Enhancement
+local VERSION = "4.0.1" -- Blacklist Fix
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -3007,7 +3007,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         BoundedInsertionSort(CandidateList, CandidateCount, CandidateSortFn)
     end
 
-    if StickyTarget then
+    if StickyTarget and not AdvancedPlayerPanelState.Blacklist[StickyTarget.UserId] then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
