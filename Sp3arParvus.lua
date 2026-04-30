@@ -5275,15 +5275,15 @@ local NAV_GAMEPAD_SPEED  = Vector3.new(1, 1, 1)
 local NAV_KEYBOARD_SPEED = Vector3.new(1, 1, 1)
 local PAN_MOUSE_SPEED    = Vector2.new(1, 1)*(pi/64)
 local PAN_GAMEPAD_SPEED  = Vector2.new(1, 1)*(pi/8)
-local FOV_WHEEL_SPEED    = 1.0
-local FOV_GAMEPAD_SPEED  = 0.25
-local NAV_ADJ_SPEED      = 0.75
-local NAV_SHIFT_MUL      = 0.25
+local FOV_WHEEL_SPEED    = 2.0
+local FOV_GAMEPAD_SPEED  = 5
+local NAV_ADJ_SPEED      = 1
+local NAV_SHIFT_MUL      = 0.50
 
-local navSpeed = 1
+local navSpeed = 3.5
 
 function Input.Vel(dt)
-navSpeed = clamp(navSpeed + dt*(keyboard.Up - keyboard.Down)*NAV_ADJ_SPEED, 0.01, 4)
+navSpeed = clamp(navSpeed + dt*(keyboard.Up - keyboard.Down)*NAV_ADJ_SPEED, 0.1, 4)
 
 local kGamepad = Vector3.new(
 thumbstickCurve(gamepad.Thumbstick1.x),
