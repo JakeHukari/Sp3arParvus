@@ -678,7 +678,7 @@ function ApplyHumanoidSettings()
     -- Game-specific presets
     if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
         local presets = {
-            ["Humanoid/JumpHeight"] = 9,
+            ["Humanoid/JumpHeight"] = 8,
             ["Humanoid/UseJumpPower"] = false,
             ["Humanoid/MaxSlopeAngle"] = 90
         }
