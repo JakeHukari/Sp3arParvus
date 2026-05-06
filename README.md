@@ -50,7 +50,6 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
     *   **Distance-based Coloring**: Color-coded proximity: **Pink** (Closest), **Red** (≤2000 studs), **Yellow** (≤4000 studs), and **Green** (>4000 studs).
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
     *   **Equipped Item**: View the currently equipped items being held by nearby players.
-*   **Player Panel**: View the Top 10 closest players with names, distances, and 2D direction arrows.
 *   **Fullbright**: Sets the workspace lighting to maximum brightness & removes shadows, fog, and other ambient lighting effects.
 *   **FullDark**: Sets the workspace lighting to minimum brightness.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
