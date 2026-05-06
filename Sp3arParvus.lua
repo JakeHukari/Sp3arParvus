@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.2" -- Remove Tracers and Offscreen Indicators
+local VERSION = "4.0.3" -- Remove Player Panel
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -92,7 +92,6 @@ local Flags = {
     ["ESP/Enabled"] = true,
     ["ESP/MaxDistance"] = 5000,
     ["ESP/Nametags"] = true,
-    ["ESP/PlayerPanel"] = false,
     ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
     ["Visuals/Fullbright"] = false,
@@ -491,12 +490,6 @@ function RemovePlayerFromCache(player)
     end
 end
 
--- Cached sorted players for Player Panel (expensive sort operation)
-cachedSortedPlayers = {}
-cachedPlayerListForSort = {}
-lastPlayerCountForSort = 0
-lastSortTime = 0
-SORT_CACHE_DURATION = 0.5 -- Only re-sort every 500ms (was every frame)
 
 
 
@@ -1615,12 +1608,6 @@ function GetMainFrameSize()
     return UDim2.fromOffset(width, height)
 end
 
-function GetPlayerPanelSize()
-    local viewport = Camera.ViewportSize
-    local width = math.min(280, viewport.X * 0.35)
-    local height = math.min(320, viewport.Y * 0.5)
-    return UDim2.fromOffset(width, height)
-end
 
 -- UI Color Constant Dictionary
 UI_THEME = {
@@ -2643,7 +2630,6 @@ end
 
 -- Forward declarations for cleanup functions (implemented after variable declarations)
 ClearCandidateReferences = nil
-ClearSortCacheReferences = nil
 
 -- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
 -- This is a safety net in case PlayerRemoving didn't fire properly
@@ -2778,9 +2764,6 @@ function CandidateSortFn(a, b)
 end
 
 -- Hoisted comparator for distance sorting
-function DistanceSortFn(a, b)
-    return a.distance < b.distance
-end
 
 -- OPTIMIZED: Reusable tables for candidate sorting to avoid per-frame allocations
 CandidateList = {} -- Array of {dist, data...}
@@ -2813,18 +2796,6 @@ function ClearCandidateReferences()
     
 end
 
--- ClearSortCacheReferences - Clears cachedPlayerListForSort references
--- Note: cachedPlayerListForSort is declared at line 118
-function ClearSortCacheReferences()
-    if not cachedPlayerListForSort then return end -- Safety check
-    for i = 1, #cachedPlayerListForSort do
-        local entry = cachedPlayerListForSort[i]
-        if entry then
-            entry.player = nil
-            entry.position = nil
-        end
-    end
-end
 
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, StickyTarget)
@@ -3985,492 +3956,6 @@ function UpdateAdvancedPlayerDetails()
 
 end
 
--- PLAYER PANEL (Top 10 Closest Players)
-
-PlayerPanelFrame = nil
-PlayerPanelRows = {}
-PlayerPanelMinimized = false
-PLAYER_PANEL_MAX_ROWS = 10
-
--- Calculate direction angle for arrow (returns rotation in degrees)
-function GetDirectionToPlayer(targetPosition)
-    if not Camera then Camera = Workspace.CurrentCamera end
-    if not Camera then return 0 end
-    
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return 0 end
-    
-    local myPos = myRoot.Position
-    local dx = targetPosition.X - myPos.X
-    local dz = targetPosition.Z - myPos.Z
-    
-    local dirMag = sqrt(dx*dx + dz*dz)
-    if dirMag < 0.01 then return 0 end
-    
-    local dirX = dx / dirMag
-    local dirZ = dz / dirMag
-    
-    local camLook = Camera.CFrame.LookVector
-    local camRight = Camera.CFrame.RightVector
-    
-    -- 2D components
-    local fwdX, fwdZ = camLook.X, camLook.Z
-    local fwdMag = sqrt(fwdX*fwdX + fwdZ*fwdZ)
-    if fwdMag > 0 then
-        fwdX = fwdX / fwdMag
-        fwdZ = fwdZ / fwdMag
-    end
-    
-    local rgtX, rgtZ = camRight.X, camRight.Z
-    local rgtMag = sqrt(rgtX*rgtX + rgtZ*rgtZ)
-    if rgtMag > 0 then
-        rgtX = rgtX / rgtMag
-        rgtZ = rgtZ / rgtMag
-    end
-    
-    -- Dot products (scalar)
-    local forwardDot = fwdX * dirX + fwdZ * dirZ
-    local rightDot = rgtX * dirX + rgtZ * dirZ
-    
-    return deg(atan2(rightDot, forwardDot))
-end
-
--- Create the Player Panel UI
-function CreatePlayerPanel()
-    if PlayerPanelFrame then return end
-    
-    -- Main container
-    PlayerPanelFrame = Instance.new("Frame")
-    PlayerPanelFrame.Name = "PlayerPanel"
-    PlayerPanelFrame.Size = UDim2.fromScale(0.15, 0.45)
-    local OriginalSize = PlayerPanelFrame.Size
-    PlayerPanelFrame.Position = UDim2.fromScale(0, 0.5) -- Left Center
-    PlayerPanelFrame.AnchorPoint = Vector2.new(0, 0.5)
-    
-    local sizeConstraint = Instance.new("UISizeConstraint")
-    sizeConstraint.MinSize = Vector2.new(200, 220)
-    sizeConstraint.MaxSize = Vector2.new(300, 360)
-    sizeConstraint.Parent = PlayerPanelFrame
-
-    PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    PlayerPanelFrame.BackgroundTransparency = 0.1
-    PlayerPanelFrame.BorderSizePixel = 0
-    PlayerPanelFrame.Visible = false
-    PlayerPanelFrame.ZIndex = 50
-    EnsureScreenGui()
-    PlayerPanelFrame.Parent = ScreenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = PlayerPanelFrame
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(60, 60, 60)
-    stroke.Thickness = 1
-    stroke.Parent = PlayerPanelFrame
-    
-    -- Header
-    local header = Instance.new("Frame")
-    header.Name = "Header"
-    header.Size = UDim2.new(1, 0, 0, 30)
-    header.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    header.BorderSizePixel = 0
-    header.ZIndex = 51
-    header.Parent = PlayerPanelFrame
-    
-    local headerCorner = Instance.new("UICorner")
-    headerCorner.CornerRadius = UDim.new(0, 8)
-    headerCorner.Parent = header
-    
-    -- Fix bottom corners of header
-    local headerFix = Instance.new("Frame")
-    headerFix.Size = UDim2.new(1, 0, 0, 10)
-    headerFix.Position = UDim2.new(0, 0, 1, -10)
-    headerFix.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    headerFix.BorderSizePixel = 0
-    headerFix.ZIndex = 51
-    headerFix.Parent = header
-    
-    -- Title
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, -60, 1, 0)
-    title.Position = UDim2.fromOffset(10, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "🎯 Nearby Players"
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 14
-    title.TextColor3 = Color3.fromRGB(0, 200, 255)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 52
-    title.Parent = header
-    
-    -- Minimize button
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Name = "MinimizeBtn"
-    minimizeBtn.Size = UDim2.fromOffset(24, 24)
-    minimizeBtn.Position = UDim2.new(1, -30, 0, 3)
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    minimizeBtn.BackgroundTransparency = 0.5
-    minimizeBtn.Text = "−"
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 16
-    minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    minimizeBtn.BorderSizePixel = 0
-    minimizeBtn.ZIndex = 52
-    minimizeBtn.Parent = header
-    
-    local minBtnCorner = Instance.new("UICorner")
-    minBtnCorner.CornerRadius = UDim.new(0, 4)
-    minBtnCorner.Parent = minimizeBtn
-    
-    -- Content container (scrolling frame for rows)
-    local content = Instance.new("ScrollingFrame")
-    content.Name = "Content"
-    content.Size = UDim2.new(1, -10, 1, -40)
-    content.Position = UDim2.fromOffset(5, 35)
-    content.BackgroundTransparency = 1
-    content.BorderSizePixel = 0
-    content.ScrollBarThickness = 4
-    content.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
-    content.CanvasSize = UDim2.fromOffset(0, PLAYER_PANEL_MAX_ROWS * 28)
-    content.ZIndex = 51
-    content.Parent = PlayerPanelFrame
-    
-    local contentLayout = Instance.new("UIListLayout")
-    contentLayout.Padding = UDim.new(0, 2)
-    contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    contentLayout.Parent = content
-    
-    -- Create rows for players
-    for i = 1, PLAYER_PANEL_MAX_ROWS do
-        local row = Instance.new("Frame")
-        row.Name = "Row" .. i
-        row.Size = UDim2.new(1, -5, 0, 26)
-        row.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        row.BackgroundTransparency = 0.5
-        row.BorderSizePixel = 0
-        row.LayoutOrder = i
-        row.ZIndex = 52
-        row.Visible = false
-        row.Parent = content
-        
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0, 4)
-        rowCorner.Parent = row
-        
-        -- Rank number
-        local rankLabel = Instance.new("TextLabel")
-        rankLabel.Name = "Rank"
-        rankLabel.Size = UDim2.fromOffset(20, 26)
-        rankLabel.Position = UDim2.fromOffset(3, 0)
-        rankLabel.BackgroundTransparency = 1
-        rankLabel.Text = "#" .. i
-        rankLabel.Font = Enum.Font.GothamBold
-        rankLabel.TextSize = 10
-        rankLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-        rankLabel.ZIndex = 53
-        rankLabel.Parent = row
-        
-        -- Direction arrow
-        local arrow = Instance.new("TextLabel")
-        arrow.Name = "Arrow"
-        arrow.Size = UDim2.fromOffset(20, 26)
-        arrow.Position = UDim2.fromOffset(22, 0)
-        arrow.BackgroundTransparency = 1
-        arrow.Text = "→"
-        arrow.Font = Enum.Font.GothamBold
-        arrow.TextSize = 14
-        arrow.TextColor3 = Color3.fromRGB(255, 200, 50)
-        arrow.ZIndex = 53
-        arrow.Parent = row
-        
-        -- Name (nickname) - with team color
-        local nameLabel = Instance.new("TextLabel")
-        nameLabel.Name = "Name"
-        nameLabel.Size = UDim2.new(0, 80, 1, 0)
-        nameLabel.Position = UDim2.fromOffset(44, 0)
-        nameLabel.BackgroundTransparency = 1
-        nameLabel.Text = ""
-        nameLabel.Font = Enum.Font.GothamBold
-        nameLabel.TextSize = 11
-        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-        nameLabel.ZIndex = 53
-        nameLabel.Parent = row
-        
-        -- Username (@name)
-        local usernameLabel = Instance.new("TextLabel")
-        usernameLabel.Name = "Username"
-        usernameLabel.Size = UDim2.new(0, 60, 1, 0)
-        usernameLabel.Position = UDim2.fromOffset(126, 0)
-        usernameLabel.BackgroundTransparency = 1
-        usernameLabel.Text = ""
-        usernameLabel.Font = Enum.Font.Gotham
-        usernameLabel.TextSize = 10
-        usernameLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-        usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-        usernameLabel.ZIndex = 53
-        usernameLabel.Parent = row
-        
-        -- Distance
-        local distLabel = Instance.new("TextLabel")
-        distLabel.Name = "Distance"
-        distLabel.Size = UDim2.new(0, 60, 1, 0)
-        distLabel.Position = UDim2.new(1, -65, 0, 0)
-        distLabel.BackgroundTransparency = 1
-        distLabel.Text = ""
-        distLabel.Font = Enum.Font.GothamBold
-        distLabel.TextSize = 10
-        distLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        distLabel.TextXAlignment = Enum.TextXAlignment.Right
-        distLabel.ZIndex = 53
-        distLabel.Parent = row
-
-        -- Whitelist/Blacklist Quick Buttons
-        local wBtn = Instance.new("TextButton")
-        wBtn.Name = "WBtn"
-        wBtn.Size = UDim2.fromOffset(20, 20)
-        wBtn.Position = UDim2.new(1, -90, 0.5, -10)
-        wBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        wBtn.Text = "W"
-        wBtn.Font = Enum.Font.GothamBold
-        wBtn.TextSize = 10
-        wBtn.TextColor3 = Color3.new(1, 1, 1)
-        wBtn.ZIndex = 54
-        wBtn.Parent = row
-        local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(0, 4); wCorner.Parent = wBtn
-        
-        local bBtn = Instance.new("TextButton")
-        bBtn.Name = "BBtn"
-        bBtn.Size = UDim2.fromOffset(20, 20)
-        bBtn.Position = UDim2.new(1, -115, 0.5, -10)
-        bBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        bBtn.Text = "B"
-        bBtn.Font = Enum.Font.GothamBold
-        bBtn.TextSize = 10
-        bBtn.TextColor3 = Color3.new(1, 1, 1)
-        bBtn.ZIndex = 54
-        bBtn.Parent = row
-        local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0, 4); bCorner.Parent = bBtn
-
-        PlayerPanelRows[i] = {
-            Frame = row,
-            Rank = rankLabel,
-            Arrow = arrow,
-            Name = nameLabel,
-            Username = usernameLabel,
-            Distance = distLabel,
-            lastPlayer = nil,
-            lastDist = -1,
-            lastAngle = 0
-        }
-    end
-    
-    -- Minimize toggle
-    -- MEMORY LEAK FIX: Track minimize button connection
-    TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
-        PlayerPanelMinimized = not PlayerPanelMinimized
-        if PlayerPanelMinimized then
-            sizeConstraint.Parent = nil
-            TweenService:Create(PlayerPanelFrame, TWEENS.SMOOTH, {Size = UDim2.fromOffset(320, 30)}):Play()
-            content.Visible = false
-            minimizeBtn.Text = "+"
-        else
-            sizeConstraint.Parent = PlayerPanelFrame
-            TweenService:Create(PlayerPanelFrame, TWEENS.SMOOTH, {Size = OriginalSize}):Play()
-            content.Visible = true
-            minimizeBtn.Text = "−"
-        end
-    end))
-    
-    -- Make draggable
-    if UI.MakeDraggable then
-        UI.MakeDraggable(PlayerPanelFrame)
-    end
-end
-
--- Get sorted list of closest players (OPTIMIZED - uses caching to avoid GC spikes)
-function GetSortedPlayersByDistance()
-    local now = os.clock()
-    local currentPlayers = GetPlayersCache()
-    local currentCount = #currentPlayers
-    
-    -- Return cached result if still valid
-    if (now - lastSortTime) < SORT_CACHE_DURATION and currentCount == lastPlayerCountForSort then
-        return cachedSortedPlayers
-    end
-    
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then 
-        table.clear(cachedSortedPlayers)
-        return cachedSortedPlayers 
-    end
-    
-    local myPos = myRoot.Position
-    
-    -- Reuse cached table instead of creating new one
-    local insertIdx = 0
-    
-    for _, player in ipairs(currentPlayers) do
-        if player ~= LocalPlayer and player.Parent then
-            local character, rootPart = GetCharacter(player)
-            if character and rootPart then
-                local dist = (rootPart.Position - myPos).Magnitude
-                if dist <= Flags["ESP/MaxDistance"] then
-                    insertIdx = insertIdx + 1
-                    -- Reuse or create entry
-                    local entry = cachedPlayerListForSort[insertIdx]
-                    if not entry then
-                        entry = {}
-                        cachedPlayerListForSort[insertIdx] = entry
-                    end
-                    entry.player = player
-                    entry.distance = dist
-                    entry.position = rootPart.Position
-                end
-            end
-        end
-    end
-    
-    -- Sort by distance (closest first)
-    -- We only sort the active portion of the list
-    if insertIdx > 1 then
-        BoundedInsertionSort(cachedPlayerListForSort, insertIdx, DistanceSortFn)
-    end
-    
-    -- Build result (reusing cached result table)
-    table.clear(cachedSortedPlayers)
-    local resultCount = min(PLAYER_PANEL_MAX_ROWS, insertIdx)
-    for i = 1, resultCount do
-        cachedSortedPlayers[i] = cachedPlayerListForSort[i]
-    end
-    
-    lastSortTime = now
-    lastPlayerCountForSort = currentCount
-    
-    return cachedSortedPlayers
-end
-
--- Arrow characters for 8 directions
-DIRECTION_ARROWS = {
-    "↑", "↗", "→", "↘", "↓", "↙", "←", "↖"
-}
-
-function GetArrowForAngle(angleDeg)
-    -- Normalize angle to 0-360
-    local normalized = (angleDeg + 180) % 360
-    -- Convert to 8 segments (0-7)
-    local segment = floor((normalized + 22.5) / 45) % 8
-    return DIRECTION_ARROWS[segment + 1] or "→"
-end
-
--- Update Player Panel
-function UpdatePlayerPanel()
-    if not Flags["ESP/PlayerPanel"] or not PlayerPanelFrame then
-        if PlayerPanelFrame then
-            PlayerPanelFrame.Visible = false
-        end
-        return
-    end
-    
-    PlayerPanelFrame.Visible = true
-    
-    -- Skip content update if minimized
-    if PlayerPanelMinimized then return end
-    
-    local sortedPlayers = GetSortedPlayersByDistance()
-    
-    for i = 1, PLAYER_PANEL_MAX_ROWS do
-        local rowData = PlayerPanelRows[i]
-        local playerData = sortedPlayers[i]
-        
-        if playerData then
-            local player = playerData.player
-            local dist = playerData.distance
-            local distRounded = floor(dist)
-            
-            rowData.Frame.Visible = true
-            
-            -- Only update if player changed or distance changed significantly
-            local playerChanged = rowData.lastPlayer ~= player
-            local distChanged = abs((rowData.lastDist or 0) - distRounded) > 3
-            
-            if playerChanged then
-                -- Update name and username
-                local nickname = player.DisplayName or player.Name
-                local username = "@" .. player.Name
-                
-                rowData.Name.Text = nickname
-                rowData.Username.Text = username
-                
-                -- Get team color
-                local teamColor = GetTeamColor(player)
-                rowData.Name.TextColor3 = teamColor
-                
-                rowData.lastPlayer = player
-            end
-            
-            if distChanged then
-                rowData.Distance.Text = distRounded .. "m"
-                
-                -- Color based on distance
-                local distColor = GetDistanceColor(dist, i == 1)
-                rowData.Distance.TextColor3 = distColor
-                
-                rowData.lastDist = distRounded
-            end
-
-            -- Whitelist/Blacklist logic
-            local wBtn = rowData.Frame:FindFirstChild("WBtn")
-            local bBtn = rowData.Frame:FindFirstChild("BBtn")
-            if wBtn and not rowData.wConn then
-                rowData.wConn = TrackConnection(wBtn.MouseButton1Click:Connect(function()
-                    ToggleWhitelist(rowData.lastPlayer)
-                end))
-            end
-            if bBtn and not rowData.bConn then
-                rowData.bConn = TrackConnection(bBtn.MouseButton1Click:Connect(function()
-                    ToggleBlacklist(rowData.lastPlayer)
-                end))
-            end
-
-            -- Update Status Colors
-            local id = player.UserId
-            local isWhitelisted = AdvancedPlayerPanelState.Whitelist[id]
-            local isBlacklisted = AdvancedPlayerPanelState.Blacklist[id]
-
-            if isWhitelisted then
-                rowData.Frame.BackgroundColor3 = UI_THEME.Success
-                rowData.Frame.BackgroundTransparency = 0.3
-            elseif isBlacklisted then
-                rowData.Frame.BackgroundColor3 = UI_THEME.Fail
-                rowData.Frame.BackgroundTransparency = 0.3
-            else
-                rowData.Frame.BackgroundColor3 = UI_THEME.Element
-                rowData.Frame.BackgroundTransparency = 0.5
-            end
-            
-            -- Update direction arrow (always update since player/camera moves)
-            local angle = GetDirectionToPlayer(playerData.position)
-            local arrowChar = GetArrowForAngle(angle)
-            if rowData.Arrow.Text ~= arrowChar then
-                rowData.Arrow.Text = arrowChar
-            end
-        else
-            -- No player for this row
-            if rowData.Frame.Visible then
-                rowData.Frame.Visible = false
-                rowData.lastPlayer = nil
-                rowData.lastDist = -1
-            end
-        end
-    end
-end
 
 PoolFolder = Instance.new("Folder")
 PoolFolder.Name = "Sp3arParvus_Pool"
@@ -6060,8 +5545,6 @@ function Cleanup()
     ClosestPlayerTrackerLabel = nil
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
-    PlayerPanelFrame = nil
-    table.clear(PlayerPanelRows)
 
     -- Cleanup AdvancedPlayerPanel
     if AdvancedPlayerPanelUI.MainFrame then
@@ -6098,12 +5581,6 @@ function Cleanup()
     end
     table.clear(CandidateList)
 
-    for _, entry in ipairs(cachedPlayerListForSort) do
-        entry.player = nil; entry.distance = nil; entry.position = nil
-    end
-    table.clear(cachedPlayerListForSort)
-    
-    table.clear(cachedSortedPlayers)
     table.clear(cachedPlayersList)
     table.clear(Br3ak3rState.brokenIgnoreCache)
     table.clear(Br3ak3rState.scratchIgnore)
@@ -6603,16 +6080,6 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
 end)
 UI.CreateNumericInput(VisualsTab, "Max ESP Distance", "ESP/MaxDistance", Flags["ESP/MaxDistance"], 100, 10000, 100, " studs")
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
-UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", Flags["ESP/PlayerPanel"], function(state)
-    -- Create panel if it doesn't exist yet
-    if state and not PlayerPanelFrame then
-        CreatePlayerPanel()
-    end
-    -- Toggle visibility
-    if PlayerPanelFrame then
-        PlayerPanelFrame.Visible = state
-    end
-end)
 UI.CreateToggle(VisualsTab, "Advanced Player Panel (Ctrl+K)", "ESP/AdvancedPlayerPanel", Flags["ESP/AdvancedPlayerPanel"], function(state)
     if state and not AdvancedPlayerPanelUI.MainFrame then
         CreateAdvancedPlayerPanel()
@@ -7199,9 +6666,6 @@ function UnifiedHeartbeat(dt)
         if LocalHealthHUD and not LocalHealthHUD.Visible then
             LocalHealthHUD.Visible = true
         end
-        if PlayerPanelFrame and not PlayerPanelFrame.Visible and Flags["ESP/PlayerPanel"] then
-            PlayerPanelFrame.Visible = true
-        end
     end
 
     UpdateLighting()
@@ -7396,7 +6860,6 @@ function UnifiedHeartbeat(dt)
         lastTrackerUpdate = now
         UpdateNearestPlayer()
         UpdateClosestPlayerTracker()
-        UpdatePlayerPanel()
     end
     
     -- 2. Br3ak3r Updates
@@ -7415,7 +6878,6 @@ function UnifiedHeartbeat(dt)
         CleanupDeadThreads()
         PruneCharCache()
         ClearCandidateReferences()
-        ClearSortCacheReferences()
         ValidateESPObjects()
     end
     
@@ -7444,7 +6906,6 @@ function UnifiedHeartbeat(dt)
             if ClosestPlayerTrackerLabel and ClosestPlayerTrackerLabel.Visible then ClosestPlayerTrackerLabel.Visible = false end
             if PerformanceLabel and PerformanceLabel.Visible then PerformanceLabel.Visible = false end
             if LocalHealthHUD and LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
-            if PlayerPanelFrame and PlayerPanelFrame.Visible then PlayerPanelFrame.Visible = false end
         end
 
         local enforcementMadeChange = false
