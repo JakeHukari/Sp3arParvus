@@ -6633,14 +6633,14 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
         table.clear(PlayerOutlineObjects)
     end
 end)
-UI.CreateToggle(VisualsTab, "Fullbright (Remove Shadows/Fog)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
+UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
     if state then
         Flags["Visuals/FullDark"] = false
         local updater = UIState.Updaters["Visuals/FullDark"]
         if updater then updater(false) end
     end
 end)
-UI.CreateToggle(VisualsTab, "FullDark (Peaceful Night)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
+UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
     if state then
         Flags["Visuals/Fullbright"] = false
         local updater = UIState.Updaters["Visuals/Fullbright"]
@@ -6648,7 +6648,7 @@ UI.CreateToggle(VisualsTab, "FullDark (Peaceful Night)", "Visuals/FullDark", Fla
     end
 end)
 
-UI.CreateSection(VisualsTab, "Waypoints Settings")
+UI.CreateSection(VisualsTab, "Waypoints Settings(Ctrl+Middle Mouse Button)")
 UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
     RefreshWaypointUI()
 end)
