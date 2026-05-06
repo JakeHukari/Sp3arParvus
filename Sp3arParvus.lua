@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.1" -- Blacklist Fix
+local VERSION = "4.0.2" -- Remove Tracers and Offscreen Indicators
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -92,8 +92,6 @@ local Flags = {
     ["ESP/Enabled"] = true,
     ["ESP/MaxDistance"] = 5000,
     ["ESP/Nametags"] = true,
-    ["ESP/Tracers"] = false,
-    ["ESP/OffscreenIndicators"] = false,
     ["ESP/PlayerPanel"] = false,
     ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
@@ -2675,10 +2673,6 @@ function ValidateESPObjects()
             -- Cleanup the orphaned ESP
             pcall(function()
                 if espData.Nametag then espData.Nametag:Destroy() end
-                if espData.Tracer then espData.Tracer:Destroy() end
-                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                    espData.OffscreenIndicator.Frame:Destroy()
-                end
                 if espData.Connections then
                     for _, conn in pairs(espData.Connections) do
                         if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
@@ -2688,16 +2682,7 @@ function ValidateESPObjects()
                     table.clear(espData.Connections)
                 end
                 espData.Nametag = nil
-                espData.Tracer = nil
                 espData.EquippedLabel = nil
-                if espData.OffscreenIndicator then
-                    espData.OffscreenIndicator.Frame = nil
-                    espData.OffscreenIndicator.Arrow = nil
-                    espData.OffscreenIndicator.NameLabel = nil
-                    espData.OffscreenIndicator.DistLabel = nil
-                    espData.OffscreenIndicator.Stroke = nil
-                end
-                espData.OffscreenIndicator = nil
                 espData.Connections = nil
             end)
             ESPObjects[player] = nil
@@ -3139,20 +3124,15 @@ end
 -- ESP SYSTEM
 
 
-ESPObjects = {} -- [Player] = {Nametag, Tracer, Connections}
+ESPObjects = {} -- [Player] = {Nametag, Connections}
 PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
 
 COLORS = {
     CLOSEST = Color3.fromRGB(255, 105, 180),
     NORMAL = Color3.fromRGB(255, 255, 255),
-    TRACER = Color3.fromRGB(0, 255, 255),
-    OUTLINE = Color3.fromRGB(255, 105, 180),
-    OFFSCREEN_INDICATOR = Color3.fromRGB(255, 200, 50)
+    OUTLINE = Color3.fromRGB(255, 105, 180)
 }
 
--- Off-screen indicator settings
-OFFSCREEN_EDGE_PADDING = 50  -- Pixels from screen edge
-OFFSCREEN_ARROW_SIZE = 20    -- Size of the direction arrow
 -- PERFORMANCE: Max highlights to use (Roblox hard limit is 31, shared with other scripts)
 MAX_OUTLINE_HIGHLIGHTS = 15 
 
@@ -3199,204 +3179,6 @@ function GetTeamColor(player)
 end
 
 -- PERFORMANCE: Cache camera data per-frame for off-screen calculations
-cachedCameraData = {
-    cFrame = nil,
-    position = nil,
-    lookVector = nil,
-    rightVector = nil,
-    upVector = nil,
-    viewportSize = nil,
-    cacheTime = 0
-}
-CAMERA_CACHE_DURATION = 0.016 -- Cache for 1 frame (~60fps)
-
-function UpdateCameraCache(now)
-    if (now - cachedCameraData.cacheTime) < CAMERA_CACHE_DURATION then
-        return true -- Cache is still valid
-    end
-    
-    if not Camera then Camera = Workspace.CurrentCamera end
-    if not Camera then return false end
-    
-    local cframe = Camera.CFrame
-    cachedCameraData.cFrame = cframe
-    cachedCameraData.position = cframe.Position
-    cachedCameraData.lookVector = cframe.LookVector
-    cachedCameraData.rightVector = cframe.RightVector
-    cachedCameraData.upVector = cframe.UpVector
-    cachedCameraData.viewportSize = Camera.ViewportSize
-    cachedCameraData.cacheTime = now
-    return true
-end
-
--- Calculate screen edge position for off-screen indicator
--- Returns the position clamped to screen edges and the angle toward the target
--- PERFORMANCE: Uses cached camera data to avoid redundant property access
-function GetEdgePosition(now, worldPosition)
-    -- Update camera cache (shared across all players per frame)
-    if not UpdateCameraCache(now) then return nil, nil, nil, false end
-    
-    local viewportSize = cachedCameraData.viewportSize
-    
-    -- Still need to call WorldToViewportPoint per-player (using centralized caching)
-    if not Camera then Camera = Workspace.CurrentCamera end
-    if not Camera then return nil, nil, nil, false end
-    local screenPos, onScreen = GetViewportPoint(worldPosition)
-    
-    -- If on screen, return nil (use normal nametag)
-    if onScreen and screenPos.X > OFFSCREEN_EDGE_PADDING and screenPos.X < viewportSize.X - OFFSCREEN_EDGE_PADDING
-       and screenPos.Y > OFFSCREEN_EDGE_PADDING and screenPos.Y < viewportSize.Y - OFFSCREEN_EDGE_PADDING then
-        return nil, nil, nil, true
-    end
-    
-    -- Calculate center of screen
-    local centerX = viewportSize.X / 2
-    local centerY = viewportSize.Y / 2
-    
-    -- Use cached camera vectors
-    local cameraPos = cachedCameraData.position
-    local cameraLook = cachedCameraData.lookVector
-    local rightVector = cachedCameraData.rightVector
-    local upVector = cachedCameraData.upVector
-    
-    -- Get direction from camera to world position
-    local directionToTarget = (worldPosition - cameraPos).Unit
-    
-    -- Project direction onto camera plane
-    local rightDot = rightVector:Dot(directionToTarget)
-    local upDot = upVector:Dot(directionToTarget)
-    local forwardDot = cameraLook:Dot(directionToTarget)
-    
-    -- If target is behind camera, we need to flip the direction
-    if forwardDot < 0 then
-        rightDot = -rightDot
-        upDot = -upDot
-    end
-    
-    -- Calculate angle for arrow rotation
-    local angle = atan2(rightDot, -upDot)
-    
-    -- Normalize to get direction on screen
-    local screenDirX = rightDot
-    local screenDirY = -upDot
-    local magnitude = sqrt(screenDirX * screenDirX + screenDirY * screenDirY)
-    if magnitude > 0 then
-        screenDirX = screenDirX / magnitude
-        screenDirY = screenDirY / magnitude
-    else
-        screenDirX = 0
-        screenDirY = 1
-    end
-    
-    -- Calculate edge intersection using constrained approach
-    local edgeX, edgeY
-    local maxX = viewportSize.X - OFFSCREEN_EDGE_PADDING - 100 -- Extra space for label
-    local maxY = viewportSize.Y - OFFSCREEN_EDGE_PADDING - 40
-    local minX = OFFSCREEN_EDGE_PADDING
-    local minY = OFFSCREEN_EDGE_PADDING
-    
-    -- Scale direction to reach screen edge
-    local scaleX = 1e10
-    local scaleY = 1e10
-    
-    if screenDirX > 0.001 then
-        scaleX = (maxX - centerX) / screenDirX
-    elseif screenDirX < -0.001 then
-        scaleX = (minX - centerX) / screenDirX
-    end
-    
-    if screenDirY > 0.001 then
-        scaleY = (maxY - centerY) / screenDirY
-    elseif screenDirY < -0.001 then
-        scaleY = (minY - centerY) / screenDirY
-    end
-    
-    local scale = min(abs(scaleX), abs(scaleY))
-    edgeX = centerX + screenDirX * scale
-    edgeY = centerY + screenDirY * scale
-    
-    -- Clamp to screen bounds
-    edgeX = max(minX, min(maxX, edgeX))
-    edgeY = max(minY, min(maxY, edgeY))
-    
-    -- MEMORY FIX: Return raw numbers instead of Vector2.new() to avoid allocations
-    return edgeX, edgeY, angle, false
-end
-
--- Create off-screen indicator UI element
-function CreateOffscreenIndicator()
-    local indicator = Instance.new("Frame")
-    indicator.Name = "OffscreenIndicator"
-    indicator.Size = UDim2.fromOffset(120, 50)
-    indicator.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    indicator.BackgroundTransparency = 0.3
-    indicator.BorderSizePixel = 0
-    indicator.Visible = false
-    indicator.ZIndex = 100
-    EnsureScreenGui()
-    indicator.Parent = ScreenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = indicator
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = COLORS.OFFSCREEN_INDICATOR
-    stroke.Thickness = 2
-    stroke.Transparency = 0.3
-    stroke.Parent = indicator
-    
-    -- Arrow indicator (pointing toward player)
-    local arrow = Instance.new("ImageLabel")
-    arrow.Name = "Arrow"
-    arrow.Size = UDim2.fromOffset(OFFSCREEN_ARROW_SIZE, OFFSCREEN_ARROW_SIZE)
-    arrow.Position = UDim2.new(0, 5, 0.5, -OFFSCREEN_ARROW_SIZE/2)
-    arrow.BackgroundTransparency = 1
-    arrow.Image = "rbxassetid://6034818372" -- Arrow/chevron icon
-    arrow.ImageColor3 = COLORS.OFFSCREEN_INDICATOR
-    arrow.ImageTransparency = 0
-    arrow.ZIndex = 101
-    arrow.Parent = indicator
-    
-    -- Name label
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NameLabel"
-    nameLabel.Size = UDim2.new(1, -30, 0, 20)
-    nameLabel.Position = UDim2.fromOffset(28, 5)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextStrokeTransparency = 0
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 12
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLabel.ZIndex = 101
-    nameLabel.Text = ""
-    nameLabel.Parent = indicator
-    
-    -- Distance label
-    local distLabel = Instance.new("TextLabel")
-    distLabel.Name = "DistLabel"
-    distLabel.Size = UDim2.new(1, -30, 0, 18)
-    distLabel.Position = UDim2.fromOffset(28, 26)
-    distLabel.BackgroundTransparency = 1
-    distLabel.TextColor3 = COLORS.OFFSCREEN_INDICATOR
-    distLabel.TextStrokeTransparency = 0
-    distLabel.Font = Enum.Font.Gotham
-    distLabel.TextSize = 11
-    distLabel.TextXAlignment = Enum.TextXAlignment.Left
-    distLabel.ZIndex = 101
-    distLabel.Text = ""
-    distLabel.Parent = indicator
-    
-    return {
-        Frame = indicator,
-        Arrow = arrow,
-        NameLabel = nameLabel,
-        DistLabel = distLabel,
-        Stroke = stroke
-    }
-end
 
 -- Create Closest Player Tracker display
 TrackerHeaderLabel, TrackerNameLabel, TrackerDistanceLabel = nil, nil, nil -- References to individual labels
@@ -4833,23 +4615,6 @@ local function CreateESP(player)
     espData.HealthBarFill = healthBarFill
     espData.EquippedLabel = equippedLabel
 
-    -- Create tracer (Frame based for AlwaysOnTop)
-    -- Using a Frame instead of Drawing ensures it renders through walls
-    local tracer = Instance.new("Frame")
-    tracer.Name = "Tracer"
-    tracer.Visible = false
-    tracer.BackgroundColor3 = COLORS.TRACER
-    tracer.BorderSizePixel = 0
-    tracer.AnchorPoint = Vector2.new(0.5, 0.5) -- Center anchor for rotation
-    EnsureScreenGui()
-    tracer.Parent = ScreenGui -- Render on top of everything
-    
-    espData.Tracer = tracer
-
-    -- Create off-screen indicator
-    espData.OffscreenIndicator = CreateOffscreenIndicator()
-    espData.lastOffscreenVisible = false
-
     ESPObjects[player] = espData
 end
 
@@ -5131,10 +4896,6 @@ function UpdateESP(now, player, isClosest)
     if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then
         if espData then
             if espData.Nametag then espData.Nametag.Enabled = false end
-            if espData.Tracer then espData.Tracer.Visible = false end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                espData.OffscreenIndicator.Frame.Visible = false
-            end
         end
         return
     end
@@ -5163,12 +4924,6 @@ function UpdateESP(now, player, isClosest)
             if nametag.Parent ~= targetGui then
                 nametag.Parent = targetGui
             end
-            if espData.Tracer and espData.Tracer.Parent ~= targetGui then
-                espData.Tracer.Parent = targetGui
-            end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Parent ~= targetGui then
-                espData.OffscreenIndicator.Frame.Parent = targetGui
-            end
         end
     end
     
@@ -5185,10 +4940,6 @@ function UpdateESP(now, player, isClosest)
         RemovePlayerOutlines(player) 
         -- Hide ESP elements
         if espData.Nametag then espData.Nametag.Enabled = false end
-        if espData.Tracer then espData.Tracer.Visible = false end
-        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-            espData.OffscreenIndicator.Frame.Visible = false
-        end
         return
     end
 
@@ -5285,129 +5036,6 @@ function UpdateESP(now, player, isClosest)
         if espData.Nametag.Enabled then espData.Nametag.Enabled = false end
     end
 
-    -- Update tracer (LOD: skip for distant players to save performance)
-    if espData.Tracer and Flags["ESP/Tracers"] and distance <= 2000 then
-        local screenPos, onScreen = GetViewportPoint(rootPart.Position)
-        if onScreen then
-            local tracerLine = espData.Tracer
-            local viewportSize = Camera.ViewportSize
-            
-            local originX = viewportSize.X / 2
-            local originY = viewportSize.Y
-            local targetX = screenPos.X
-            local targetY = screenPos.Y
-            
-            local diffX = targetX - originX
-            local diffY = targetY - originY
-            local length = floor(sqrt(diffX*diffX + diffY*diffY) + 0.5)
-            local rotation = floor(deg(atan2(diffY, diffX)) + 0.5)
-            local midX = floor((originX + targetX) / 2 + 0.5)
-            local midY = floor((originY + targetY) / 2 + 0.5)
-            
-            tracerLine.Visible = true
-            
-            -- MEMORY FIX: Only update if values changed to avoid UDim2 allocations
-            local lastTracerLength = espData.lastTracerLength or 0
-            local lastTracerMidX = espData.lastTracerMidX or 0
-            local lastTracerMidY = espData.lastTracerMidY or 0
-            local lastTracerRot = espData.lastTracerRot or 0
-            
-            if abs(length - lastTracerLength) > 3 then
-                tracerLine.Size = UDim2.fromOffset(length, 1)
-                espData.lastTracerLength = length
-            end
-            if abs(midX - lastTracerMidX) > 3 or abs(midY - lastTracerMidY) > 3 then
-                tracerLine.Position = UDim2.fromOffset(midX, midY)
-                espData.lastTracerMidX = midX
-                espData.lastTracerMidY = midY
-            end
-            if abs(rotation - lastTracerRot) > 1 then
-                tracerLine.Rotation = rotation
-                espData.lastTracerRot = rotation
-            end
-        else
-            espData.Tracer.Visible = false
-        end
-    elseif espData.Tracer then
-        espData.Tracer.Visible = false
-    end
-
-    -- Update off-screen indicator
-    if Flags["ESP/Nametags"] and Flags["ESP/OffscreenIndicators"] and espData.OffscreenIndicator then
-        local indicator = espData.OffscreenIndicator
-        -- MEMORY FIX: GetEdgePosition now returns raw numbers instead of Vector2
-        local edgeX, edgeY, angle, isOnScreen = GetEdgePosition(now, rootPart.Position)
-        
-        -- Logic Fix: WorldToViewportPoint/GetEdgePosition and/or ternary bug prevention
-        if edgeX == nil and isOnScreen == nil then
-            -- Failed to get position (likely camera not ready)
-            return
-        end
-
-        if isOnScreen then
-            if espData.lastOffscreenVisible then
-                indicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        elseif edgeX then
-            if not espData.lastOffscreenVisible then
-                indicator.Frame.Visible = true
-                espData.lastOffscreenVisible = true
-            end
-            
-            -- Only update pos if moved > 5px for perf
-            local newX = floor(edgeX - 60)
-            local newY = floor(edgeY - 25)
-            local lastX = espData.lastOffscreenX or 0
-            local lastY = espData.lastOffscreenY or 0
-            
-            if abs(newX - lastX) > 5 or abs(newY - lastY) > 5 then
-                indicator.Frame.Position = UDim2.fromOffset(newX, newY)
-                espData.lastOffscreenX = newX
-                espData.lastOffscreenY = newY
-            end
-            
-            if angle then
-                local newRotation = floor(deg(angle) - 90)
-                if espData.lastOffscreenAngle ~= newRotation then
-                    indicator.Arrow.Rotation = newRotation
-                    espData.lastOffscreenAngle = newRotation
-                end
-            end
-            
-            local nickname = espData.lastNickname or (player.DisplayName or player.Name)
-            if espData.lastOffscreenName ~= nickname then
-                indicator.NameLabel.Text = nickname
-                espData.lastOffscreenName = nickname
-            end
-            
-            local distRounded = floor(distance)
-            if abs((espData.lastOffscreenDist or 0) - distRounded) > 5 then
-                indicator.DistLabel.Text = distRounded .. " studs"
-                espData.lastOffscreenDist = distRounded
-            end
-            
-            local distanceColor = espData.lastDistanceColor or GetDistanceColor(distance, isClosest)
-            if espData.lastOffscreenColor ~= distanceColor then
-                indicator.DistLabel.TextColor3 = distanceColor
-                indicator.Stroke.Color = distanceColor
-                indicator.Arrow.ImageColor3 = distanceColor
-                espData.lastOffscreenColor = distanceColor
-            end
-            
-            if espData.Nametag and espData.Nametag.Enabled then
-                espData.Nametag.Enabled = false
-            end
-        else
-            if espData.lastOffscreenVisible then
-                indicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        end
-    elseif espData.OffscreenIndicator and espData.lastOffscreenVisible then
-        espData.OffscreenIndicator.Frame.Visible = false
-        espData.lastOffscreenVisible = false
-    end
     
     if Flags["ESP/PlayerOutlines"] then
         UpdatePlayerOutlines(player, character)
@@ -5429,13 +5057,6 @@ function RemoveESP(player)
     if espData.Nametag then
         PcallDestroy(espData.Nametag)
     end
-    if espData.Tracer then
-        PcallDestroy(espData.Tracer)
-    end
-    -- Clean up off-screen indicator
-    if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-        PcallDestroy(espData.OffscreenIndicator.Frame)
-    end
 
     -- Clean up player-specific connections
     if espData.Connections then
@@ -5446,16 +5067,7 @@ function RemoveESP(player)
     end
     
     espData.Nametag = nil
-    espData.Tracer = nil
     espData.EquippedLabel = nil
-    if espData.OffscreenIndicator then
-        espData.OffscreenIndicator.Frame = nil
-        espData.OffscreenIndicator.Arrow = nil
-        espData.OffscreenIndicator.NameLabel = nil
-        espData.OffscreenIndicator.DistLabel = nil
-        espData.OffscreenIndicator.Stroke = nil
-    end
-    espData.OffscreenIndicator = nil
     espData.Connections = nil
 
     ESPObjects[player] = nil
@@ -6306,10 +5918,6 @@ function Cleanup()
     for player, espData in pairs(ESPObjects) do
         pcall(function()
             if espData.Nametag then espData.Nametag:Destroy() end
-            if espData.Tracer then espData.Tracer:Destroy() end
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                espData.OffscreenIndicator.Frame:Destroy()
-            end
             -- MEMORY LEAK FIX: Disconnect player-specific connections
             if espData.Connections then
                 for _, conn in pairs(espData.Connections) do
@@ -6995,18 +6603,6 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
 end)
 UI.CreateNumericInput(VisualsTab, "Max ESP Distance", "ESP/MaxDistance", Flags["ESP/MaxDistance"], 100, 10000, 100, " studs")
 UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
-UI.CreateToggle(VisualsTab, "Draw Tracers", "ESP/Tracers", Flags["ESP/Tracers"])
-UI.CreateToggle(VisualsTab, "Off-Screen Indicators", "ESP/OffscreenIndicators", Flags["ESP/OffscreenIndicators"], function(state)
-    -- When disabled, hide all existing off-screen indicators
-    if not state then
-        for _, espData in pairs(ESPObjects) do
-            if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame then
-                espData.OffscreenIndicator.Frame.Visible = false
-                espData.lastOffscreenVisible = false
-            end
-        end
-    end
-end)
 UI.CreateToggle(VisualsTab, "Player Panel (Top 10)", "ESP/PlayerPanel", Flags["ESP/PlayerPanel"], function(state)
     -- Create panel if it doesn't exist yet
     if state and not PlayerPanelFrame then
@@ -7763,10 +7359,6 @@ function UnifiedHeartbeat(dt)
                     local espData = ESPObjects[player]
                     if espData then
                         if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
-                        if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
-                        if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
-                            espData.OffscreenIndicator.Frame.Visible = false
-                        end
                     end
                     RemovePlayerOutlines(player)
                     continue
@@ -7842,10 +7434,6 @@ function UnifiedHeartbeat(dt)
         if ghostMode then
             for _, espData in pairs(ESPObjects) do
                 if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
-                if espData.Tracer and espData.Tracer.Visible then espData.Tracer.Visible = false end
-                if espData.OffscreenIndicator and espData.OffscreenIndicator.Frame and espData.OffscreenIndicator.Frame.Visible then
-                    espData.OffscreenIndicator.Frame.Visible = false
-                end
             end
 
             -- Ensure pooled objects are disabled during Gh0st mode
