@@ -5218,7 +5218,7 @@ end
 end
 end
 
-function GetFocusDistance(cameraFrame)
+local function GetFocusDistance(cameraFrame)
 local znear = 0.1
 local viewport = Camera.ViewportSize
 local projy = 2*tan(cameraFov/2)
@@ -5250,7 +5250,7 @@ end
 
 ------------------------------------------------------------------------
 
-function StepFreecam(dt)
+local function StepFreecam(dt)
 local vel = velSpring:Update(dt, Input.Vel(dt))
 local pan = panSpring:Update(dt, Input.Pan(dt))
 local fov = fovSpring:Update(dt, Input.Fov(dt))
@@ -5334,7 +5334,7 @@ mouseBehavior = nil
 end
 end
 
-function StartFreecam()
+local function StartFreecam()
 local cameraCFrame = Camera.CFrame
 cameraRot = Vector2.new(cameraCFrame:toEulerAnglesYXZ())
 cameraPos = cameraCFrame.p
@@ -5349,7 +5349,7 @@ RunService:BindToRenderStep("Freecam", Enum.RenderPriority.Camera.Value, StepFre
 Input.StartCapture()
 end
 
-function StopFreecam()
+local function StopFreecam()
 Input.StopCapture()
 RunService:UnbindFromRenderStep("Freecam")
 PlayerState.Pop()
@@ -5360,7 +5360,9 @@ end
 do
 local enabled = false
 
-function ToggleFreecam()
+local ToggleFreecam, CheckMacro, HandleActivationInput
+
+ToggleFreecam = function()
 if enabled then
 StopFreecam()
 else
@@ -5376,7 +5378,7 @@ _G.StopFreecamFunc = function()
     end
 end
 
-function CheckMacro(macro)
+CheckMacro = function(macro)
 for i = 1, #macro - 1 do
 if not UserInputService:IsKeyDown(macro[i]) then
 return
@@ -5385,7 +5387,7 @@ end
 if Flags["Settings/Freecam Toggle"] then ToggleFreecam() end
 end
 
-function HandleActivationInput(action, state, input)
+HandleActivationInput = function(action, state, input)
 if state == Enum.UserInputState.Begin then
 if input.KeyCode == FREECAM_MACRO_KB[#FREECAM_MACRO_KB] then
 CheckMacro(FREECAM_MACRO_KB)
