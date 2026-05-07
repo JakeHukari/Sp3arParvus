@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.3" -- Remove Player Panel
+local VERSION = "4.0.4" -- Add State Filtering Tabs to Advanced Player Panel
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -157,6 +157,7 @@ local AdvancedPlayerPanelState = {
     CurrentView = "List", -- "List" or "Details"
     SelectedPlayer = nil,
     Spectating = nil,
+    ListTab = "All",
     Whitelist = {},
     Blacklist = {}
 }
@@ -183,7 +184,8 @@ local AdvancedPlayerPanelUI = {
     ListFrame = nil,
     DetailsFrame = nil,
     Entries = {},
-    DetailLabels = {}
+    DetailLabels = {},
+    TabButtons = {}
 }
 local HumanoidState = {
     originalSettings = {},
@@ -751,7 +753,7 @@ function ApplyWorldHumanoidSettings()
                     local path = GetUniquePath(hum)
                     if not WorldHumState.lockedProperties[path] then
                         WorldHumState.lockedProperties[path] = {
-                            ["JumpPower"] = 70,
+                            ["JumpPower"] = 65,
                             ["MaxSlopeAngle"] = 89.9
                         }
                     end
@@ -3490,10 +3492,49 @@ function CreateAdvancedPlayerPanel()
     searchBox.Parent = ListFrame
     local sbCorner = Instance.new("UICorner"); sbCorner.CornerRadius = UDim.new(0, 6); sbCorner.Parent = searchBox
 
+    local tabFrame = Instance.new("Frame")
+    tabFrame.Name = "TabFrame"
+    tabFrame.Size = UDim2.new(1, -20, 0, 30)
+    tabFrame.Position = UDim2.fromOffset(10, 45)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Parent = ListFrame
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.FillDirection = Enum.FillDirection.Horizontal
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabLayout.Parent = tabFrame
+
+    local function CreateTab(name, label)
+        local btn = Instance.new("TextButton")
+        btn.Name = name .. "_Tab"
+        btn.Size = UDim2.new(0.33, -3, 1, 0)
+        btn.BackgroundColor3 = (AdvancedPlayerPanelState.ListTab == name) and UI_THEME.Accent or UI_THEME.Element
+        btn.Text = label
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 12
+        btn.TextColor3 = UI_THEME.Text
+        btn.Parent = tabFrame
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = btn
+
+        TrackConnection(btn.MouseButton1Click:Connect(function()
+            AdvancedPlayerPanelState.ListTab = name
+            for tabName, tabBtn in pairs(AdvancedPlayerPanelUI.TabButtons) do
+                tabBtn.BackgroundColor3 = (tabName == name) and UI_THEME.Accent or UI_THEME.Element
+            end
+            UpdateAdvancedPlayerList()
+        end))
+        AdvancedPlayerPanelUI.TabButtons[name] = btn
+    end
+
+    CreateTab("All", "All")
+    CreateTab("Whitelisted", "Whitelisted")
+    CreateTab("Blacklisted", "Blacklisted")
+
     local listContent = Instance.new("ScrollingFrame")
     listContent.Name = "ListContent"
-    listContent.Size = UDim2.new(1, -10, 1, -50)
-    listContent.Position = UDim2.fromOffset(5, 45)
+    listContent.Size = UDim2.new(1, -10, 1, -85)
+    listContent.Position = UDim2.fromOffset(5, 80)
     listContent.BackgroundTransparency = 1
     listContent.BorderSizePixel = 0
     listContent.ScrollBarThickness = 4
@@ -3596,6 +3637,17 @@ function UpdateAdvancedPlayerList()
         local username = player.Name
         
         if searchText ~= "" and not nickname:lower():find(searchText) and not username:lower():find(searchText) then
+            if AdvancedPlayerPanelUI.Entries[player] then
+                AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
+            end
+            continue
+        end
+
+        local isWhitelisted = AdvancedPlayerPanelState.Whitelist[player.UserId]
+        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[player.UserId]
+        local currentTab = AdvancedPlayerPanelState.ListTab
+
+        if (currentTab == "Whitelisted" and not isWhitelisted) or (currentTab == "Blacklisted" and not isBlacklisted) then
             if AdvancedPlayerPanelUI.Entries[player] then
                 AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
             end
@@ -5564,6 +5616,7 @@ function Cleanup()
     AdvancedPlayerPanelUI.SearchBox = nil
     table.clear(AdvancedPlayerPanelUI.Entries)
     table.clear(AdvancedPlayerPanelUI.DetailLabels)
+    table.clear(AdvancedPlayerPanelUI.TabButtons)
     LocalPlayer.ReplicationFocus = nil
     pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
     
