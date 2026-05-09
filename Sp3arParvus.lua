@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.5" -- Add Player and Workspace Data Tabs to Advanced Player Panel
+local VERSION = "4.0.6" -- Add Copy Buttons and Player ID to Advanced Player Panel
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -3782,7 +3782,7 @@ function UpdateAdvancedPlayerList()
             entry = {}
             local frame = Instance.new("Frame")
             frame.Name = player.Name .. "_Entry"
-            frame.Size = UDim2.new(1, 0, 0, 50)
+            frame.Size = UDim2.new(1, 0, 0, 75)
             frame.BackgroundColor3 = UI_THEME.Element
             frame.BorderSizePixel = 0
             frame.Parent = AdvancedPlayerPanelUI.ListContent
@@ -3791,7 +3791,7 @@ function UpdateAdvancedPlayerList()
             local avatar = Instance.new("ImageLabel")
             avatar.Name = "Avatar"
             avatar.Size = UDim2.fromOffset(40, 40)
-            avatar.Position = UDim2.fromOffset(5, 5)
+            avatar.Position = UDim2.fromOffset(5, 17)
             avatar.BackgroundColor3 = UI_THEME.Background
             avatar.Parent = frame
             local aCorner = Instance.new("UICorner"); aCorner.CornerRadius = UDim.new(1, 0); aCorner.Parent = avatar
@@ -3801,29 +3801,58 @@ function UpdateAdvancedPlayerList()
                 if isReady then avatar.Image = content end
             end)
 
-            local nickLbl = Instance.new("TextLabel")
-            nickLbl.Name = "Nickname"
-            nickLbl.Size = UDim2.new(1, -145, 0, 20)
-            nickLbl.Position = UDim2.fromOffset(55, 5)
-            nickLbl.BackgroundTransparency = 1
-            nickLbl.Text = nickname
-            nickLbl.Font = Enum.Font.GothamBold
-            nickLbl.TextSize = 14
-            nickLbl.TextColor3 = UI_THEME.Text
-            nickLbl.TextXAlignment = Enum.TextXAlignment.Left
-            nickLbl.Parent = frame
+            local function createCopyableLabel(parent, text, position, font, size, color)
+                local container = Instance.new("Frame")
+                container.Size = UDim2.new(1, -145, 0, 20)
+                container.Position = position
+                container.BackgroundTransparency = 1
+                container.ZIndex = 3
+                container.Parent = parent
 
-            local userLbl = Instance.new("TextLabel")
-            userLbl.Name = "Username"
-            userLbl.Size = UDim2.new(1, -145, 0, 18)
-            userLbl.Position = UDim2.fromOffset(55, 25)
-            userLbl.BackgroundTransparency = 1
-            userLbl.Text = "@" .. username
-            userLbl.Font = Enum.Font.Gotham
-            userLbl.TextSize = 12
-            userLbl.TextColor3 = UI_THEME.TextDark
-            userLbl.TextXAlignment = Enum.TextXAlignment.Left
-            userLbl.Parent = frame
+                local layout = Instance.new("UIListLayout")
+                layout.FillDirection = Enum.FillDirection.Horizontal
+                layout.Padding = UDim.new(0, 5)
+                layout.VerticalAlignment = Enum.VerticalAlignment.Center
+                layout.SortOrder = Enum.SortOrder.LayoutOrder
+                layout.Parent = container
+
+                local lbl = Instance.new("TextLabel")
+                lbl.AutomaticSize = Enum.AutomaticSize.X
+                lbl.Size = UDim2.fromScale(0, 1)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = text
+                lbl.Font = font
+                lbl.TextSize = size
+                lbl.TextColor3 = color
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = container
+
+                local copyBtn = Instance.new("TextButton")
+                copyBtn.Text = "📋"
+                copyBtn.Font = Enum.Font.Gotham
+                copyBtn.TextSize = 12
+                copyBtn.TextColor3 = UI_THEME.Text
+                copyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                copyBtn.BackgroundTransparency = 0.3
+                copyBtn.Size = UDim2.fromOffset(20, 20)
+                copyBtn.ZIndex = 3
+                copyBtn.Parent = container
+
+                local btnCorner = Instance.new("UICorner")
+                btnCorner.CornerRadius = UDim.new(0, 4)
+                btnCorner.Parent = copyBtn
+
+                TrackConnection(copyBtn.MouseButton1Click:Connect(function()
+                    local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+                    if copy then copy(text) end
+                end))
+
+                return container
+            end
+
+            createCopyableLabel(frame, nickname, UDim2.fromOffset(55, 5), Enum.Font.GothamBold, 14, UI_THEME.Text)
+            createCopyableLabel(frame, "@" .. username, UDim2.fromOffset(55, 25), Enum.Font.Gotham, 12, UI_THEME.TextDark)
+            createCopyableLabel(frame, tostring(player.UserId), UDim2.fromOffset(55, 45), Enum.Font.Gotham, 12, UI_THEME.TextDark)
 
             local distLbl = Instance.new("TextLabel")
             distLbl.Name = "Distance"
@@ -4148,6 +4177,7 @@ function ShowAdvancedPlayerDetails(player)
         createSection("User Information")
     createLabel("Display Name", player.DisplayName)
     createLabel("Username", "@" .. player.Name)
+    createLabel("User ID", tostring(player.UserId))
     
     local creationDate = "Unknown"
     pcall(function()
