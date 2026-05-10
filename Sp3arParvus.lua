@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.7" -- Team Filtering and UI Expansion 
+local VERSION = "4.0.8" -- Whitelist/Blacklist Status Indicators 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -4663,6 +4663,7 @@ local function CreateESP(player)
         lastTeamColor = nil,
         lastDistanceColor = nil,
         lastEquipped = "",
+        lastStatus = "",
         Connections = {} -- Store player-specific connections here
     }
 
@@ -4671,7 +4672,7 @@ local function CreateESP(player)
     billboard.Enabled = false
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 200, 0, 110) -- Increased height for 6 lines
+    billboard.Size = UDim2.new(0, 200, 0, 140) -- Increased height for status indicator + 6 lines
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     EnsureScreenGui() -- Ensure parent exists
     billboard.Parent = ScreenGui
@@ -4687,8 +4688,23 @@ local function CreateESP(player)
     layout.FillDirection = Enum.FillDirection.Vertical
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 0)
     layout.Parent = container
+
+    -- Status Indicator (Emoji) - Topmost line
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Text = ""
+    statusLabel.Name = "StatusLabel"
+    statusLabel.Size = UDim2.new(1, 0, 0, 22)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.TextStrokeTransparency = 0
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 16
+    statusLabel.LayoutOrder = 0
+    statusLabel.Visible = false
+    statusLabel.Parent = container
 
     -- Display Name (Nickname) - Top line (colored by team)
     local nicknameLabel = Instance.new("TextLabel")
@@ -4774,6 +4790,7 @@ local function CreateESP(player)
     equippedLabel.Parent = container
 
     espData.Nametag = billboard
+    espData.StatusLabel = statusLabel
     espData.NicknameLabel = nicknameLabel
     espData.UsernameLabel = usernameLabel
     espData.DistanceLabel = distanceLabel
@@ -5068,9 +5085,22 @@ function UpdateESP(now, player, isClosest)
     local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
     local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
     local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
-    local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+    local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
 
-    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] or isWhitelisted then
+    local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+    
+    local statusEmoji = ""
+    if isIndivBlacklisted then
+        statusEmoji = "❌"
+    elseif isIndivWhitelisted then
+        statusEmoji = "✅"
+    elseif isTeamBlacklisted then
+        statusEmoji = "❌"
+    elseif isTeamWhitelisted then
+        statusEmoji = "✅"
+    end
+
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] or (isWhitelisted and statusEmoji == "") then
         if espData then
             if espData.Nametag then espData.Nametag.Enabled = false end
         end
@@ -5145,6 +5175,15 @@ function UpdateESP(now, player, isClosest)
         local username = "@" .. player.Name
         local distRounded = floor(distance)
         
+        -- Update Status Emoji
+        if espData.StatusLabel then
+            if espData.lastStatus ~= statusEmoji then
+                espData.StatusLabel.Text = statusEmoji
+                espData.StatusLabel.Visible = (statusEmoji ~= "")
+                espData.lastStatus = statusEmoji
+            end
+        end
+
         -- PERFORMANCE: Only update text/color if values changed
         if espData.lastNickname ~= nickname then
             espData.NicknameLabel.Text = nickname
@@ -6965,6 +7004,7 @@ function SetupPlayerESP(player)
                     data.lastDistance = -1
                     data.lastTeamColor = nil
                     data.lastDistanceColor = nil
+                    data.lastStatus = ""
                     
                     -- Ensure ScreenGui is valid
                     EnsureScreenGui()
@@ -7005,6 +7045,7 @@ function SetupPlayerESP(player)
                     espData.lastDistance = -1
                     espData.lastTeamColor = nil
                     espData.lastDistanceColor = nil
+                    espData.lastStatus = ""
                     
                     EnsureScreenGui()
                     UpdateESP(os.clock(), player, player == NearestPlayerRef)
