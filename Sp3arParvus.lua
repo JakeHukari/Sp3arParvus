@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.6" -- Add Copy Buttons and Player ID to Advanced Player Panel
+local VERSION = "4.0.7" -- Team Filtering and UI Expansion 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -162,7 +162,7 @@ local PROPERTY_CATEGORIES = {
 
 local AdvancedPlayerPanelState = {
     Visible = false,
-    CurrentView = "List", -- "List" or "Details"
+    CurrentView = "List", -- "List", "Details", or "Teams"
     SelectedPlayer = nil,
     Spectating = nil,
     ListTab = "All",
@@ -171,7 +171,10 @@ local AdvancedPlayerPanelState = {
     ExplorerSelected = nil,
     PropertySearchText = "",
     Whitelist = {},
-    Blacklist = {}
+    Blacklist = {},
+    TeamWhitelist = {},
+    TeamBlacklist = {},
+    TeamExpanded = {}
 }
 
 function ToggleWhitelist(player)
@@ -189,6 +192,22 @@ function ToggleBlacklist(player)
     AdvancedPlayerPanelState.Blacklist[id] = not AdvancedPlayerPanelState.Blacklist[id]
     if AdvancedPlayerPanelState.Blacklist[id] then
         AdvancedPlayerPanelState.Whitelist[id] = nil
+    end
+end
+
+function ToggleTeamWhitelist(teamName)
+    if not teamName then return end
+    AdvancedPlayerPanelState.TeamWhitelist[teamName] = not AdvancedPlayerPanelState.TeamWhitelist[teamName]
+    if AdvancedPlayerPanelState.TeamWhitelist[teamName] then
+        AdvancedPlayerPanelState.TeamBlacklist[teamName] = nil
+    end
+end
+
+function ToggleTeamBlacklist(teamName)
+    if not teamName then return end
+    AdvancedPlayerPanelState.TeamBlacklist[teamName] = not AdvancedPlayerPanelState.TeamBlacklist[teamName]
+    if AdvancedPlayerPanelState.TeamBlacklist[teamName] then
+        AdvancedPlayerPanelState.TeamWhitelist[teamName] = nil
     end
 end
 local AdvancedPlayerPanelUI = {
@@ -2842,12 +2861,22 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
+        local pId = Player.UserId
+        local pTeam = Player.Team
+        local teamName = pTeam and pTeam.Name
+
+        local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
+        local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+        local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
+        local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
+
+        local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+        local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
+
         -- Whitelist Check
-        if AdvancedPlayerPanelState.Whitelist[Player.UserId] then
+        if isWhitelisted then
             continue
         end
-
-        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[Player.UserId]
 
         local Character, RootPart = GetCharacter(Player)
         if not Character or not RootPart then
@@ -2981,11 +3010,19 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         BoundedInsertionSort(CandidateList, CandidateCount, CandidateSortFn)
     end
 
-    if StickyTarget and not AdvancedPlayerPanelState.Blacklist[StickyTarget.UserId] then
+    local stickyId = StickyTarget and StickyTarget.UserId
+    local stickyTeam = StickyTarget and StickyTarget.Team and StickyTarget.Team.Name
+    local isStickyBlacklisted = stickyId and (AdvancedPlayerPanelState.Blacklist[stickyId] or (stickyTeam and AdvancedPlayerPanelState.TeamBlacklist[stickyTeam] and not AdvancedPlayerPanelState.Whitelist[stickyId]))
+
+    if StickyTarget and not isStickyBlacklisted then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
-                local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[entry.ply.UserId]
+                local pId = entry.ply.UserId
+                local pTeam = entry.ply.Team
+                local teamName = pTeam and pTeam.Name
+                local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
+                
                 if isSpecTargetBlacklisted or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
@@ -3008,7 +3045,11 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[entry.ply.UserId]
+        local pId = entry.ply.UserId
+        local pTeam = entry.ply.Team
+        local teamName = pTeam and pTeam.Name
+        local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
+
         if not isEntryBlacklisted and ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
             continue
         end
@@ -3485,6 +3526,33 @@ function CreateAdvancedPlayerPanel()
         if updater then updater(false) end
     end))
 
+    local teamsBtn = Instance.new("TextButton")
+    teamsBtn.Name = "TeamsBtn"
+    teamsBtn.Size = UDim2.fromOffset(26, 26)
+    teamsBtn.Position = UDim2.new(1, -62, 0.5, -13)
+    teamsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    teamsBtn.BackgroundTransparency = 0.5
+    teamsBtn.Text = "🛡️"
+    teamsBtn.Font = Enum.Font.GothamBold
+    teamsBtn.TextSize = 14
+    teamsBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    teamsBtn.BorderSizePixel = 0
+    teamsBtn.Parent = header
+
+    local teamsBtnCorner = Instance.new("UICorner")
+    teamsBtnCorner.CornerRadius = UDim.new(0, 4)
+    teamsBtnCorner.Parent = teamsBtn
+
+    TrackConnection(teamsBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.CurrentView = "Teams"
+        if AdvancedPlayerPanelUI.ListFrame then AdvancedPlayerPanelUI.ListFrame.Visible = false end
+        if AdvancedPlayerPanelUI.DetailsFrame then AdvancedPlayerPanelUI.DetailsFrame.Visible = false end
+        if AdvancedPlayerPanelUI.TeamFrame then 
+            AdvancedPlayerPanelUI.TeamFrame.Visible = true 
+            UpdateTeamPanelList()
+        end
+    end))
+
     -- List View
     local ListFrame = Instance.new("Frame")
     ListFrame.Name = "ListFrame"
@@ -3724,15 +3792,213 @@ function CreateAdvancedPlayerPanel()
     AdvancedPlayerPanelUI.PropertyContent = propertyContent
     AdvancedPlayerPanelUI.PropertySearch = pfSearch
 
+    -- Team View
+    local TeamFrame = Instance.new("Frame")
+    TeamFrame.Name = "TeamFrame"
+    TeamFrame.Size = UDim2.new(1, 0, 1, -35)
+    TeamFrame.Position = UDim2.fromOffset(0, 35)
+    TeamFrame.BackgroundTransparency = 1
+    TeamFrame.Visible = false
+    TeamFrame.Parent = MainFrame
+
+    local teamBackBtn = Instance.new("TextButton")
+    teamBackBtn.Name = "BackBtn"
+    teamBackBtn.Size = UDim2.fromOffset(70, 26)
+    teamBackBtn.Position = UDim2.fromOffset(10, 10)
+    teamBackBtn.BackgroundColor3 = UI_THEME.Element
+    teamBackBtn.Text = "← Back"
+    teamBackBtn.Font = Enum.Font.GothamBold
+    teamBackBtn.TextSize = 12
+    teamBackBtn.TextColor3 = UI_THEME.Text
+    teamBackBtn.Parent = TeamFrame
+    local tbbCorner = Instance.new("UICorner"); tbbCorner.CornerRadius = UDim.new(0, 4); tbbCorner.Parent = teamBackBtn
+
+    TrackConnection(teamBackBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.CurrentView = "List"
+        TeamFrame.Visible = false
+        ListFrame.Visible = true
+    end))
+
+    local teamContent = Instance.new("ScrollingFrame")
+    teamContent.Name = "TeamContent"
+    teamContent.Size = UDim2.new(1, -10, 1, -46)
+    teamContent.Position = UDim2.fromOffset(5, 46)
+    teamContent.BackgroundTransparency = 1
+    teamContent.BorderSizePixel = 0
+    teamContent.ScrollBarThickness = 4
+    teamContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    teamContent.Parent = TeamFrame
+
+    local teamLayout = Instance.new("UIListLayout")
+    teamLayout.Padding = UDim.new(0, 5)
+    teamLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    teamLayout.Parent = teamContent
+
+    TrackConnection(teamLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        teamContent.CanvasSize = UDim2.new(0, 0, 0, teamLayout.AbsoluteContentSize.Y)
+    end))
+
     AdvancedPlayerPanelUI.MainFrame = MainFrame
     AdvancedPlayerPanelUI.ListFrame = ListFrame
     AdvancedPlayerPanelUI.DetailsFrame = DetailsFrame
+    AdvancedPlayerPanelUI.TeamFrame = TeamFrame
     AdvancedPlayerPanelUI.ListContent = listContent
     AdvancedPlayerPanelUI.DetailsContent = detailsContent
+    AdvancedPlayerPanelUI.TeamContent = teamContent
     AdvancedPlayerPanelUI.SearchBox = searchBox
 
     if UI.MakeDraggable then
         UI.MakeDraggable(MainFrame)
+    end
+end
+
+function UpdateTeamPanelList()
+    if not AdvancedPlayerPanelUI.MainFrame or not AdvancedPlayerPanelUI.MainFrame.Visible then return end
+    if AdvancedPlayerPanelState.CurrentView ~= "Teams" then return end
+
+    local content = AdvancedPlayerPanelUI.TeamContent
+    if not content then return end
+
+    for _, child in ipairs(content:GetChildren()) do
+        if not child:IsA("UIListLayout") then child:Destroy() end
+    end
+
+    local Teams = game:GetService("Teams")
+    local teamList = Teams:GetTeams()
+
+    for _, team in ipairs(teamList) do
+        local teamName = team.Name
+        local teamColor = team.TeamColor.Color
+        local playersOnTeam = team:GetPlayers()
+        local playerCount = #playersOnTeam
+
+        local isWhitelisted = AdvancedPlayerPanelState.TeamWhitelist[teamName]
+        local isBlacklisted = AdvancedPlayerPanelState.TeamBlacklist[teamName]
+        local isExpanded = AdvancedPlayerPanelState.TeamExpanded[teamName]
+
+        local row = Instance.new("Frame")
+        row.Name = teamName .. "_Row"
+        row.Size = UDim2.new(1, 0, 0, 40)
+        row.BackgroundColor3 = isWhitelisted and UI_THEME.Success or (isBlacklisted and UI_THEME.Fail or UI_THEME.Element)
+        row.Parent = content
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = row
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -160, 1, 0)
+        nameLabel.Position = UDim2.fromOffset(10, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = string.format("%s [%d Players]", teamName, playerCount)
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 14
+        nameLabel.TextColor3 = teamColor
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = row
+
+        local expandBtn = Instance.new("TextButton")
+        expandBtn.Size = UDim2.fromOffset(25, 25)
+        expandBtn.Position = UDim2.new(1, -35, 0.5, -12)
+        expandBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        expandBtn.Text = isExpanded and "⬇️" or "➡️"
+        expandBtn.Font = Enum.Font.GothamBold
+        expandBtn.TextSize = 12
+        expandBtn.TextColor3 = Color3.new(1, 1, 1)
+        expandBtn.Parent = row
+        local eCorner = Instance.new("UICorner"); eCorner.CornerRadius = UDim.new(0, 4); eCorner.Parent = expandBtn
+
+        TrackConnection(expandBtn.MouseButton1Click:Connect(function()
+            AdvancedPlayerPanelState.TeamExpanded[teamName] = not AdvancedPlayerPanelState.TeamExpanded[teamName]
+            UpdateTeamPanelList()
+        end))
+
+        local wBtn = Instance.new("TextButton")
+        wBtn.Size = UDim2.fromOffset(25, 25)
+        wBtn.Position = UDim2.new(1, -65, 0.5, -12)
+        wBtn.BackgroundColor3 = isWhitelisted and UI_THEME.Success or Color3.fromRGB(40, 40, 40)
+        wBtn.Text = "W"
+        wBtn.Font = Enum.Font.GothamBold
+        wBtn.TextSize = 12
+        wBtn.TextColor3 = Color3.new(1, 1, 1)
+        wBtn.Parent = row
+        local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(0, 4); wCorner.Parent = wBtn
+
+        TrackConnection(wBtn.MouseButton1Click:Connect(function()
+            ToggleTeamWhitelist(teamName)
+            UpdateTeamPanelList()
+        end))
+
+        local bBtn = Instance.new("TextButton")
+        bBtn.Size = UDim2.fromOffset(25, 25)
+        bBtn.Position = UDim2.new(1, -95, 0.5, -12)
+        bBtn.BackgroundColor3 = isBlacklisted and UI_THEME.Fail or Color3.fromRGB(40, 40, 40)
+        bBtn.Text = "B"
+        bBtn.Font = Enum.Font.GothamBold
+        bBtn.TextSize = 12
+        bBtn.TextColor3 = Color3.new(1, 1, 1)
+        bBtn.Parent = row
+        local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0, 4); bCorner.Parent = bBtn
+
+        TrackConnection(bBtn.MouseButton1Click:Connect(function()
+            ToggleTeamBlacklist(teamName)
+            UpdateTeamPanelList()
+        end))
+
+        if isExpanded then
+            for _, player in ipairs(playersOnTeam) do
+                local pId = player.UserId
+                local pWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
+                local pBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+
+                local pRow = Instance.new("Frame")
+                pRow.Size = UDim2.new(1, -20, 0, 30)
+                pRow.Position = UDim2.fromOffset(20, 0)
+                pRow.BackgroundColor3 = pWhitelisted and UI_THEME.Success or (pBlacklisted and UI_THEME.Fail or Color3.fromRGB(35, 35, 35))
+                pRow.Parent = content
+                local pCorner = Instance.new("UICorner"); pCorner.CornerRadius = UDim.new(0, 4); pCorner.Parent = pRow
+
+                local pLabel = Instance.new("TextLabel")
+                pLabel.Size = UDim2.new(1, -70, 1, 0)
+                pLabel.Position = UDim2.fromOffset(10, 0)
+                pLabel.BackgroundTransparency = 1
+                pLabel.Text = player.DisplayName or player.Name
+                pLabel.Font = Enum.Font.Gotham
+                pLabel.TextSize = 12
+                pLabel.TextColor3 = Color3.new(1, 1, 1)
+                pLabel.TextXAlignment = Enum.TextXAlignment.Left
+                pLabel.Parent = pRow
+
+                local pwBtn = Instance.new("TextButton")
+                pwBtn.Size = UDim2.fromOffset(20, 20)
+                pwBtn.Position = UDim2.new(1, -25, 0.5, -10)
+                pwBtn.BackgroundColor3 = pWhitelisted and UI_THEME.Success or Color3.fromRGB(45, 45, 45)
+                pwBtn.Text = "W"
+                pwBtn.Font = Enum.Font.GothamBold
+                pwBtn.TextSize = 10
+                pwBtn.TextColor3 = Color3.new(1, 1, 1)
+                pwBtn.Parent = pRow
+                local pwCorner = Instance.new("UICorner"); pwCorner.CornerRadius = UDim.new(0, 4); pwCorner.Parent = pwBtn
+
+                TrackConnection(pwBtn.MouseButton1Click:Connect(function()
+                    ToggleWhitelist(player)
+                    UpdateTeamPanelList()
+                end))
+
+                local pbBtn = Instance.new("TextButton")
+                pbBtn.Size = UDim2.fromOffset(20, 20)
+                pbBtn.Position = UDim2.new(1, -50, 0.5, -10)
+                pbBtn.BackgroundColor3 = pBlacklisted and UI_THEME.Fail or Color3.fromRGB(45, 45, 45)
+                pbBtn.Text = "B"
+                pbBtn.Font = Enum.Font.GothamBold
+                pbBtn.TextSize = 10
+                pbBtn.TextColor3 = Color3.new(1, 1, 1)
+                pbBtn.Parent = pRow
+                local pbCorner = Instance.new("UICorner"); pbCorner.CornerRadius = UDim.new(0, 4); pbCorner.Parent = pbBtn
+
+                TrackConnection(pbBtn.MouseButton1Click:Connect(function()
+                    ToggleBlacklist(player)
+                    UpdateTeamPanelList()
+                end))
+            end
+        end
     end
 end
 
@@ -3766,8 +4032,18 @@ function UpdateAdvancedPlayerList()
             continue
         end
 
-        local isWhitelisted = AdvancedPlayerPanelState.Whitelist[player.UserId]
-        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[player.UserId]
+        local pId = player.UserId
+        local pTeam = player.Team
+        local teamName = pTeam and pTeam.Name
+
+        local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
+        local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+        local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
+        local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
+
+        local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+        local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
+        
         local currentTab = AdvancedPlayerPanelState.ListTab
 
         if (currentTab == "Whitelisted" and not isWhitelisted) or (currentTab == "Blacklisted" and not isBlacklisted) then
@@ -3932,11 +4208,7 @@ function UpdateAdvancedPlayerList()
         end
         entry.Frame.LayoutOrder = math.floor(dist)
 
-        -- Update Status Colors
-        local id = player.UserId
-        local isWhitelisted = AdvancedPlayerPanelState.Whitelist[id]
-        local isBlacklisted = AdvancedPlayerPanelState.Blacklist[id]
-
+        -- Update Status Colors (Reuse previously calculated isWhitelisted/isBlacklisted)
         if isWhitelisted then
             entry.Frame.BackgroundColor3 = UI_THEME.Success
         elseif isBlacklisted then
@@ -4788,10 +5060,21 @@ end
 -- Update ESP for a player (optimized - uses cached closest player)
 function UpdateESP(now, player, isClosest)
     local espData = ESPObjects[player]
-    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] then
+
+    local pId = player.UserId
+    local pTeam = player.Team
+    local teamName = pTeam and pTeam.Name
+
+    local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
+    local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+    local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
+    local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] or isWhitelisted then
         if espData then
             if espData.Nametag then espData.Nametag.Enabled = false end
         end
+        RemovePlayerOutlines(player)
         return
     end
     
@@ -5969,11 +6252,16 @@ function Cleanup()
     AdvancedPlayerPanelState.Spectating = nil
     table.clear(AdvancedPlayerPanelState.Whitelist)
     table.clear(AdvancedPlayerPanelState.Blacklist)
+    table.clear(AdvancedPlayerPanelState.TeamWhitelist)
+    table.clear(AdvancedPlayerPanelState.TeamBlacklist)
+    table.clear(AdvancedPlayerPanelState.TeamExpanded)
     AdvancedPlayerPanelUI.MainFrame = nil
     AdvancedPlayerPanelUI.ListFrame = nil
     AdvancedPlayerPanelUI.DetailsFrame = nil
+    AdvancedPlayerPanelUI.TeamFrame = nil
     AdvancedPlayerPanelUI.ListContent = nil
     AdvancedPlayerPanelUI.DetailsContent = nil
+    AdvancedPlayerPanelUI.TeamContent = nil
     AdvancedPlayerPanelUI.SearchBox = nil
     table.clear(AdvancedPlayerPanelUI.Entries)
     table.clear(AdvancedPlayerPanelUI.DetailLabels)
@@ -7061,6 +7349,7 @@ lastHumanoidSync = 0
 humanoidSyncRate = 0.1 -- 10 FPS
 lastWorldHumListUpdate = 0
 lastWorldHumPresetScan = 0
+lastTeamsUpdate = 0
 lastGhostMode = nil
 
 -- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
@@ -7135,7 +7424,14 @@ function UnifiedHeartbeat(dt)
         
         -- Update Advanced Player Panel
         if AdvancedPlayerPanelState.Visible then
-            UpdateAdvancedPlayerList()
+            if AdvancedPlayerPanelState.CurrentView == "Teams" then
+                if (now - lastTeamsUpdate) > 1.0 then
+                    lastTeamsUpdate = now
+                    UpdateTeamPanelList()
+                end
+            else
+                UpdateAdvancedPlayerList()
+            end
             UpdateAdvancedPlayerDetails()
         end
 
