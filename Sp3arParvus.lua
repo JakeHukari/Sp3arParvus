@@ -3167,9 +3167,9 @@ COLORS = {
 MAX_OUTLINE_HIGHLIGHTS = 15 
 
 -- Distance-based color zones (for tracker, but closest overrides to pink)
-COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-2000 studs)
-COLOR_MID = Color3.fromRGB(255, 200, 50)      -- Yellow (2001-4000 studs)
-COLOR_FAR = Color3.fromRGB(50, 255, 50)       -- Green (4000+ studs)
+COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-750 studs)
+COLOR_MID = Color3.fromRGB(255, 200, 50)      -- Yellow (751-1875 studs)
+COLOR_FAR = Color3.fromRGB(50, 255, 50)       -- Green (1875+ studs)
 
 -- Closest Player Tracker variables
 ClosestPlayerTrackerLabel = nil
@@ -3179,15 +3179,15 @@ NearestPlayerRef = nil
 CurrentTargetDistance = 0 -- Track distance for color coding
 TrackerStrokeRef = nil -- Cached stroke reference to avoid repeated lookups
 
--- Get color based on distance (Pink=Closest, Red≤2000, Yellow≤4000, Green>4000)
+-- Get color based on distance (Pink=Closest, Red≤750, Yellow≤1875, Green>1875)
 function GetDistanceColor(distance, isClosest)
     if isClosest then
         return COLORS.CLOSEST -- Pink always overrides for closest player
     end
 
-    if distance <= 2000 then
+    if distance <= 750 then
         return COLOR_CLOSE -- Red
-    elseif distance <= 4000 then
+    elseif distance <= 1875 then
         return COLOR_MID -- Yellow
     else
         return COLOR_FAR -- Green
