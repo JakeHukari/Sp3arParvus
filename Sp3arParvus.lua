@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.8" -- Whitelist/Blacklist Status Indicators 
+local VERSION = "4.0.9" -- Dynamic Health Label Color Transition Logic 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -2564,6 +2564,30 @@ function GetHealth(player)
     end
     
     return 0, 100
+end
+
+function GetHealthColor(health, maxHealth)
+    -- Snap health to nearest 5 for the "shift every 5 health" requirement
+    local snappedHealth = math.floor(health / 5) * 5
+    local percent = math.clamp(snappedHealth / maxHealth, 0, 1)
+    
+    if percent >= 0.75 then
+        -- 100-75% of total hp = (0,255,0) -> (127,255,0)
+        local t = (1 - percent) / 0.25
+        return Color3.fromRGB(math.floor(127 * t), 255, 0)
+    elseif percent >= 0.50 then
+        -- 74-50% of total hp = (127,255,0) -> (255,255,0)
+        local t = (0.75 - percent) / 0.25
+        return Color3.fromRGB(127 + math.floor(128 * t), 255, 0)
+    elseif percent >= 0.25 then
+        -- 49-25% of total hp = (255,255,0) -> (255,127,0)
+        local t = (0.50 - percent) / 0.25
+        return Color3.fromRGB(255, 255 - math.floor(128 * t), 0)
+    else
+        -- <24% of total hp = (255,127,0) -> (255,0,0)
+        local t = (0.25 - percent) / 0.25
+        return Color3.fromRGB(255, 127 - math.floor(127 * t), 0)
+    end
 end
 
 function InEnemyTeam(Enabled, Player)
@@ -5239,6 +5263,7 @@ function UpdateESP(now, player, isClosest)
         local health, maxHealth = GetHealth(player)
         if espData.lastHealth ~= health or espData.lastMaxHealth ~= maxHealth then
             espData.HealthNumericalLabel.Text = string.format("%d/%d", math.floor(health), math.floor(maxHealth))
+            espData.HealthNumericalLabel.TextColor3 = GetHealthColor(health, maxHealth)
             
             local healthPercent = math.clamp(health / maxHealth, 0, 1)
             espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
