@@ -4782,7 +4782,7 @@ local function CreateESP(player)
     equippedLabel.Name = "EquippedLabel"
     equippedLabel.Size = UDim2.new(1, 0, 0, 18)
     equippedLabel.BackgroundTransparency = 1
-    equippedLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Static white
+    equippedLabel.TextColor3 = GetTeamColor(player)
     equippedLabel.TextStrokeTransparency = 0
     equippedLabel.Font = Enum.Font.GothamBold
     equippedLabel.TextSize = 14
@@ -5197,6 +5197,7 @@ function UpdateESP(now, player, isClosest)
         
         if espData.lastTeamColor ~= teamColor then
             espData.NicknameLabel.TextColor3 = teamColor
+            espData.EquippedLabel.TextColor3 = teamColor
             -- Username color is now handled by distance logic
             espData.lastTeamColor = teamColor
         end
