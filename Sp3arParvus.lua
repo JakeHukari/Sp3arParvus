@@ -67,24 +67,24 @@ print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - i
 -- STATE MANAGEMENT
 local CharCache = {}
 local AimState = {
-    Aimbot = false,
+    Aim = false,
     Trigger = false,
-    LastAimbotTarget = nil,
+    LastAimTarget = nil,
     LastMouseMode = nil,
     LastOriginX = nil,
     LastOriginY = nil,
     AcquiringFrames = 0
 }
 local Flags = {
-    ["Aimbot/AimLock"] = true,
-    ["Aimbot/AutoFire"] = false,
-    ["Aimbot/AlwaysEnabled"] = true,
-    ["Aimbot/TeamCheck"] = false,
-    ["Aimbot/VisibilityCheck"] = true,
-    ["Aimbot/Sensitivity"] = 20,
-    ["Aimbot/FOV/Radius"] = 75,
-    ["Aimbot/Priority"] = "Head",
-    ["Aimbot/BodyParts"] = {"Head", "HumanoidRootPart"},
+    ["Aim/AimLock"] = true,
+    ["Aim/AutoFire"] = false,
+    ["Aim/AlwaysEnabled"] = true,
+    ["Aim/TeamCheck"] = false,
+    ["Aim/VisibilityCheck"] = true,
+    ["Aim/Sensitivity"] = 20,
+    ["Aim/FOV/Radius"] = 75,
+    ["Aim/Priority"] = "Head",
+    ["Aim/BodyParts"] = {"Head", "HumanoidRootPart"},
     ["Trigger/AlwaysEnabled"] = false,
     ["Trigger/HoldMouseButton"] = true,
     ["Trigger/Delay"] = 0,
@@ -539,7 +539,7 @@ local AIM_ACQUIRE_STABILIZE_FRAMES = 2
 local AIM_ORIGIN_JUMP_RATIO = 0.25
 
 function ClearAimLockState(resetMouseMode)
-    AimState.LastAimbotTarget = nil
+    AimState.LastAimTarget = nil
     AimState.LastOriginX = nil
     AimState.LastOriginY = nil
     AimState.AcquiringFrames = 0
@@ -2653,8 +2653,8 @@ function PruneCharCache()
     for player, cache in pairs(CharCache) do
         -- Remove if player left the game
         if not playerMap[player] or not player.Parent then
-            if AimState.LastAimbotTarget == player then
-                AimState.LastAimbotTarget = nil
+            if AimState.LastAimTarget == player then
+                AimState.LastAimTarget = nil
             end
             RemoveESP(player)
             cache.Char = nil
@@ -2667,8 +2667,8 @@ function PruneCharCache()
             CharCache[player] = nil
         -- Clear character-linked fields if character is invalid/destroyed
         elseif cache.Char and not cache.Char.Parent then
-            if AimState.LastAimbotTarget == player then
-                AimState.LastAimbotTarget = nil
+            if AimState.LastAimTarget == player then
+                AimState.LastAimTarget = nil
             end
             RemovePlayerOutlines(player)
             cache.Char = nil
@@ -2677,8 +2677,8 @@ function PruneCharCache()
             cache.HealthInst = nil
             cache.Head = nil
         elseif cache.Root and not cache.Root.Parent then
-            if AimState.LastAimbotTarget == player then
-                AimState.LastAimbotTarget = nil
+            if AimState.LastAimTarget == player then
+                AimState.LastAimTarget = nil
             end
             RemovePlayerOutlines(player)
             cache.Root = nil
@@ -2711,7 +2711,7 @@ function ValidateESPObjects()
         if not player or not player.Parent then
             -- Reset global references if this player was the target
             if NearestPlayerRef == player then NearestPlayerRef = nil end
-            if AimState.LastAimbotTarget == player then AimState.LastAimbotTarget = nil end
+            if AimState.LastAimTarget == player then AimState.LastAimTarget = nil end
             if ClosestResult[1] == player then table.clear(ClosestResult) end
 
             -- Also cleanup outlines for this player
@@ -2741,7 +2741,7 @@ end
 -- PHYSICS & BALLISTICS
 
 
--- AIMBOT CORE (EXACT CODE FROM PARVUS)
+-- Aim CORE (EXACT CODE FROM PARVUS)
 
 
 -- Raycast for visibility check
@@ -3116,8 +3116,8 @@ function AimAt(Hitbox, Sensitivity)
     end
 
     local currentTarget = Hitbox[1]
-    if currentTarget ~= AimState.LastAimbotTarget then
-        AimState.LastAimbotTarget = currentTarget
+    if currentTarget ~= AimState.LastAimTarget then
+        AimState.LastAimTarget = currentTarget
         AimState.LastOriginX = nil
         AimState.LastOriginY = nil
     end
@@ -3153,7 +3153,7 @@ function AimAt(Hitbox, Sensitivity)
     local dx, dy = targetX - originX, targetY - originY
 
     local mag = sqrt(dx * dx + dy * dy)
-    if mag > Flags["Aimbot/FOV/Radius"] then
+    if mag > Flags["Aim/FOV/Radius"] then
         return
     end
 
@@ -5481,7 +5481,7 @@ function CreatePerformanceDisplay(parent)
     CreateRow("Ping", "0 ms")
     CreateRow("Memory", "0 MB")
     CreateRow("Players", "0")
-    CreateRow("Aimbot", "OFF")
+    CreateRow("Aim", "OFF")
     CreateRow("Br0k3n Objects", "0")
     CreateRow("H1ghL1ghted Objects", "0")
 
@@ -5629,12 +5629,12 @@ function UpdatePerformanceDisplay()
         local val = tostring(playerCount)
         if PerformanceRows.Players.Text ~= val then PerformanceRows.Players.Text = val end
     end
-    if PerformanceRows.Aimbot then
-        local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
-        local val = aimbotActive and "LOCKED 🔒" or "IDLE ─"
-        local col = aimbotActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
-        if PerformanceRows.Aimbot.Text ~= val then PerformanceRows.Aimbot.Text = val end
-        if PerformanceRows.Aimbot.TextColor3 ~= col then PerformanceRows.Aimbot.TextColor3 = col end
+    if PerformanceRows.Aim then
+        local AimActive = Flags["Aim/AimLock"] and (Flags["Aim/AlwaysEnabled"] or AimState.Aim)
+        local val = AimActive and "LOCKED 🔒" or "IDLE ─"
+        local col = AimActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
+        if PerformanceRows.Aim.Text ~= val then PerformanceRows.Aim.Text = val end
+        if PerformanceRows.Aim.TextColor3 ~= col then PerformanceRows.Aim.TextColor3 = col end
     end
     if PerformanceRows["Br0k3n Objects"] then
         local brokenCount = 0
@@ -6291,9 +6291,9 @@ function Cleanup()
     end
 
     -- Reset module-level state
-    AimState.Aimbot = false
+    AimState.Aim = false
     AimState.Trigger = false
-    AimState.LastAimbotTarget = nil
+    AimState.LastAimTarget = nil
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
@@ -6374,7 +6374,7 @@ CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
 
 -- Create Tabs
-local AimTab = UI.CreateTab("Aimbot")
+local AimTab = UI.CreateTab("Aim")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
@@ -6822,20 +6822,20 @@ TrackConnection(wListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Conn
     WaypointsUIList.Size = UDim2.new(1, 0, 0, wListLayout.AbsoluteContentSize.Y)
 end))
 
--- AIMBOT TAB
+-- Aim TAB
 UI.CreateSection(AimTab, "General Aim")
-UI.CreateToggle(AimTab, "Enable Aim Lock", "Aimbot/AimLock", Flags["Aimbot/AimLock"])
-UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
-UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
-UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
-UI.CreateToggle(AimTab, "Visibility Check", "Aimbot/VisibilityCheck", Flags["Aimbot/VisibilityCheck"])
-UI.CreateNumericInput(AimTab, "Smoothing", "Aimbot/Sensitivity", Flags["Aimbot/Sensitivity"], 0, 100, 1, "%")
-UI.CreateNumericInput(AimTab, "FOV Radius", "Aimbot/FOV/Radius", Flags["Aimbot/FOV/Radius"], 0, 500, 5, "px")
+UI.CreateToggle(AimTab, "Enable Aim Lock", "Aim/AimLock", Flags["Aim/AimLock"])
+UI.CreateToggle(AimTab, "Enable Auto Fire", "Aim/AutoFire", Flags["Aim/AutoFire"])
+UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
+UI.CreateToggle(AimTab, "Team Check", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
+UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
+UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
+UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
 
 UI.CreateSection(AimTab, "Trigger Bot")
 -- Linked to Auto Fire
-UI.CreateToggle(AimTab, "Enable Trigger", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
+UI.CreateToggle(AimTab, "Enable Trigger", "Aim/AutoFire", Flags["Aim/AutoFire"])
 UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", Flags["Trigger/HoldMouseButton"])
 UI.CreateNumericInput(AimTab, "Trigger Delay", "Trigger/Delay", Flags["Trigger/Delay"] * 1000, 0, 1000, 10, "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
 
@@ -7113,10 +7113,10 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         H1ghl1ght3rState.SHIFT_HELD = true
     end
     
-    -- Handle RMB for Aimbot/Trigger (only when not processed by game)
+    -- Handle RMB for Aim/Trigger (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
-        AimState.Aimbot = Flags["Aimbot/AimLock"]
-        AimState.Trigger = Flags["Aimbot/AutoFire"]
+        AimState.Aim = Flags["Aim/AimLock"]
+        AimState.Trigger = Flags["Aim/AutoFire"]
     end
     
     -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
@@ -7282,7 +7282,7 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
     end
     
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        AimState.Aimbot = false
+        AimState.Aim = false
         AimState.Trigger = false
     end
 end))
@@ -7297,46 +7297,46 @@ function GetCachedTarget()
         return CachedTarget
     end
     
-    -- Use broadest settings to find targets (Aimbot settings as primary)
+    -- Use broadest settings to find targets (Aim settings as primary)
     CachedTarget = GetClosest(
-        Flags["Aimbot/AimLock"] or Flags["Aimbot/AutoFire"],
-        Flags["Aimbot/TeamCheck"],
-        Flags["Aimbot/VisibilityCheck"],
+        Flags["Aim/AimLock"] or Flags["Aim/AutoFire"],
+        Flags["Aim/TeamCheck"],
+        Flags["Aim/VisibilityCheck"],
         false, -- Distance check disabled (no cap)
         0, -- Distance limit unused
-        max(Flags["Aimbot/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
-        Flags["Aimbot/Priority"],
-        Flags["Aimbot/BodyParts"],
-        AimState.LastAimbotTarget -- Sticky target support
+        max(Flags["Aim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
+        Flags["Aim/Priority"],
+        Flags["Aim/BodyParts"],
+        AimState.LastAimTarget -- Sticky target support
     )
     CachedTargetTime = now
     return CachedTarget
 end
 
--- Aimbot update loop (OPTIMIZED - uses cached target)
--- Aimbot update loop (FIXED - clears state when target is lost)
-function UpdateAimbot()
+-- Aim update loop (OPTIMIZED - uses cached target)
+-- Aim update loop (FIXED - clears state when target is lost)
+function UpdateAim()
     if not Sp3arParvus.Active or not LocalCharReady then
         ClearAimLockState(false)
         return
     end
 
 
-    local aimbotActive = Flags["Aimbot/AimLock"] and (Flags["Aimbot/AlwaysEnabled"] or AimState.Aimbot)
-    if not aimbotActive then
+    local AimActive = Flags["Aim/AimLock"] and (Flags["Aim/AlwaysEnabled"] or AimState.Aim)
+    if not AimActive then
         ClearAimLockState(false)
         return
     end
 
     local target = GetCachedTarget()
     if target then
-        AimAt(target, Flags["Aimbot/Sensitivity"] / 100)
+        AimAt(target, Flags["Aim/Sensitivity"] / 100)
     else
         ClearAimLockState(false)
     end
 end
 
-TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
+TrackConnection(RunService.RenderStepped:Connect(UpdateAim))
 
 -- Trigger bot loop (FIXED - maintains fire while target is alive)
 -- Logic: Trigger fires when:
@@ -7345,7 +7345,7 @@ TrackConnection(RunService.RenderStepped:Connect(UpdateAimbot))
 local triggerThread = task.spawn(function()
     local MAX_TRIGGER_ITERATIONS = 1000
     while Sp3arParvus.Active do
-        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aimbot/AutoFire"])
+        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aim/AutoFire"])
         if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
             if type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
                 -- Get initial target
@@ -7776,10 +7776,10 @@ TrackThread(perfThread)
 -- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
-print(string.format("[Sp3arParvus v%s] Aimbot: %s | Trigger: %s | ESP: %s",
+print(string.format("[Sp3arParvus v%s] Aim: %s | Trigger: %s | ESP: %s",
     VERSION,
-    Flags["Aimbot/AimLock"] and "ON" or "OFF",
-    Flags["Aimbot/AutoFire"] and "ON" or "OFF",
+    Flags["Aim/AimLock"] and "ON" or "OFF",
+    Flags["Aim/AutoFire"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
 print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
