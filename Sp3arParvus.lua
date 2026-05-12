@@ -84,7 +84,7 @@ local Flags = {
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head", "HumanoidRootPart"},
     ["ShootBot/Enabled"] = false,
-    ["ShootBot/CPS"] = 20,
+    ["ShootBot/CPS"] = 8,
     ["ShootBot/TargetParts"] = {
         Head = false,
         Torso = false,
@@ -6860,14 +6860,14 @@ do
         Part.Position = pos
         Part.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
         Part.BackgroundTransparency = Flags["ShootBot/TargetParts"][flagKey] and 0 or 1
-        Part.BorderSizePixel = 2
-        Part.BorderColor3 = Color3.fromRGB(255, 255, 255)
+        Part.BorderSizePixel = 0
         Part.Text = ""
         Part.Parent = HumanoidRoot
 
         local PartStroke = Instance.new("UIStroke")
-        PartStroke.Color = Color3.fromRGB(0, 0, 0)
-        PartStroke.Thickness = 2
+        PartStroke.Color = Color3.fromRGB(255, 255, 255)
+        PartStroke.Thickness = 1
+        PartStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         PartStroke.Parent = Part
 
         Part.MouseButton1Click:Connect(function()
@@ -7762,9 +7762,17 @@ local shootBotThread = task.spawn(function()
         
         if enabled and type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
             local targetPart = Mouse.Target
-            if targetPart and targetPart:IsA("BasePart") then
-                local character = targetPart:FindFirstAncestorOfClass("Model")
-                local player = character and Players:GetPlayerFromCharacter(character)
+            if targetPart then
+                -- Ancestor Check: Find the Character model robustly
+                local character = targetPart.Parent
+                while character and character ~= game do
+                    if character:IsA("Model") and Players:GetPlayerFromCharacter(character) then
+                        break
+                    end
+                    character = character.Parent
+                end
+                
+                local player = character and character ~= game and Players:GetPlayerFromCharacter(character)
                 
                 if player and player ~= LocalPlayer and InEnemyTeam(true, player) and GetCharacter(player) then
                     local targetParts = Flags["ShootBot/TargetParts"]
@@ -7775,21 +7783,46 @@ local shootBotThread = task.spawn(function()
                     
                     local shouldFire = false
                     if not anySelected then
+                        -- General Targeting (Condition B): Fire on any valid part, tool, or accessory
                         shouldFire = true
                     else
-                        local name = targetPart.Name
-                        if targetParts.Head and (name == "Head") then
-                            shouldFire = true
-                        elseif targetParts.Torso and (name == "UpperTorso" or name == "LowerTorso" or name == "Torso") then
-                            shouldFire = true
-                        elseif targetParts.LeftArm and (name == "LeftUpperArm" or name == "LeftLowerArm" or name == "LeftHand" or name == "Left Arm") then
-                            shouldFire = true
-                        elseif targetParts.RightArm and (name == "RightUpperArm" or name == "RightLowerArm" or name == "RightHand" or name == "Right Arm") then
-                            shouldFire = true
-                        elseif targetParts.LeftLeg and (name == "LeftUpperLeg" or name == "LeftLowerLeg" or name == "LeftFoot" or name == "Left Leg") then
-                            shouldFire = true
-                        elseif targetParts.RightLeg and (name == "RightUpperLeg" or name == "RightLowerLeg" or name == "RightFoot" or name == "Right Leg") then
-                            shouldFire = true
+                        -- Specific Targeting (Condition A): Map Mouse.Target to body part group
+                        local bodyPart = nil
+                        if targetPart.Parent == character then
+                            bodyPart = targetPart
+                        else
+                            -- Accessory support
+                            local accessory = targetPart:FindFirstAncestorOfClass("Accessory")
+                            if accessory then
+                                local handle = accessory:FindFirstChild("Handle") or targetPart
+                                local weld = handle:FindFirstChild("AccessoryWeld") or handle:FindFirstChildOfClass("Weld")
+                                if weld and weld.Part1 and weld.Part1:IsDescendantOf(character) then
+                                    bodyPart = weld.Part1
+                                end
+                            else
+                                -- Tool support
+                                local tool = targetPart:FindFirstAncestorOfClass("Tool")
+                                if tool then
+                                    bodyPart = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+                                end
+                            end
+                        end
+                        
+                        if bodyPart then
+                            local name = bodyPart.Name
+                            if targetParts.Head and name == "Head" then
+                                shouldFire = true
+                            elseif targetParts.Torso and (name == "UpperTorso" or name == "LowerTorso" or name == "Torso" or name == "HumanoidRootPart") then
+                                shouldFire = true
+                            elseif targetParts.LeftArm and (name == "LeftUpperArm" or name == "LeftLowerArm" or name == "LeftHand" or name == "Left Arm") then
+                                shouldFire = true
+                            elseif targetParts.RightArm and (name == "RightUpperArm" or name == "RightLowerArm" or name == "RightHand" or name == "Right Arm") then
+                                shouldFire = true
+                            elseif targetParts.LeftLeg and (name == "LeftUpperLeg" or name == "LeftLowerLeg" or name == "LeftFoot" or name == "Left Leg") then
+                                shouldFire = true
+                            elseif targetParts.RightLeg and (name == "RightUpperLeg" or name == "RightLowerLeg" or name == "RightFoot" or name == "Right Leg") then
+                                shouldFire = true
+                            end
                         end
                     end
                     
