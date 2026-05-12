@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.0" -- ShootBot 
+local VERSION = "4.1.1" -- Dynamic AimLock Refactor  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -83,6 +83,12 @@ local Flags = {
     ["Aim/FOV/Radius"] = 75,
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head", "HumanoidRootPart"},
+    ["Aim/TargetGroups"] = {
+        Head = true,
+        Torso = false,
+        Arms = false,
+        Legs = false
+    },
     ["ShootBot/Enabled"] = false,
     ["ShootBot/CPS"] = 8,
     ["ShootBot/TargetParts"] = {
@@ -146,6 +152,7 @@ local Flags = {
 }
 local UIState = {
     MainFrame = nil,
+    PriorityLabel = nil,
     Tabs = {},
     CurrentTab = nil,
     Visible = true,
@@ -588,9 +595,21 @@ local CachedTarget = nil
 local CachedTargetTime = 0
 
 -- Known body parts for targeting
-KnownBodyParts = {
-    "Head", "HumanoidRootPart"
+local TARGET_GROUPS = {
+    Head = {"Head"},
+    Torso = {"Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart"},
+    Arms = {"Left Arm", "Right Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand"},
+    Legs = {"Left Leg", "Right Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"}
 }
+
+local ALL_BODY_PARTS = {}
+for _, group in pairs(TARGET_GROUPS) do
+    for _, part in ipairs(group) do
+        table.insert(ALL_BODY_PARTS, part)
+    end
+end
+
+KnownBodyParts = ALL_BODY_PARTS
 
 
 local HUMANOID_PROPERTY_MAPPING = {
@@ -2930,99 +2949,64 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
         -- 3. VIEWPORT PRE-FILTER (Removed - allows targeting players when root is just off-screen)
 
-        if Priority == "Random" then
-            local PartName = BodyParts[math.random(#BodyParts)]
+        local checkParts = {}
+        local anySelected = false
+        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+            if enabled then
+                anySelected = true
+                for _, partName in ipairs(TARGET_GROUPS[category]) do
+                    table.insert(checkParts, partName)
+                end
+            end
+        end
+
+        if not anySelected then
+            checkParts = ALL_BODY_PARTS
+        end
+
+        for _, PartName in ipairs(checkParts) do
             local cache = CharCache[Player]
             local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
-            if BodyPart then
-                local ActualPosition = BodyPart.Position
-                local Distance = (ActualPosition - CameraPosition).Magnitude
-
-                if isBlacklisted or not DistanceCheck or Distance < DistanceLimit then
-                    local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
-                    if OnScreen then
-                        local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                        local dx, dy = screenX - crosshairX, screenY - crosshairY
-                        local Magnitude = sqrt(dx * dx + dy * dy)
-                        
-                        -- Blacklist Prioritization
-                        if isBlacklisted then
-                            Magnitude = Magnitude - 10000 -- Force to front of sort
-                        end
-
-                        if isBlacklisted or Magnitude < FieldOfView then
-                            local TargetPosition = ActualPosition
-
-                            if CandidateCount < maxCandsLimit then
-                                CandidateCount = CandidateCount + 1
-                                local entry = CandidateList[CandidateCount]
-                                if not entry then
-                                    entry = {}
-                                    CandidateList[CandidateCount] = entry
-                                end
-                                entry.mag = Magnitude
-                                entry.ply = Player
-                                entry.char = Character
-                                entry.part = BodyPart
-                                entry.sx = screenX
-                                entry.sy = screenY
-                                entry.pos = TargetPosition
-                                entry.realPos = ActualPosition
-                            end
-                        end
-                    end
-                end
-            end
-        else
-            local checkParts = BodyParts
-            if Priority ~= "Closest" and Priority ~= "Random" then
-                checkParts = {Priority}
+            if not BodyPart then
+                continue
             end
 
-            for _, PartName in ipairs(checkParts) do
-                local cache = CharCache[Player]
-                local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
-                if not BodyPart then
-                    continue
+            local ActualPosition = BodyPart.Position
+            local Distance = (ActualPosition - CameraPosition).Magnitude
+
+            if not isBlacklisted and DistanceCheck and Distance >= DistanceLimit then
+                continue
+            end
+
+            local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
+            if OnScreen then
+                local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+                local dx, dy = screenX - crosshairX, screenY - crosshairY
+                local Magnitude = sqrt(dx * dx + dy * dy)
+
+                -- Blacklist Prioritization
+                if isBlacklisted then
+                    Magnitude = Magnitude - 10000 -- Force to front of sort
                 end
 
-                local ActualPosition = BodyPart.Position
-                local Distance = (ActualPosition - CameraPosition).Magnitude
+                if isBlacklisted or Magnitude < FieldOfView then
+                    local TargetPosition = ActualPosition
 
-                if not isBlacklisted and DistanceCheck and Distance >= DistanceLimit then
-                    continue
-                end
-
-                local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
-                if OnScreen then
-                    local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
-                    local dx, dy = screenX - crosshairX, screenY - crosshairY
-                    local Magnitude = sqrt(dx * dx + dy * dy)
-
-                    -- Blacklist Prioritization
-                    if isBlacklisted then
-                        Magnitude = Magnitude - 10000 -- Force to front of sort
-                    end
-
-                    if isBlacklisted or Magnitude < FieldOfView then
-                        local TargetPosition = ActualPosition
-
-                        if CandidateCount < maxCandsLimit then
-                            CandidateCount = CandidateCount + 1
-                            local entry = CandidateList[CandidateCount]
-                            if not entry then
-                                entry = {}
-                                CandidateList[CandidateCount] = entry
-                            end
-                            entry.mag = Magnitude
-                            entry.ply = Player
-                            entry.char = Character
-                            entry.part = BodyPart
-                            entry.sx = screenX
-                            entry.sy = screenY
-                            entry.pos = TargetPosition
-                            entry.realPos = ActualPosition
+                    if CandidateCount < maxCandsLimit then
+                        CandidateCount = CandidateCount + 1
+                        local entry = CandidateList[CandidateCount]
+                        if not entry then
+                            entry = {}
+                            CandidateList[CandidateCount] = entry
                         end
+                        entry.mag = Magnitude
+                        entry.ply = Player
+                        entry.char = Character
+                        entry.part = BodyPart
+                        entry.sx = screenX
+                        entry.sy = screenY
+                        entry.pos = TargetPosition
+                        entry.realPos = ActualPosition
                     end
                 end
             end
@@ -4963,7 +4947,7 @@ function UpdateDot(player, character, storage, dotType, partName)
             -- Check if this specific part is being locked onto
             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
                 local lockedPart = CachedTarget[3]
-                if lockedPart and lockedPart.Name == partName then
+                if lockedPart == part then
                     dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
                 end
             end
@@ -4984,11 +4968,36 @@ function UpdatePlayerOutlines(player, character)
     
     local storage = PlayerOutlineObjects[player]
     
-    -- Cleanup legacy/previous outlines (SelectionBoxes/BoxHandleAdornments)
+    -- Determine which dots should be visible
+    local dotParts = {}
+    local anySelected = false
+    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+        if enabled then
+            anySelected = true
+            for _, partName in ipairs(TARGET_GROUPS[category]) do
+                table.insert(dotParts, partName)
+            end
+        end
+    end
+
+    if not anySelected then
+        -- Condition B: Single dot on current target
+        if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
+            table.insert(dotParts, CachedTarget[3].Name)
+        end
+    end
+
+    -- Cleanup unused dots (return to pool)
     for k, v in pairs(storage) do
-        if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
-            if v then v:Destroy() end
-            storage[k] = nil
+        if k ~= "Highlight" then
+            local stillNeeded = false
+            for _, name in ipairs(dotParts) do
+                if k == name .. "Dot" then stillNeeded = true break end
+            end
+            if not stillNeeded then
+                ReturnPooledObject(v)
+                storage[k] = nil
+            end
         end
     end
     
@@ -5065,9 +5074,10 @@ function UpdatePlayerOutlines(player, character)
         end
     end
 
-    -- Update Head and Root dots
-    UpdateDot(player, character, storage, "HeadDot", "Head")
-    UpdateDot(player, character, storage, "RootDot", "HumanoidRootPart")
+    -- Update dots
+    for _, partName in ipairs(dotParts) do
+        UpdateDot(player, character, storage, partName .. "Dot", partName)
+    end
 end
 
 -- Remove all outlines for a player (Optimized: Return to pool)
@@ -5082,20 +5092,15 @@ function RemovePlayerOutlines(player)
         ActiveHighlightCount = math.max(0, ActiveHighlightCount - 1)
     end
     
-    -- Cleanup Billboard dots
-    if storage.HeadDot then 
-        ReturnPooledObject(storage.HeadDot) 
-        storage.HeadDot = nil
-    end
-    if storage.RootDot then 
-        ReturnPooledObject(storage.RootDot) 
-        storage.RootDot = nil
-    end
-    
-    -- Cleanup any legacy parts
+    -- Cleanup Billboard dots and others
     for k, v in pairs(storage) do
-        if k ~= "Highlight" and k ~= "HeadDot" and k ~= "RootDot" then
-            if v and v.Parent then v:Destroy() end
+        if k ~= "Highlight" then
+            if v:IsA("BillboardGui") then
+                ReturnPooledObject(v)
+            else
+                if v and v.Parent then v:Destroy() end
+            end
+            storage[k] = nil
         end
     end
     
@@ -6834,6 +6839,88 @@ UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/Vi
 UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
+UI.CreateSection(AimTab, "Aim Assistance Target Selector")
+
+do
+    local TargetArea = Instance.new("Frame")
+    TargetArea.Name = "TargetArea"
+    TargetArea.Size = UDim2.new(1, 0, 0, 220)
+    TargetArea.BackgroundTransparency = 1
+    TargetArea.Parent = AimTab
+
+    local PriorityLabel = Instance.new("TextLabel")
+    PriorityLabel.Name = "PriorityLabel"
+    PriorityLabel.Size = UDim2.new(1, 0, 0, 25)
+    PriorityLabel.Position = UDim2.new(0, 0, 0, 0)
+    PriorityLabel.BackgroundTransparency = 1
+    PriorityLabel.Text = "Priority: Head"
+    PriorityLabel.Font = Enum.Font.GothamBold
+    PriorityLabel.TextSize = 14
+    PriorityLabel.TextColor3 = UI_THEME.Text
+    PriorityLabel.Parent = TargetArea
+    UIState.PriorityLabel = PriorityLabel
+
+    local HumanoidRoot = Instance.new("Frame")
+    HumanoidRoot.Name = "HumanoidRoot"
+    HumanoidRoot.Size = UDim2.fromOffset(100, 180)
+    HumanoidRoot.Position = UDim2.new(0.5, 0, 0.5, 15)
+    HumanoidRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+    HumanoidRoot.BackgroundTransparency = 1
+    HumanoidRoot.Parent = TargetArea
+
+    local function CreatePart(name, size, pos, flagKey)
+        local Part = Instance.new("TextButton")
+        Part.Name = name
+        Part.Size = size
+        Part.Position = pos
+        Part.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        Part.BackgroundTransparency = Flags["Aim/TargetGroups"][flagKey] and 0 or 1
+        Part.BorderSizePixel = 0
+        Part.Text = ""
+        Part.Parent = HumanoidRoot
+
+        local PartStroke = Instance.new("UIStroke")
+        PartStroke.Color = Color3.fromRGB(255, 255, 255)
+        PartStroke.Thickness = 1
+        PartStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        PartStroke.Parent = Part
+
+        Part.MouseButton1Click:Connect(function()
+            Flags["Aim/TargetGroups"][flagKey] = not Flags["Aim/TargetGroups"][flagKey]
+            Part.BackgroundTransparency = Flags["Aim/TargetGroups"][flagKey] and 0 or 1
+            
+            -- Dynamic text initialization logic (GetCachedTarget will handle real-time updates)
+            local anySelected = false
+            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
+            if not anySelected then
+                PriorityLabel.Text = "Priority: Closest part"
+            end
+        end)
+
+        return Part
+    end
+
+    local Head = CreatePart("Head", UDim2.fromOffset(30, 30), UDim2.new(0.5, 0, 0, 0), "Head")
+    Head.AnchorPoint = Vector2.new(0.5, 0)
+    local HeadCorner = Instance.new("UICorner", Head)
+    HeadCorner.CornerRadius = UDim.new(1, 0)
+
+    local Torso = CreatePart("Torso", UDim2.fromOffset(40, 60), UDim2.new(0.5, 0, 0, 35), "Torso")
+    Torso.AnchorPoint = Vector2.new(0.5, 0)
+
+    local LeftArm = CreatePart("LeftArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, -25, 0, 35), "Arms")
+    LeftArm.AnchorPoint = Vector2.new(1, 0)
+
+    local RightArm = CreatePart("RightArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, 25, 0, 35), "Arms")
+    RightArm.AnchorPoint = Vector2.new(0, 0)
+
+    local LeftLeg = CreatePart("LeftLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, -2, 0, 100), "Legs")
+    LeftLeg.AnchorPoint = Vector2.new(1, 0)
+
+    local RightLeg = CreatePart("RightLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, 2, 0, 100), "Legs")
+    RightLeg.AnchorPoint = Vector2.new(0, 0)
+end
+
 UI.CreateSection(AimTab, "ShootBot")
 UI.CreateToggle(AimTab, "Enable ShootBot", "ShootBot/Enabled", Flags["ShootBot/Enabled"])
 UI.CreateNumericInput(AimTab, "ShootBot CPS", "ShootBot/CPS", Flags["ShootBot/CPS"], 5, 100, 5, "cps")
@@ -7368,6 +7455,30 @@ function GetCachedTarget()
         AimState.LastAimTarget -- Sticky target support
     )
     CachedTargetTime = now
+
+    -- Update Priority Label
+    if UIState.PriorityLabel then
+        if CachedTarget then
+            local anySelected = false
+            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
+            
+            if not anySelected then
+                UIState.PriorityLabel.Text = "Priority: Closest part"
+            else
+                UIState.PriorityLabel.Text = "Priority: " .. CachedTarget[3].Name
+            end
+        else
+            -- If no target, keep label consistent with toggle state
+            local anySelected = false
+            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
+            if not anySelected then
+                UIState.PriorityLabel.Text = "Priority: Closest part"
+            end
+            -- Note: If parts are selected, we leave the last targeted part name or default "Head" 
+            -- to prevent flickering when no enemies are in range.
+        end
+    end
+
     return CachedTarget
 end
 
