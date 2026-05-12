@@ -7383,6 +7383,12 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.Period then
             -- Ctrl+.: Toggle D3v Tool
             Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
+        elseif input.KeyCode == Enum.KeyCode.Backquote then
+            -- Ctrl+~: Toggle Aim Assistance
+            Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
+            local state = Flags["Aim/AimLock"]
+            local updater = UIState.Updaters["Aim/AimLock"]
+            if updater then updater(state) end
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
             if UIState.ToggleMinimize then
