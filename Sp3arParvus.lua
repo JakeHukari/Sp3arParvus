@@ -6823,8 +6823,8 @@ TrackConnection(wListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Conn
 end))
 
 -- AIMBOT TAB
-UI.CreateSection(AimTab, "General Aim Assistance Settings")
-UI.CreateToggle(AimTab, "Enable Aim Assistance", "Aimbot/AimLock", Flags["Aimbot/AimLock"])
+UI.CreateSection(AimTab, "General Aim")
+UI.CreateToggle(AimTab, "Enable Aim Lock", "Aimbot/AimLock", Flags["Aimbot/AimLock"])
 UI.CreateToggle(AimTab, "Enable Auto Fire", "Aimbot/AutoFire", Flags["Aimbot/AutoFire"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aimbot/AlwaysEnabled", Flags["Aimbot/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aimbot/TeamCheck", Flags["Aimbot/TeamCheck"])
