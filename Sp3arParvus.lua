@@ -86,8 +86,10 @@ local Flags = {
     ["Aim/TargetGroups"] = {
         Head = true,
         Torso = false,
-        Arms = false,
-        Legs = false
+        LeftArm = false,
+        RightArm = false,
+        LeftLeg = false,
+        RightLeg = false
     },
     ["ShootBot/Enabled"] = false,
     ["ShootBot/CPS"] = 8,
@@ -598,8 +600,10 @@ local CachedTargetTime = 0
 local TARGET_GROUPS = {
     Head = {"Head"},
     Torso = {"Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart"},
-    Arms = {"Left Arm", "Right Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand"},
-    Legs = {"Left Leg", "Right Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"}
+    LeftArm = {"Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand"},
+    RightArm = {"Right Arm", "RightUpperArm", "RightLowerArm", "RightHand"},
+    LeftLeg = {"Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot"},
+    RightLeg = {"Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot"}
 }
 
 local ALL_BODY_PARTS = {}
@@ -6888,13 +6892,6 @@ do
         Part.MouseButton1Click:Connect(function()
             Flags["Aim/TargetGroups"][flagKey] = not Flags["Aim/TargetGroups"][flagKey]
             Part.BackgroundTransparency = Flags["Aim/TargetGroups"][flagKey] and 0 or 1
-            
-            -- Dynamic text initialization logic (GetCachedTarget will handle real-time updates)
-            local anySelected = false
-            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
-            if not anySelected then
-                PriorityLabel.Text = "Priority: Closest part"
-            end
         end)
 
         return Part
@@ -6908,16 +6905,16 @@ do
     local Torso = CreatePart("Torso", UDim2.fromOffset(40, 60), UDim2.new(0.5, 0, 0, 35), "Torso")
     Torso.AnchorPoint = Vector2.new(0.5, 0)
 
-    local LeftArm = CreatePart("LeftArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, -25, 0, 35), "Arms")
+    local LeftArm = CreatePart("LeftArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, -25, 0, 35), "LeftArm")
     LeftArm.AnchorPoint = Vector2.new(1, 0)
 
-    local RightArm = CreatePart("RightArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, 25, 0, 35), "Arms")
+    local RightArm = CreatePart("RightArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, 25, 0, 35), "RightArm")
     RightArm.AnchorPoint = Vector2.new(0, 0)
 
-    local LeftLeg = CreatePart("LeftLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, -2, 0, 100), "Legs")
+    local LeftLeg = CreatePart("LeftLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, -2, 0, 100), "LeftLeg")
     LeftLeg.AnchorPoint = Vector2.new(1, 0)
 
-    local RightLeg = CreatePart("RightLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, 2, 0, 100), "Legs")
+    local RightLeg = CreatePart("RightLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, 2, 0, 100), "RightLeg")
     RightLeg.AnchorPoint = Vector2.new(0, 0)
 end
 
@@ -7458,24 +7455,36 @@ function GetCachedTarget()
 
     -- Update Priority Label
     if UIState.PriorityLabel then
-        if CachedTarget then
-            local anySelected = false
-            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
-            
-            if not anySelected then
-                UIState.PriorityLabel.Text = "Priority: Closest part"
-            else
-                UIState.PriorityLabel.Text = "Priority: " .. CachedTarget[3].Name
-            end
+        local selectedCount = 0
+        local lastCategory = "Head"
+        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do 
+            if enabled then 
+                selectedCount = selectedCount + 1 
+                lastCategory = category
+            end 
+        end
+        
+        if selectedCount == 0 or selectedCount == 6 then
+            UIState.PriorityLabel.Text = "Priority: Closest part"
+        elseif selectedCount == 1 then
+            UIState.PriorityLabel.Text = "Priority: " .. lastCategory
         else
-            -- If no target, keep label consistent with toggle state
-            local anySelected = false
-            for _, v in pairs(Flags["Aim/TargetGroups"]) do if v then anySelected = true break end end
-            if not anySelected then
+            -- Multiple selected but not all
+            if CachedTarget then
+                local targetedPart = CachedTarget[3]
+                local categoryName = "Closest part"
+                for category, parts in pairs(TARGET_GROUPS) do
+                    for _, pName in ipairs(parts) do
+                        if targetedPart.Name == pName then
+                            categoryName = category
+                            break
+                        end
+                    end
+                end
+                UIState.PriorityLabel.Text = "Priority: " .. categoryName
+            else
                 UIState.PriorityLabel.Text = "Priority: Closest part"
             end
-            -- Note: If parts are selected, we leave the last targeted part name or default "Head" 
-            -- to prevent flickering when no enemies are in range.
         end
     end
 
