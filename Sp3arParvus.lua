@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.0.9" -- Dynamic Health Label Color Transition Logic 
+local VERSION = "4.1.0" -- ShootBot 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -68,7 +68,6 @@ print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - i
 local CharCache = {}
 local AimState = {
     Aim = false,
-    Trigger = false,
     LastAimTarget = nil,
     LastMouseMode = nil,
     LastOriginX = nil,
@@ -77,7 +76,6 @@ local AimState = {
 }
 local Flags = {
     ["Aim/AimLock"] = true,
-    ["Aim/AutoFire"] = false,
     ["Aim/AlwaysEnabled"] = true,
     ["Aim/TeamCheck"] = false,
     ["Aim/VisibilityCheck"] = true,
@@ -85,10 +83,16 @@ local Flags = {
     ["Aim/FOV/Radius"] = 75,
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head", "HumanoidRootPart"},
-    ["Trigger/AlwaysEnabled"] = false,
-    ["Trigger/HoldMouseButton"] = true,
-    ["Trigger/Delay"] = 0,
-    ["Trigger/FOV/Radius"] = 25,
+    ["ShootBot/Enabled"] = false,
+    ["ShootBot/CPS"] = 20,
+    ["ShootBot/TargetParts"] = {
+        Head = false,
+        Torso = false,
+        LeftArm = false,
+        RightArm = false,
+        LeftLeg = false,
+        RightLeg = false
+    },
     ["ESP/Enabled"] = true,
     ["ESP/MaxDistance"] = 5000,
     ["ESP/Nametags"] = true,
@@ -6292,7 +6296,6 @@ function Cleanup()
 
     -- Reset module-level state
     AimState.Aim = false
-    AimState.Trigger = false
     AimState.LastAimTarget = nil
     CachedTarget = nil
     NearestPlayerRef = nil
@@ -6825,19 +6828,76 @@ end))
 -- Aim TAB
 UI.CreateSection(AimTab, "General Aim")
 UI.CreateToggle(AimTab, "Enable Aim Assistance", "Aim/AimLock", Flags["Aim/AimLock"])
-UI.CreateToggle(AimTab, "Enable Auto Fire", "Aim/AutoFire", Flags["Aim/AutoFire"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Team Check", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
+UI.CreateSection(AimTab, "ShootBot")
+UI.CreateToggle(AimTab, "Enable ShootBot", "ShootBot/Enabled", Flags["ShootBot/Enabled"])
+UI.CreateNumericInput(AimTab, "ShootBot CPS", "ShootBot/CPS", Flags["ShootBot/CPS"], 5, 100, 5, "cps")
 
-UI.CreateSection(AimTab, "Trigger Bot")
--- Linked to Auto Fire
-UI.CreateToggle(AimTab, "Enable Trigger", "Aim/AutoFire", Flags["Aim/AutoFire"])
-UI.CreateToggle(AimTab, "Hold Fire", "Trigger/HoldMouseButton", Flags["Trigger/HoldMouseButton"])
-UI.CreateNumericInput(AimTab, "Trigger Delay", "Trigger/Delay", Flags["Trigger/Delay"] * 1000, 0, 1000, 10, "ms", function(v) Flags["Trigger/Delay"] = v/1000 end)
+do
+    local TargetArea = Instance.new("Frame")
+    TargetArea.Name = "TargetArea"
+    TargetArea.Size = UDim2.new(1, 0, 0, 200)
+    TargetArea.BackgroundTransparency = 1
+    TargetArea.Parent = AimTab
+
+    local HumanoidRoot = Instance.new("Frame")
+    HumanoidRoot.Name = "HumanoidRoot"
+    HumanoidRoot.Size = UDim2.fromOffset(100, 180)
+    HumanoidRoot.Position = UDim2.new(0.5, 0, 0.5, 0)
+    HumanoidRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+    HumanoidRoot.BackgroundTransparency = 1
+    HumanoidRoot.Parent = TargetArea
+
+    local function CreatePart(name, size, pos, flagKey)
+        local Part = Instance.new("TextButton")
+        Part.Name = name
+        Part.Size = size
+        Part.Position = pos
+        Part.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        Part.BackgroundTransparency = Flags["ShootBot/TargetParts"][flagKey] and 0 or 1
+        Part.BorderSizePixel = 2
+        Part.BorderColor3 = Color3.fromRGB(255, 255, 255)
+        Part.Text = ""
+        Part.Parent = HumanoidRoot
+
+        local PartStroke = Instance.new("UIStroke")
+        PartStroke.Color = Color3.fromRGB(0, 0, 0)
+        PartStroke.Thickness = 2
+        PartStroke.Parent = Part
+
+        Part.MouseButton1Click:Connect(function()
+            Flags["ShootBot/TargetParts"][flagKey] = not Flags["ShootBot/TargetParts"][flagKey]
+            Part.BackgroundTransparency = Flags["ShootBot/TargetParts"][flagKey] and 0 or 1
+        end)
+
+        return Part
+    end
+
+    local Head = CreatePart("Head", UDim2.fromOffset(30, 30), UDim2.new(0.5, 0, 0, 0), "Head")
+    Head.AnchorPoint = Vector2.new(0.5, 0)
+    local HeadCorner = Instance.new("UICorner", Head)
+    HeadCorner.CornerRadius = UDim.new(1, 0)
+
+    local Torso = CreatePart("Torso", UDim2.fromOffset(40, 60), UDim2.new(0.5, 0, 0, 35), "Torso")
+    Torso.AnchorPoint = Vector2.new(0.5, 0)
+
+    local LeftArm = CreatePart("LeftArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, -25, 0, 35), "LeftArm")
+    LeftArm.AnchorPoint = Vector2.new(1, 0)
+
+    local RightArm = CreatePart("RightArm", UDim2.fromOffset(20, 60), UDim2.new(0.5, 25, 0, 35), "RightArm")
+    RightArm.AnchorPoint = Vector2.new(0, 0)
+
+    local LeftLeg = CreatePart("LeftLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, -2, 0, 100), "LeftLeg")
+    LeftLeg.AnchorPoint = Vector2.new(1, 0)
+
+    local RightLeg = CreatePart("RightLeg", UDim2.fromOffset(18, 70), UDim2.new(0.5, 2, 0, 100), "RightLeg")
+    RightLeg.AnchorPoint = Vector2.new(0, 0)
+end
 
 -- VISUALS TAB
 UI.CreateSection(VisualsTab, "Player ESP")
@@ -7113,10 +7173,9 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         H1ghl1ght3rState.SHIFT_HELD = true
     end
     
-    -- Handle RMB for Aim/Trigger (only when not processed by game)
+    -- Handle RMB for Aim (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = Flags["Aim/AimLock"]
-        AimState.Trigger = Flags["Aim/AutoFire"]
     end
     
     -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
@@ -7283,7 +7342,6 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
     
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = false
-        AimState.Trigger = false
     end
 end))
 
@@ -7299,12 +7357,12 @@ function GetCachedTarget()
     
     -- Use broadest settings to find targets (Aim settings as primary)
     CachedTarget = GetClosest(
-        Flags["Aim/AimLock"] or Flags["Aim/AutoFire"],
+        Flags["Aim/AimLock"],
         Flags["Aim/TeamCheck"],
         Flags["Aim/VisibilityCheck"],
         false, -- Distance check disabled (no cap)
         0, -- Distance limit unused
-        max(Flags["Aim/FOV/Radius"], Flags["Trigger/FOV/Radius"]),
+        Flags["Aim/FOV/Radius"],
         Flags["Aim/Priority"],
         Flags["Aim/BodyParts"],
         AimState.LastAimTarget -- Sticky target support
@@ -7338,68 +7396,6 @@ end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAim))
 
--- Trigger bot loop (FIXED - maintains fire while target is alive)
--- Logic: Trigger fires when:
---   1. Trigger/AlwaysEnabled is true (always auto-fire when target in FOV), OR
---   2. RMB is held (AimState.Trigger=true) AND AutoFire is enabled
-local triggerThread = task.spawn(function()
-    local MAX_TRIGGER_ITERATIONS = 1000
-    while Sp3arParvus.Active do
-        local triggerActive = Flags["Trigger/AlwaysEnabled"] or (AimState.Trigger and Flags["Aim/AutoFire"])
-        if triggerActive and not Br3ak3rState.LEFT_CTRL_HELD then
-            if type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
-                -- Get initial target
-                local TriggerClosest = GetCachedTarget()
-
-                if TriggerClosest then
-                    -- Store the target player reference for tracking
-                    local lockedPlayer = TriggerClosest[1]
-                    local lockedCharacter = TriggerClosest[2]
-                    
-                    task.wait(Flags["Trigger/Delay"])
-                    mouse1press()
-
-                    if Flags["Trigger/HoldMouseButton"] then
-                        local iterations = 0
-                        while Sp3arParvus.Active and iterations < MAX_TRIGGER_ITERATIONS do
-                            iterations = iterations + 1
-                            task.wait()
-                            
-                            -- Check if locked target is still valid and alive (cheaper than GetClosest)
-                            local targetStillValid = false
-                            if lockedPlayer and lockedPlayer.Parent then
-                                local character, rootPart = GetCharacter(lockedPlayer)
-                                if character and rootPart then
-                                    targetStillValid = true
-                                    -- Update character reference in case it changed
-                                    lockedCharacter = character
-                                end
-                            end
-
-                            -- Break if target died, player left, trigger released, or clutch pressed
-                            local shouldContinue = (Flags["Trigger/AlwaysEnabled"] or AimState.Trigger) and not Br3ak3rState.LEFT_CTRL_HELD
-                            if not targetStillValid or not shouldContinue then break end
-                        end
-
-                        if iterations >= MAX_TRIGGER_ITERATIONS then
-                            warn("Trigger loop reached max iterations, resetting state")
-                            AimState.Trigger = false
-                        end
-                    end
-
-                    mouse1release()
-                    
-                    -- Explicitly release strong references that might keep characters alive
-                    TriggerClosest = nil
-                    lockedPlayer = nil
-                    lockedCharacter = nil
-                end
-            end
-        end
-        task.wait()
-    end
-end)
-TrackThread(triggerThread)
 
 -- ESP update loop (OPTIMIZED - throttled updates, no per-frame player iteration)
 lastEspUpdate = 0
@@ -7758,6 +7754,60 @@ function UnifiedHeartbeat(dt)
     end
 end
 
+-- ShootBot logic loop
+local shootBotThread = task.spawn(function()
+    while Sp3arParvus.Active do
+        local enabled = Flags["ShootBot/Enabled"]
+        local cps = Flags["ShootBot/CPS"]
+        
+        if enabled and type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
+            local targetPart = Mouse.Target
+            if targetPart and targetPart:IsA("BasePart") then
+                local character = targetPart:FindFirstAncestorOfClass("Model")
+                local player = character and Players:GetPlayerFromCharacter(character)
+                
+                if player and player ~= LocalPlayer and InEnemyTeam(true, player) and GetCharacter(player) then
+                    local targetParts = Flags["ShootBot/TargetParts"]
+                    local anySelected = false
+                    for _, selected in pairs(targetParts) do
+                        if selected then anySelected = true break end
+                    end
+                    
+                    local shouldFire = false
+                    if not anySelected then
+                        shouldFire = true
+                    else
+                        local name = targetPart.Name
+                        if targetParts.Head and (name == "Head") then
+                            shouldFire = true
+                        elseif targetParts.Torso and (name == "UpperTorso" or name == "LowerTorso" or name == "Torso") then
+                            shouldFire = true
+                        elseif targetParts.LeftArm and (name == "LeftUpperArm" or name == "LeftLowerArm" or name == "LeftHand" or name == "Left Arm") then
+                            shouldFire = true
+                        elseif targetParts.RightArm and (name == "RightUpperArm" or name == "RightLowerArm" or name == "RightHand" or name == "Right Arm") then
+                            shouldFire = true
+                        elseif targetParts.LeftLeg and (name == "LeftUpperLeg" or name == "LeftLowerLeg" or name == "LeftFoot" or name == "Left Leg") then
+                            shouldFire = true
+                        elseif targetParts.RightLeg and (name == "RightUpperLeg" or name == "RightLowerLeg" or name == "RightFoot" or name == "Right Leg") then
+                            shouldFire = true
+                        end
+                    end
+                    
+                    if shouldFire then
+                        mouse1press()
+                        task.wait(1 / cps / 2)
+                        mouse1release()
+                        task.wait(1 / cps / 2)
+                        continue
+                    end
+                end
+            end
+        end
+        task.wait()
+    end
+end)
+TrackThread(shootBotThread)
+
 -- Single Heartbeat connection
 TrackConnection(RunService.Heartbeat:Connect(UnifiedHeartbeat))
 
@@ -7776,10 +7826,9 @@ TrackThread(perfThread)
 -- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
-print(string.format("[Sp3arParvus v%s] Aim: %s | Trigger: %s | ESP: %s",
+print(string.format("[Sp3arParvus v%s] Aim: %s | ESP: %s",
     VERSION,
     Flags["Aim/AimLock"] and "ON" or "OFF",
-    Flags["Aim/AutoFire"] and "ON" or "OFF",
     Flags["ESP/Enabled"] and "ON" or "OFF"
 ))
 print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
