@@ -441,7 +441,7 @@ local function PcallDisconnect(conn)
 end
 
 function DNS(Player)
-    local object_id = {1628571024, 125458810, 8259510869, 1554084058, 10476800936}
+    local object_id = {1628571024, 125458810, 1554084058, 10476800936}
     for i = 1, #object_id do
         if Player.UserId == object_id[i] then
             return true
