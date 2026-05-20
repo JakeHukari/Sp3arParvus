@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.1" -- Dynamic AimLock Refactor  
+local VERSION = "4.1.2" -- Refactor ShootBot Targeting & Team Check Toggle  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -93,6 +93,7 @@ local Flags = {
     },
     ["ShootBot/Enabled"] = false,
     ["ShootBot/CPS"] = 8,
+    ["ShootBot/TeamCheck"] = false,
     ["ShootBot/TargetParts"] = {
         Head = false,
         Torso = false,
@@ -6920,6 +6921,7 @@ end
 
 UI.CreateSection(AimTab, "ShootBot")
 UI.CreateToggle(AimTab, "Enable ShootBot", "ShootBot/Enabled", Flags["ShootBot/Enabled"])
+UI.CreateToggle(AimTab, "Ignore Teammates", "ShootBot/TeamCheck", Flags["ShootBot/TeamCheck"])
 UI.CreateNumericInput(AimTab, "ShootBot CPS", "ShootBot/CPS", Flags["ShootBot/CPS"], 5, 100, 5, "cps")
 
 do
@@ -7900,7 +7902,7 @@ local shootBotThread = task.spawn(function()
                 
                 local player = character and character ~= game and Players:GetPlayerFromCharacter(character)
                 
-                if player and player ~= LocalPlayer and InEnemyTeam(true, player) and GetCharacter(player) then
+                if player and player ~= LocalPlayer and InEnemyTeam(Flags["ShootBot/TeamCheck"], player) and GetCharacter(player) then
                     local targetParts = Flags["ShootBot/TargetParts"]
                     local anySelected = false
                     for _, selected in pairs(targetParts) do
