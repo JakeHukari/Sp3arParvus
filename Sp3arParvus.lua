@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.3" -- Item Panel  
+local VERSION = "4.1.4" -- Item Panel, Aim Dots, and Freecam Controls  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -77,6 +77,7 @@ local AimState = {
 local Flags = {
     ["Aim/AimLock"] = true,
     ["Aim/AlwaysEnabled"] = true,
+    ["Aim/ShowAssistDots"] = true,
     ["Aim/TeamCheck"] = false,
     ["Aim/VisibilityCheck"] = true,
     ["Aim/Sensitivity"] = 20,
@@ -151,7 +152,8 @@ local Flags = {
     ["Humanoid/MaxSlopeAngle/Locked"] = false,
     ["Humanoid/WalkSpeed"] = 16,
     ["Humanoid/WalkSpeed/Locked"] = false,
-    ["Misc/ScrollUnlocker"] = true
+    ["Misc/ScrollUnlocker"] = true,
+    ["Misc/ItemPanel"] = false
 }
 local UIState = {
     MainFrame = nil,
@@ -3665,6 +3667,9 @@ function CreateItemPanel()
     TrackConnection(closeBtn.MouseButton1Click:Connect(function()
         ItemPanelState.Visible = false
         MainFrame.Visible = false
+        Flags["Misc/ItemPanel"] = false
+        local updater = UIState.Updaters["Misc/ItemPanel"]
+        if updater then updater(false) end
     end))
 
     -- Left Side: Explorer
@@ -5441,6 +5446,13 @@ function ReturnPooledObject(obj)
 end
 -- Helper to create/update Dot Indicator
 function UpdateDot(player, character, storage, dotType, partName)
+    if not Flags["Aim/ShowAssistDots"] then
+        if storage[dotType] then
+            ReturnPooledObject(storage[dotType])
+            storage[dotType] = nil
+        end
+        return
+    end
     local part = character:FindFirstChild(partName)
     if not part then
         if storage[dotType] then
@@ -5543,20 +5555,22 @@ function UpdatePlayerOutlines(player, character)
     
     -- Determine which dots should be visible
     local dotParts = {}
-    local anySelected = false
-    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
-        if enabled then
-            anySelected = true
-            for _, partName in ipairs(TARGET_GROUPS[category]) do
-                table.insert(dotParts, partName)
+    if Flags["Aim/ShowAssistDots"] then
+        local anySelected = false
+        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+            if enabled then
+                anySelected = true
+                for _, partName in ipairs(TARGET_GROUPS[category]) do
+                    table.insert(dotParts, partName)
+                end
             end
         end
-    end
 
-    if not anySelected then
-        -- Condition B: Single dot on current target
-        if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
-            table.insert(dotParts, CachedTarget[3].Name)
+        if not anySelected then
+            -- Condition B: Single dot on current target
+            if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
+                table.insert(dotParts, CachedTarget[3].Name)
+            end
         end
     end
 
@@ -6659,6 +6673,8 @@ end
 enabled = not enabled
 end
 
+_G.ToggleFreecamFunc = ToggleFreecam
+
 _G.StopFreecamFunc = function()
     if enabled then
         StopFreecam()
@@ -7425,6 +7441,7 @@ UI.CreateToggle(AimTab, "Enable Aim Assistance (Ctrl + ~)", "Aim/AimLock", Flags
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Ignore Teamates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
+UI.CreateToggle(AimTab, "Show Aim Assist Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
@@ -7683,10 +7700,29 @@ end)
 UI.CreateButton(MiscTab, "Undo Last Highlight (Ctrl+Shift+Z)", unhighlightLast)
 
 UI.CreateSection(MiscTab, "Utilities")
+UI.CreateToggle(MiscTab, "Toggle Item Panel", "Misc/ItemPanel", Flags["Misc/ItemPanel"], function(state)
+    ItemPanelState.Visible = state
+    if state then
+        if not ItemPanelUI.MainFrame then
+            CreateItemPanel()
+        end
+        UpdateItemPanelUI()
+        ItemPanelUI.MainFrame.Visible = true
+    else
+        if ItemPanelUI.MainFrame then
+            ItemPanelUI.MainFrame.Visible = false
+        end
+    end
+end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
 UI.CreateSection(MiscTab, "Configuration")
+UI.CreateButton(MiscTab, "Activate/Deactivate Freecam", function()
+    if type(_G.ToggleFreecamFunc) == "function" then
+        _G.ToggleFreecamFunc()
+    end
+end)
 UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
     if not state and type(_G.StopFreecamFunc) == "function" then
         _G.StopFreecamFunc()
@@ -7996,6 +8032,10 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.J and Br3ak3rState.CTRL_HELD then
             -- Ctrl+J: Toggle Item Panel
             ItemPanelState.Visible = not ItemPanelState.Visible
+            Flags["Misc/ItemPanel"] = ItemPanelState.Visible
+            local updater = UIState.Updaters["Misc/ItemPanel"]
+            if updater then updater(ItemPanelState.Visible) end
+            
             if ItemPanelState.Visible then
                 if not ItemPanelUI.MainFrame then
                     CreateItemPanel()
