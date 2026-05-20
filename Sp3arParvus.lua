@@ -7421,7 +7421,7 @@ end))
 
 -- Aim TAB
 UI.CreateSection(AimTab, "General Aim")
-UI.CreateToggle(AimTab, "Enable Aim Assistance", "Aim/AimLock", Flags["Aim/AimLock"])
+UI.CreateToggle(AimTab, "Enable Aim Assistance (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Ignore Teamates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
