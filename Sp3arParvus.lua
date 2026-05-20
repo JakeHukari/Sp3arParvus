@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.2" -- Refactor ShootBot Targeting & Team Check Toggle  
+local VERSION = "4.1.3" -- Item Panel  
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -191,6 +191,15 @@ local AdvancedPlayerPanelState = {
     TeamExpanded = {}
 }
 
+local ItemPanelState = {
+    Visible = false,
+    lockedProperties = {},
+    selectedItem = nil,
+    explorerExpanded = {},
+    explorerSelected = nil,
+    PropertySearchText = ""
+}
+
 function ToggleWhitelist(player)
     if not player then return end
     local id = player.UserId
@@ -235,6 +244,15 @@ local AdvancedPlayerPanelUI = {
     PropertyFrame = nil,
     PropertyContent = nil,
     PropertySearch = nil
+}
+
+local ItemPanelUI = {
+    MainFrame = nil,
+    ExplorerContent = nil,
+    PropertyContent = nil,
+    PropertyFrame = nil,
+    PropertySearch = nil,
+    ExplorerCounter = 0
 }
 local HumanoidState = {
     originalSettings = {},
@@ -803,6 +821,17 @@ function GetNearbyHumanoids()
     return humanoids
 end
 
+function ApplyItemPanelSettings()
+    for path, props in pairs(ItemPanelState.lockedProperties) do
+        local inst = ResolveItemPath(path)
+        if inst then
+            for prop, val in pairs(props) do
+                pcall(PcallSafeSetProp, inst, prop, val)
+            end
+        end
+    end
+end
+
 function ApplyWorldHumanoidSettings()
     -- Game-specific WorldHumanoid presets
     if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
@@ -918,6 +947,102 @@ function GetUniquePath(instance)
     end
     PathCache[instance] = path
     return path
+end
+
+function GetItemUniquePath(instance)
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local character = LocalPlayer.Character
+    
+    local root = nil
+    local rootName = ""
+    
+    if backpack and instance:IsDescendantOf(backpack) then
+        root = backpack
+        rootName = "Backpack"
+    elseif character and instance:IsDescendantOf(character) then
+        root = character
+        rootName = "Character"
+    end
+    
+    if not root then return GetUniquePath(instance) end
+    
+    local path = ""
+    local current = instance
+    while current and current ~= root do
+        local name = current.Name
+        local parent = current.Parent
+        local index = 1
+        if parent then
+            for _, child in ipairs(parent:GetChildren()) do
+                if child == current then break end
+                if child.Name == name then
+                    index = index + 1
+                end
+            end
+        end
+        path = name .. "[" .. index .. "]" .. (path == "" and "" or "\1" .. path)
+        current = parent
+    end
+    
+    return rootName .. "\2" .. path
+end
+
+function ResolveRelativePath(root, relativePath)
+    if not relativePath or relativePath == "" then return root end
+    local segments = string.split(relativePath, "\1")
+    local current = root
+    for _, segment in ipairs(segments) do
+        local name, index = string.match(segment, "^(.*)%[(%d+)%]$")
+        if name and index then
+            index = tonumber(index)
+            local count = 0
+            local found = false
+            for _, child in ipairs(current:GetChildren()) do
+                if child.Name == name then
+                    count = count + 1
+                    if count == index then
+                        current = child
+                        found = true
+                        break
+                    end
+                end
+            end
+            if not found then return nil end
+        else
+            current = current:FindFirstChild(segment)
+            if not current then return nil end
+        end
+    end
+    return current
+end
+
+function ResolveItemPath(itemPath)
+    if not itemPath then return nil end
+    if not string.find(itemPath, "\2") then return GetInstanceFromPath(itemPath) end
+    
+    local parts = string.split(itemPath, "\2")
+    local rootName = parts[1]
+    local relativePath = parts[2]
+    
+    local root = nil
+    if rootName == "Backpack" then
+        root = LocalPlayer:FindFirstChild("Backpack")
+    elseif rootName == "Character" then
+        root = LocalPlayer.Character
+    end
+    
+    local resolved = root and ResolveRelativePath(root, relativePath)
+    if not resolved then
+        -- Swap and try again (Backpack <-> Character)
+        if rootName == "Backpack" then
+            root = LocalPlayer.Character
+        else
+            root = LocalPlayer:FindFirstChild("Backpack")
+        end
+        resolved = root and ResolveRelativePath(root, relativePath)
+    end
+    
+    return resolved
 end
 
 function GetInstanceFromPath(uniquePath)
@@ -3463,6 +3588,188 @@ end
 
 -- ADVANCED PLAYER PANEL (Ctrl+K)
 
+function CreateItemPanel()
+    if ItemPanelUI.MainFrame then return end
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "ItemPanel"
+    MainFrame.Size = UDim2.fromOffset(500, 400)
+    MainFrame.Position = UDim2.fromScale(0.5, 0.5)
+    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainFrame.BackgroundColor3 = UI_THEME.Background
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Visible = false
+    MainFrame.ClipsDescendants = true
+    EnsureScreenGui()
+    MainFrame.Parent = ScreenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = MainFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(60, 60, 60)
+    stroke.Thickness = 1
+    stroke.Parent = MainFrame
+
+    UI.MakeDraggable(MainFrame)
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 35)
+    header.BackgroundColor3 = UI_THEME.Sidebar
+    header.BorderSizePixel = 0
+    header.Parent = MainFrame
+
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 10)
+    headerFix.Position = UDim2.new(0, 0, 1, -10)
+    headerFix.BackgroundColor3 = UI_THEME.Sidebar
+    headerFix.BorderSizePixel = 0
+    headerFix.Parent = header
+
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -70, 1, 0)
+    title.Position = UDim2.fromOffset(12, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🎒 Item Panel"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 16
+    title.TextColor3 = UI_THEME.Accent
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "CloseBtn"
+    closeBtn.Size = UDim2.fromOffset(26, 26)
+    closeBtn.Position = UDim2.new(1, -31, 0.5, -13)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    closeBtn.BackgroundTransparency = 0.5
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Parent = header
+
+    local closeBtnCorner = Instance.new("UICorner")
+    closeBtnCorner.CornerRadius = UDim.new(0, 4)
+    closeBtnCorner.Parent = closeBtn
+
+    TrackConnection(closeBtn.MouseButton1Click:Connect(function()
+        ItemPanelState.Visible = false
+        MainFrame.Visible = false
+    end))
+
+    -- Left Side: Explorer
+    local ExplorerFrame = Instance.new("Frame")
+    ExplorerFrame.Name = "ExplorerFrame"
+    ExplorerFrame.Size = UDim2.new(0.5, -5, 1, -45)
+    ExplorerFrame.Position = UDim2.fromOffset(5, 40)
+    ExplorerFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    ExplorerFrame.BorderSizePixel = 0
+    ExplorerFrame.Parent = MainFrame
+    local efCorner = Instance.new("UICorner"); efCorner.CornerRadius = UDim.new(0, 6); efCorner.Parent = ExplorerFrame
+
+    local explorerContent = Instance.new("ScrollingFrame")
+    explorerContent.Name = "ExplorerContent"
+    explorerContent.Size = UDim2.new(1, -10, 1, -10)
+    explorerContent.Position = UDim2.fromOffset(5, 5)
+    explorerContent.BackgroundTransparency = 1
+    explorerContent.BorderSizePixel = 0
+    explorerContent.ScrollBarThickness = 4
+    explorerContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    explorerContent.Parent = ExplorerFrame
+
+    local explorerLayout = Instance.new("UIListLayout")
+    explorerLayout.Padding = UDim.new(0, 2)
+    explorerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    explorerLayout.Parent = explorerContent
+
+    TrackConnection(explorerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        explorerContent.CanvasSize = UDim2.new(0, 0, 0, explorerLayout.AbsoluteContentSize.Y)
+    end))
+
+    -- Right Side: Properties
+    local PropertyFrame = Instance.new("Frame")
+    PropertyFrame.Name = "PropertyFrame"
+    PropertyFrame.Size = UDim2.new(0.5, -5, 1, -45)
+    PropertyFrame.Position = UDim2.new(0.5, 0, 0, 40)
+    PropertyFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    PropertyFrame.BorderSizePixel = 0
+    PropertyFrame.Parent = MainFrame
+    local pfCorner = Instance.new("UICorner"); pfCorner.CornerRadius = UDim.new(0, 6); pfCorner.Parent = PropertyFrame
+
+    local pfHeader = Instance.new("Frame")
+    pfHeader.Size = UDim2.new(1, 0, 0, 30)
+    pfHeader.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    pfHeader.Parent = PropertyFrame
+    local pfhCorner = Instance.new("UICorner"); pfhCorner.CornerRadius = UDim.new(0, 6); pfhCorner.Parent = pfHeader
+
+    local pfTitle = Instance.new("TextLabel")
+    pfTitle.Size = UDim2.new(0.4, 0, 1, 0)
+    pfTitle.Position = UDim2.fromOffset(10, 0)
+    pfTitle.BackgroundTransparency = 1
+    pfTitle.Text = "Properties"
+    pfTitle.Font = Enum.Font.GothamBold
+    pfTitle.TextSize = 12
+    pfTitle.TextColor3 = UI_THEME.Accent
+    pfTitle.TextXAlignment = Enum.TextXAlignment.Left
+    pfTitle.Parent = pfHeader
+
+    local pfSearch = Instance.new("TextBox")
+    pfSearch.Size = UDim2.new(0.5, -5, 0.7, 0)
+    pfSearch.Position = UDim2.new(1, -5, 0.5, 0)
+    pfSearch.AnchorPoint = Vector2.new(1, 0.5)
+    pfSearch.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    pfSearch.Text = ""
+    pfSearch.PlaceholderText = "Search..."
+    pfSearch.Font = Enum.Font.Gotham
+    pfSearch.TextSize = 11
+    pfSearch.TextColor3 = UI_THEME.Text
+    pfSearch.Parent = pfHeader
+    local pfsCorner = Instance.new("UICorner"); pfsCorner.CornerRadius = UDim.new(0, 4); pfsCorner.Parent = pfSearch
+
+    TrackConnection(pfSearch:GetPropertyChangedSignal("Text"):Connect(function()
+        ItemPanelState.PropertySearchText = pfSearch.Text:lower()
+        if ItemPanelState.selectedItem then
+            local inst = ResolveItemPath(ItemPanelState.selectedItem)
+            if inst then UpdateItemPropertyPane(inst) end
+        end
+    end))
+
+    local propertyContent = Instance.new("ScrollingFrame")
+    propertyContent.Name = "PropertyContent"
+    propertyContent.Size = UDim2.new(1, -10, 1, -40)
+    propertyContent.Position = UDim2.fromOffset(5, 35)
+    propertyContent.BackgroundTransparency = 1
+    propertyContent.BorderSizePixel = 0
+    propertyContent.ScrollBarThickness = 4
+    propertyContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    propertyContent.Parent = PropertyFrame
+
+    local propertyLayout = Instance.new("UIListLayout")
+    propertyLayout.Padding = UDim.new(0, 2)
+    propertyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    propertyLayout.Parent = propertyContent
+
+    TrackConnection(propertyLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        propertyContent.CanvasSize = UDim2.new(0, 0, 0, propertyLayout.AbsoluteContentSize.Y)
+    end))
+
+    ItemPanelUI.MainFrame = MainFrame
+    ItemPanelUI.ExplorerContent = explorerContent
+    ItemPanelUI.PropertyContent = propertyContent
+    ItemPanelUI.PropertyFrame = PropertyFrame
+    ItemPanelUI.PropertySearch = pfSearch
+end
+
 function CreateAdvancedPlayerPanel()
     if AdvancedPlayerPanelUI.MainFrame then return end
 
@@ -4237,6 +4544,154 @@ function UpdateAdvancedPlayerList()
 end
 
 local ExplorerCounter = 0
+local function UpdateItemPropertyPane(instance)
+    local content = ItemPanelUI.PropertyContent
+    if not content then return end
+
+    for _, child in ipairs(content:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local searchText = ItemPanelState.PropertySearchText
+    local path = GetItemUniquePath(instance)
+    local lockedProps = ItemPanelState.lockedProperties[path] or {}
+
+    local categories = {"Data", "Appearance", "Behavior", "Stats", "Transform"}
+
+    for _, catName in ipairs(categories) do
+        local catProps = PROPERTY_CATEGORIES[catName]
+        local catHasAny = false
+        
+        for _, prop in ipairs(catProps) do
+            if searchText == "" or prop:lower():find(searchText) then
+                local success, val = pcall(function() return instance[prop] end)
+                if success and val ~= nil then
+                    catHasAny = true
+                    break
+                end
+            end
+        end
+
+        if catHasAny then
+            local catHeader = Instance.new("Frame")
+            catHeader.Size = UDim2.new(1, 0, 0, 20)
+            catHeader.BackgroundTransparency = 1
+            catHeader.Parent = content
+            
+            local catLabel = Instance.new("TextLabel")
+            catLabel.Size = UDim2.new(1, -10, 1, 0)
+            catLabel.Position = UDim2.fromOffset(5, 0)
+            catLabel.BackgroundTransparency = 1
+            catLabel.Text = "v " .. catName
+            catLabel.Font = Enum.Font.GothamBold
+            catLabel.TextSize = 11
+            catLabel.TextColor3 = UI_THEME.TextDark
+            catLabel.TextXAlignment = Enum.TextXAlignment.Left
+            catLabel.Parent = catHeader
+
+            for _, prop in ipairs(catProps) do
+                if searchText == "" or prop:lower():find(searchText) then
+                    local success, val = pcall(function() return instance[prop] end)
+                    if success and val ~= nil then
+                        local isLocked = lockedProps[prop] ~= nil
+                        
+                        local row = Instance.new("Frame")
+                        row.Size = UDim2.new(1, 0, 0, 30)
+                        row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+                        row.BackgroundTransparency = 0.5
+                        row.BorderSizePixel = 0
+                        row.Parent = content
+                        
+                        local lockBtn = Instance.new("TextButton")
+                        lockBtn.Size = UDim2.new(0, 20, 0, 20)
+                        lockBtn.Position = UDim2.new(0, 5, 0.5, -10)
+                        lockBtn.BackgroundTransparency = 1
+                        lockBtn.Text = isLocked and "🔒" or "🔓"
+                        lockBtn.Font = Enum.Font.GothamBold
+                        lockBtn.TextSize = 12
+                        lockBtn.TextColor3 = isLocked and UI_THEME.Accent or UI_THEME.TextDark
+                        lockBtn.Parent = row
+
+                        TrackConnection(lockBtn.MouseButton1Click:Connect(function()
+                            if not ItemPanelState.lockedProperties[path] then
+                                ItemPanelState.lockedProperties[path] = {}
+                            end
+                            if ItemPanelState.lockedProperties[path][prop] ~= nil then
+                                ItemPanelState.lockedProperties[path][prop] = nil
+                                if not next(ItemPanelState.lockedProperties[path]) then
+                                    ItemPanelState.lockedProperties[path] = nil
+                                end
+                                lockBtn.Text = "🔓"
+                                lockBtn.TextColor3 = UI_THEME.TextDark
+                            else
+                                ItemPanelState.lockedProperties[path][prop] = instance[prop]
+                                lockBtn.Text = "🔒"
+                                lockBtn.TextColor3 = UI_THEME.Accent
+                            end
+                        end))
+
+                        local nameLabel = Instance.new("TextLabel")
+                        nameLabel.Size = UDim2.new(0.4, -30, 1, 0)
+                        nameLabel.Position = UDim2.fromOffset(30, 0)
+                        nameLabel.BackgroundTransparency = 1
+                        nameLabel.Text = prop
+                        nameLabel.Font = Enum.Font.Gotham
+                        nameLabel.TextSize = 10
+                        nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+                        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                        nameLabel.Parent = row
+
+                        local valInput = Instance.new("TextBox")
+                        valInput.Size = UDim2.new(0.6, -10, 0.8, 0)
+                        valInput.Position = UDim2.new(0.4, 5, 0.1, 0)
+                        valInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                        valInput.Text = tostring(val)
+                        valInput.Font = Enum.Font.Gotham
+                        valInput.TextSize = 10
+                        valInput.TextColor3 = Color3.new(1, 1, 1)
+                        valInput.ClearTextOnFocus = false
+                        valInput.Parent = row
+                        local viCorner = Instance.new("UICorner"); viCorner.CornerRadius = UDim.new(0, 4); viCorner.Parent = valInput
+
+                        TrackConnection(valInput.FocusLost:Connect(function()
+                            local newVal = valInput.Text
+                            local currentVal = instance[prop]
+                            local typeName = typeof(currentVal)
+                            
+                            local finalVal = nil
+                            if typeName == "number" then
+                                finalVal = tonumber(newVal)
+                            elseif typeName == "boolean" then
+                                finalVal = (newVal:lower() == "true")
+                            elseif typeName == "string" then
+                                finalVal = newVal
+                            elseif typeName == "Vector3" then
+                                local parts = string.split(newVal, ",")
+                                if #parts == 3 then
+                                    finalVal = Vector3.new(tonumber(parts[1]), tonumber(parts[2]), tonumber(parts[3]))
+                                end
+                            elseif typeName == "Color3" then
+                                local parts = string.split(newVal, ",")
+                                if #parts == 3 then
+                                    finalVal = Color3.new(tonumber(parts[1])/255, tonumber(parts[2])/255, tonumber(parts[3])/255)
+                                end
+                            end
+
+                            if finalVal ~= nil then
+                                pcall(SafeSetProp, instance, prop, finalVal)
+                                if ItemPanelState.lockedProperties[path] and ItemPanelState.lockedProperties[path][prop] ~= nil then
+                                    ItemPanelState.lockedProperties[path][prop] = finalVal
+                                end
+                            end
+                            valInput.Text = tostring(instance[prop])
+                        end))
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function UpdatePropertyPane(instance)
     local content = AdvancedPlayerPanelUI.PropertyContent
     if not content then return end
@@ -4316,6 +4771,119 @@ local function UpdatePropertyPane(instance)
                         valueLabel.Parent = row
                     end
                 end
+            end
+        end
+    end
+end
+
+local function VisualizeItemInstance(instance, content, depth)
+    if depth > 10 then return end
+    
+    local success, children = pcall(function() return instance:GetChildren() end)
+    if not success then return end
+    table.sort(children, function(a, b) return a.Name < b.Name end)
+
+    for _, child in ipairs(children) do
+        pcall(function()
+            local path = GetItemUniquePath(child)
+            local isExpanded = ItemPanelState.explorerExpanded[path]
+            local isSelected = ItemPanelState.explorerSelected == path
+            local hasChildren = #child:GetChildren() > 0
+
+            ItemPanelUI.ExplorerCounter = ItemPanelUI.ExplorerCounter + 1
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, 0, 0, 24)
+            row.BackgroundColor3 = isSelected and UI_THEME.Accent or UI_THEME.Element
+            row.BackgroundTransparency = isSelected and 0.5 or 1
+            row.BorderSizePixel = 0
+            row.LayoutOrder = ItemPanelUI.ExplorerCounter
+            row.Parent = content
+
+            local indent = depth * 12
+
+            if hasChildren then
+                local toggleBtn = Instance.new("TextButton")
+                toggleBtn.Size = UDim2.new(0, 20, 1, 0)
+                toggleBtn.Position = UDim2.fromOffset(indent, 0)
+                toggleBtn.BackgroundTransparency = 1
+                toggleBtn.Text = isExpanded and "▼" or "▶"
+                toggleBtn.Font = Enum.Font.GothamBold
+                toggleBtn.TextSize = 10
+                toggleBtn.TextColor3 = UI_THEME.Accent
+                toggleBtn.Parent = row
+
+                TrackConnection(toggleBtn.MouseButton1Click:Connect(function()
+                    ItemPanelState.explorerExpanded[path] = not ItemPanelState.explorerExpanded[path]
+                    UpdateItemPanelUI()
+                end))
+            end
+
+            local selectBtn = Instance.new("TextButton")
+            selectBtn.Size = UDim2.new(1, -(indent + 25), 1, 0)
+            selectBtn.Position = UDim2.fromOffset(indent + 20, 0)
+            selectBtn.BackgroundTransparency = 1
+            selectBtn.Text = child.Name .. " (" .. child.ClassName .. ")"
+            selectBtn.Font = Enum.Font.Gotham
+            selectBtn.TextSize = 11
+            selectBtn.TextColor3 = isSelected and Color3.new(1, 1, 1) or UI_THEME.Text
+            selectBtn.TextXAlignment = Enum.TextXAlignment.Left
+            selectBtn.Parent = row
+
+            TrackConnection(selectBtn.MouseButton1Click:Connect(function()
+                ItemPanelState.explorerSelected = (ItemPanelState.explorerSelected == path) and nil or path
+                ItemPanelState.selectedItem = ItemPanelState.explorerSelected
+                UpdateItemPanelUI()
+                if ItemPanelState.explorerSelected then
+                    UpdateItemPropertyPane(child)
+                end
+            end))
+
+            if isExpanded then
+                VisualizeItemInstance(child, content, depth + 1)
+            end
+        end)
+    end
+end
+
+function UpdateItemPanelUI()
+    if not ItemPanelUI.ExplorerContent then return end
+    ItemPanelUI.ExplorerCounter = 0
+    
+    for _, child in ipairs(ItemPanelUI.ExplorerContent:GetChildren()) do
+        if not child:IsA("UIListLayout") then child:Destroy() end
+    end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local character = LocalPlayer.Character
+
+    local function createSection(name)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 25)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "  " .. name:upper()
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 12
+        lbl.TextColor3 = UI_THEME.Accent
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.LayoutOrder = ItemPanelUI.ExplorerCounter
+        lbl.Parent = ItemPanelUI.ExplorerContent
+        ItemPanelUI.ExplorerCounter = ItemPanelUI.ExplorerCounter + 1
+    end
+
+    if backpack then
+        createSection("Backpack")
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") or item:IsA("Accessory") then
+                VisualizeItemInstance(item, ItemPanelUI.ExplorerContent, 0)
+            end
+        end
+    end
+
+    if character then
+        createSection("Character")
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") or item:IsA("Accessory") then
+                VisualizeItemInstance(item, ItemPanelUI.ExplorerContent, 0)
             end
         end
     end
@@ -6348,6 +6916,22 @@ function Cleanup()
     AdvancedPlayerPanelUI.PropertyFrame = nil
     AdvancedPlayerPanelUI.PropertyContent = nil
     AdvancedPlayerPanelUI.PropertySearch = nil
+
+    -- Cleanup Item Panel
+    if ItemPanelUI.MainFrame then
+        pcall(function() ItemPanelUI.MainFrame:Destroy() end)
+    end
+    ItemPanelState.Visible = false
+    table.clear(ItemPanelState.lockedProperties)
+    ItemPanelState.selectedItem = nil
+    table.clear(ItemPanelState.explorerExpanded)
+    ItemPanelState.explorerSelected = nil
+    ItemPanelUI.MainFrame = nil
+    ItemPanelUI.ExplorerContent = nil
+    ItemPanelUI.PropertyContent = nil
+    ItemPanelUI.PropertyFrame = nil
+    ItemPanelUI.PropertySearch = nil
+
     LocalPlayer.ReplicationFocus = nil
     pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
     
@@ -7409,6 +7993,20 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             end
             local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
             if updater then updater(state) end
+        elseif input.KeyCode == Enum.KeyCode.J and Br3ak3rState.CTRL_HELD then
+            -- Ctrl+J: Toggle Item Panel
+            ItemPanelState.Visible = not ItemPanelState.Visible
+            if ItemPanelState.Visible then
+                if not ItemPanelUI.MainFrame then
+                    CreateItemPanel()
+                end
+                UpdateItemPanelUI()
+                ItemPanelUI.MainFrame.Visible = true
+            else
+                if ItemPanelUI.MainFrame then
+                    ItemPanelUI.MainFrame.Visible = false
+                end
+            end
         end
     end
 end))
@@ -7574,6 +8172,7 @@ function UnifiedHeartbeat(dt)
         UpdateD3vTool()
         ApplyHumanoidSettings()
         ApplyWorldHumanoidSettings()
+        ApplyItemPanelSettings()
 
         -- Scroll Unlocker Logic
         local currentMax = LocalPlayer.CameraMaxZoomDistance
