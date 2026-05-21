@@ -89,8 +89,8 @@ local Flags = {
         Torso = true,
         LeftArm = true,
         RightArm = true,
-        LeftLeg = true,
-        RightLeg = true
+        LeftLeg = false,
+        RightLeg = false
     },
     ["ShootBot/Enabled"] = false,
     ["ShootBot/CPS"] = 8,
