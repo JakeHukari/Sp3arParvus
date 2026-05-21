@@ -87,8 +87,8 @@ local Flags = {
     ["Aim/TargetGroups"] = {
         Head = true,
         Torso = true,
-        LeftArm = true,
-        RightArm = true,
+        LeftArm = false,
+        RightArm = false,
         LeftLeg = false,
         RightLeg = false
     },
