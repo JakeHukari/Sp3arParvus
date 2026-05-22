@@ -14,7 +14,7 @@
 
 ## Overview
 
-Sp3arParvus is a lua client designed to enhance your in-game senses with universal player tracking, bullet prediction, and various utility tools. Sp3arParvus provides an easy to use interface with minimal performance impact.
+Sp3arParvus is a lua client designed to enhance your in-game senses with universal player tracking, aim assistance, and various utility tools. Sp3arParvus provides an easy to use interface with minimal performance impact.
 
 ### UI Demo
 
@@ -39,22 +39,25 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 ## Features
 
 ### Combat & Accuracy
-*   **Silent Aim**: Hit your targets without snapping your camera.
-*   **TriggerBot**: Automatic firing when a target is detected.
-*   **Physics Prediction**: Advanced velocity and gravity correction for projectiles (3155 velocity default).
-*   **Target Indicators**: Dynamic head and root dots that turn **Red** when locked-on by the aimbot.
+*   **Aim Assistance**: Smoothing-based assistance to help track targets with adjustable sensitivity and FOV.
+*   **ShootBot**: Automatic firing when a target is detected under the crosshair.
+*   **Target Indicators**: Dynamic dots on target parts that turn **Red** when locked-on by the aimbot.
 
 ### Visuals & ESP
 *   **Gh0st Mode**: Turns off all UI elements while still allowing functions like aimbot and br3ak3r.
 *   **Player ESP**: Full hitbox, nametag, distance tracking, and team tracking.
-    *   **Distance-based Coloring**: Color-coded proximity: **Pink** (Closest), **Red** (≤2000 studs), **Yellow** (≤4000 studs), and **Green** (>4000 studs).
+    *   **Distance-based Coloring**: Color-coded proximity: **Pink** (Closest), **Red** (≤750 studs), **Yellow** (≤1875 studs), and **Green** (>1875 studs).
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
     *   **Equipped Item**: View the currently equipped items being held by nearby players.
+*   **Closest Player Tracker**: Real-time HUD tracking the nearest player's name and distance.
+*   **Local Health HUD**: Compact display of your current health and max health.
 *   **Fullbright**: Sets the workspace lighting to maximum brightness & removes shadows, fog, and other ambient lighting effects.
 *   **FullDark**: Sets the workspace lighting to minimum brightness.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create ESP tracking for any item, folder, or group of items in your workspace.
 
 ### Developer Utilities
+*   **Advanced Player Panel**: Comprehensive player management including whitelisting, blacklisting, and detailed property viewing/spectating.
+*   **Item Panel**: Robust item explorer and property editor for backpack and character items.
 *   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC in the game.
 *   **Br3ak3r (Wallbreak)**: Remove annoying obstacles, analyze map structure, or walk through walls.
 *   **H1ghL1ghter**: Highlight parts and get full workspace path nametags.
@@ -63,6 +66,9 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Free-cam**: Cinematic exploration for creators or tactical scouting.
 *   **Performance Monitor**: Real-time FPS, ping, memory usage, and object counts (Broken/Highlighted).
 *   **Humanoid Editor**: Edit LocalPlayer humanoid properties like walkspeed, jump power, max-slope-angle, health, etc.
+*   **Anti-AFK**: Built-in mechanism to prevent idle kicks during long sessions.
+*   **Scroll-unlocker**: Dynamically unlocks camera zoom limits, especially useful while using Br3ak3r.
+*   **Q-Teleport**: Quick teleportation to mouse cursor position (Press Q).
 
 ## Shortcut Keys
 
@@ -74,7 +80,9 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Unload Sp3arParvus**: `Ctrl + U`
 
 ### Combat & Accuracy
+*   **Aim Assistance Toggle**: `Ctrl + ~`
 *   **Aimbot Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
+*   **Mouse Teleport**: `Q`
 
 ### Visuals & ESP
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
@@ -84,6 +92,8 @@ Upon execution, the Sp3arParvus client will immediately begin enhancing the user
 *   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**
 
 ### Developer Utilities
+*   **Advanced Player Panel**: `Ctrl + K`
+*   **Item Panel**: `Ctrl + J`
 *   **D3v Tool**: `Ctrl + .` (Period)
 *   **Br3ak3r**: `Ctrl + Left Click` to **Br3ak** objects, `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
 *   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, `Ctrl + Shift + Z` to **Undo** last highlight
