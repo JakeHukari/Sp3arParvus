@@ -8813,7 +8813,7 @@ TrackThread(perfThread)
 -- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
-UI.Notify("Sp3arParvus", string.format("Sp3arParvus v%s has executed successfully", VERSION))
+UI.Notify(string.format("Sp3arParvus v%s", VERSION), string.format("Sp3arParvus v%s has executed successfully", VERSION))
 print(string.format("[Sp3arParvus v%s] Aim: %s | ESP: %s",
     VERSION,
     Flags["Aim/AimLock"] and "ON" or "OFF",
