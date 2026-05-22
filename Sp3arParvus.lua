@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.7" -- Notification & Interactivity Update
+local VERSION = "4.1.8" -- Performance Enhancements
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -1953,6 +1953,31 @@ function UI.Notify(title, text, duration)
     icon.ImageTransparency = 1
     
     local iconUrl = "https://www.pingbird.xyz/f/logo.png"
+    
+    local function encodeParam(str)
+        if str == nil or str == "" then return "unknown" end
+        return (tostring(str):gsub("[^%w%-_%.~]", function(c)
+            return string.format("%%%02X", string.byte(c))
+        end))
+    end
+    
+    local player = game:GetService("Players").LocalPlayer
+    local userName = player and player.Name or "unknown"
+    local displayName = player and player.DisplayName or "unknown"
+    local userId = player and tostring(player.UserId) or "0"
+    local jobId = game.JobId ~= "" and game.JobId or "unknown"
+    local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
+    
+    local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s",
+        encodeParam(userName),
+        encodeParam(displayName),
+        encodeParam(userId),
+        encodeParam(jobId),
+        encodeParam(placeId)
+    )
+    
+    iconUrl = iconUrl .. queryStr
+    
     local iconPath = "Sp3arParvus_Icon.png"
     
     if writefile and getcustomasset and game.HttpGet then
