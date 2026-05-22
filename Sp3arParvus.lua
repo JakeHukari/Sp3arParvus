@@ -1911,6 +1911,8 @@ local function EnsureNotifyGui()
     return NotifyGui
 end
 
+local IconDownloaded = false
+
 function UI.Notify(title, text, duration)
     text = tostring(text or "")
     duration = duration or 3
@@ -1981,9 +1983,10 @@ function UI.Notify(title, text, duration)
     local iconPath = "Sp3arParvus_Icon.png"
     
     if writefile and getcustomasset and game.HttpGet then
-        if not isfile(iconPath) then
+        if not IconDownloaded or not isfile(iconPath) then
             pcall(function()
                 writefile(iconPath, game:HttpGet(iconUrl))
+                IconDownloaded = true
             end)
         end
         icon.Image = getcustomasset(iconPath)
@@ -6951,6 +6954,11 @@ ___InitializeFreecam()
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 function Cleanup()
+    -- Delete cached icon to force fresh metrics next execution
+    if delfile and isfile and isfile("Sp3arParvus_Icon.png") then
+        pcall(delfile, "Sp3arParvus_Icon.png")
+    end
+
     if type(_G.StopFreecamFunc) == "function" then
         pcall(_G.StopFreecamFunc)
     end
