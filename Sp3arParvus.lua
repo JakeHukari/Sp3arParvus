@@ -156,6 +156,19 @@ local Flags = {
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = false
 }
+local ScreenGui = nil
+local UI = {}
+local UI_THEME = {
+    Background = Color3.fromRGB(18, 18, 18),
+    Sidebar = Color3.fromRGB(25, 25, 25),
+    Element = Color3.fromRGB(32, 32, 32),
+    Accent = Color3.fromRGB(252, 149, 175),
+    Text = Color3.fromRGB(240, 240, 240),
+    TextDark = Color3.fromRGB(150, 150, 150),
+    Success = Color3.fromRGB(0, 220, 100),
+    Fail = Color3.fromRGB(220, 50, 50)
+}
+
 local UIState = {
     MainFrame = nil,
     PriorityLabel = nil,
@@ -1769,8 +1782,6 @@ end
 
 
 TweenService = Services.TweenService
-local ScreenGui = nil -- Define at top level to be accessible to all functions
-local UI = {}
 
 function ReclampAllUI()
     local viewportSize = Camera.ViewportSize
@@ -1819,17 +1830,6 @@ function GetMainFrameSize()
 end
 
 
--- UI Color Constant Dictionary
-UI_THEME = {
-    Background = Color3.fromRGB(18, 18, 18),
-    Sidebar = Color3.fromRGB(25, 25, 25),
-    Element = Color3.fromRGB(32, 32, 32),
-    Accent = Color3.fromRGB(252, 149, 175),
-    Text = Color3.fromRGB(240, 240, 240),
-    TextDark = Color3.fromRGB(150, 150, 150),
-    Success = Color3.fromRGB(0, 220, 100),
-    Fail = Color3.fromRGB(220, 50, 50)
-}
 
 -- Helper to ensure ScreenGui exists and is parented correctly
 function EnsureScreenGui()
@@ -1912,6 +1912,7 @@ local function EnsureNotifyGui()
 end
 
 function UI.Notify(title, text, duration)
+    text = tostring(text or "")
     duration = duration or 3
     local gui = EnsureNotifyGui()
     local container = gui:FindFirstChild("NotifyContainer")
@@ -8080,9 +8081,9 @@ TrackConnection(Players.PlayerAdded:Connect(function(player)
     SetupPlayerESP(player)
 
     if AdvancedPlayerPanelState.Whitelist[player.UserId] then
-        UI.Notify("Whitelist", "Whitelisted player " .. player.Name .. " has joined the server")
+        UI.Notify("Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has joined the server")
     elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
-        UI.Notify("Blacklist", "Blacklisted player " .. player.Name .. " has joined the server")
+        UI.Notify("Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has joined the server")
     end
 end))
 TrackConnection(Players.PlayerRemoving:Connect(function(player) 
@@ -8091,9 +8092,9 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemoveESP(player) 
 
     if AdvancedPlayerPanelState.Whitelist[player.UserId] then
-        UI.Notify("Whitelist", "Whitelisted player " .. player.Name .. " has left")
+        UI.Notify("Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has left")
     elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
-        UI.Notify("Blacklist", "Blacklisted player " .. player.Name .. " has left")
+        UI.Notify("Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has left")
     end
 end))
 
