@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.6" -- Notification System & Asset Handling
+local VERSION = "4.1.7" -- Notification & Interactivity Update
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -1237,6 +1237,8 @@ function markBroken(part)
     pcall(function() part.CanQuery = false end)
     part.LocalTransparencyModifier = 0.5
     part.Transparency = 0.5
+
+    UI.Notify("Br3ak3r", "Br3ak3r removed '" .. (part.Name or "Unknown") .. "'")
 end
 
 -- Undo the last broken part
@@ -1253,6 +1255,8 @@ function unbreakLast()
     Br3ak3rState.brokenSet[path] = nil
     Br3ak3rState.brokenCacheDirty = true
     
+    UI.Notify("Br3ak3r", "Br3ak3r r3st0r3d '" .. (entry.name or (part and part.Name) or "Unknown") .. "'")
+
     if part then
         -- Restore original state
         part.CanCollide = entry.cc
@@ -1265,6 +1269,9 @@ end
 
 -- Clear all broken parts
 function unbreakAll()
+    local count = 0
+    for _ in pairs(Br3ak3rState.brokenSet) do count = count + 1 end
+
     for path, data in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
             local part = data.instance
@@ -1284,6 +1291,8 @@ function unbreakAll()
     table.clear(Br3ak3rState.undoStack)
     table.clear(Br3ak3rState.brokenIgnoreCache)
     Br3ak3rState.brokenCacheDirty = true
+
+    UI.Notify("Br3ak3r", "Br3ak3r restored " .. count .. " parts")
 end
 
 -- Sweep undo stack (periodic cleanup of destroyed parts)
@@ -1420,7 +1429,8 @@ function markHighlighted(part)
     }
     
     table.insert(H1ghl1ght3rState.undoStack, {
-        part = part, 
+        part = part,
+        name = part.Name,
         hl = hl, 
         bg = bg,
         ltm = part.LocalTransparencyModifier,
@@ -1439,6 +1449,8 @@ function markHighlighted(part)
     -- Force visibility so the Highlight is visible on transparent objects
     part.LocalTransparencyModifier = 0.5
     part.Transparency = 0.5
+
+    UI.Notify("H1ghl1ght3r", "H1ghl1ght3r selected '" .. (part.Name or "Unknown") .. "'")
 end
 
 function unhighlightLast()
@@ -1453,6 +1465,8 @@ function unhighlightLast()
         if entry.hl then pcall(function() entry.hl:Destroy() end) end
         if entry.bg then pcall(function() entry.bg:Destroy() end) end
         if entry.part then H1ghl1ght3rState.highlightedSet[entry.part] = nil end
+
+        UI.Notify("H1ghl1ght3r", "Removed highlight from '" .. (entry.name or (entry.part and entry.part.Name) or "Unknown") .. "'")
     end
 end
 
@@ -1668,6 +1682,7 @@ function DestroyWaypoint(id)
         end
         ActiveWaypoints[id] = nil
         RefreshWaypointUI()
+        UI.Notify("Waypoints", "Waypoint removed")
     end
 end
 function SetDestroyWaypointFunc(func)
@@ -1742,6 +1757,7 @@ function CreateWaypoint(position)
     }
     
     RefreshWaypointUI()
+    UI.Notify("Waypoints", string.format("Waypoint created at %.1f, %.1f, %.1f", position.X, position.Y, position.Z))
 end
 
 -- UTILITY FUNCTIONS
@@ -1995,6 +2011,39 @@ function UI.Notify(title, text, duration)
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextWrapped = true
     contentLabel.Parent = textContainer
+
+    -- Coordinate Copy Support
+    local coords = string.match(text, "%-?%d+%.?%d*, %-?%d+%.?%d*, %-?%d+%.?%d*")
+    if coords then
+        local hint = Instance.new("TextLabel")
+        hint.Name = "CopyHint"
+        hint.Size = UDim2.new(1, 0, 0, 10)
+        hint.BackgroundTransparency = 1
+        hint.TextTransparency = 1
+        hint.Text = "(Click to copy coordinates)"
+        hint.TextColor3 = UI_THEME.Accent
+        hint.TextSize = 10
+        hint.Font = Enum.Font.GothamItalic
+        hint.TextXAlignment = Enum.TextXAlignment.Left
+        hint.Parent = textContainer
+
+        local clickBtn = Instance.new("TextButton")
+        clickBtn.Size = UDim2.new(1, 0, 1, 0)
+        clickBtn.BackgroundTransparency = 1
+        clickBtn.Text = ""
+        clickBtn.Parent = frame
+
+        TrackConnection(clickBtn.MouseButton1Click:Connect(function()
+            local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+            if copy then 
+                copy(coords)
+                hint.Text = "COPIED!"
+                task.delay(1, function() if hint and hint.Parent then hint.Text = "(Click to copy coordinates)" end end)
+            end
+        end))
+
+        TweenService:Create(hint, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
+    end
 
     -- Animate In
     TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 0}):Play()
@@ -6837,6 +6886,7 @@ else
 StartFreecam()
 end
 enabled = not enabled
+UI.Notify("Freecam", "Freecam is now " .. (enabled and "ON" or "OFF"))
 end
 
 _G.ToggleFreecamFunc = ToggleFreecam
@@ -8028,11 +8078,23 @@ end
 TrackConnection(Players.PlayerAdded:Connect(function(player)
     AddPlayerToCache(player)
     SetupPlayerESP(player)
+
+    if AdvancedPlayerPanelState.Whitelist[player.UserId] then
+        UI.Notify("Whitelist", "Whitelisted player " .. player.Name .. " has joined the server")
+    elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
+        UI.Notify("Blacklist", "Blacklisted player " .. player.Name .. " has joined the server")
+    end
 end))
 TrackConnection(Players.PlayerRemoving:Connect(function(player) 
     RemovePlayerFromCache(player)
     CharCache[player] = nil -- Clear character cache
     RemoveESP(player) 
+
+    if AdvancedPlayerPanelState.Whitelist[player.UserId] then
+        UI.Notify("Whitelist", "Whitelisted player " .. player.Name .. " has left")
+    elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
+        UI.Notify("Blacklist", "Blacklisted player " .. player.Name .. " has left")
+    end
 end))
 
 -- MAIN UPDATE LOOPS
@@ -8155,6 +8217,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             end
         elseif input.KeyCode == Enum.KeyCode.E then
             -- Ctrl+E: Load Any-Item-ESP
+            UI.Notify("Any-Item-ESP", "Executing Any-Item-ESP...")
             loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
         elseif input.KeyCode == Enum.KeyCode.R then
             -- Ctrl+R: Rejoin
@@ -8227,6 +8290,8 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             local updater = UIState.Updaters["Misc/ItemPanel"]
             if updater then updater(ItemPanelState.Visible) end
             
+            UI.Notify("Item Panel", "Item Panel is now " .. (ItemPanelState.Visible and "ON" or "OFF"))
+
             if ItemPanelState.Visible then
                 if not ItemPanelUI.MainFrame then
                     CreateItemPanel()
