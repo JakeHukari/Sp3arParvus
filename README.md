@@ -6,9 +6,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/JakeHukari/Sp3arParvus?style=for-the-badge&color=ef5ecb" alt="Stars">
-  <img src="https://img.shields.io/github/forks/JakeHukari/Sp3arParvus?style=for-the-badge&color=ef5ecb" alt="Forks">
-  <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=ef5ecb" alt="License">
+  <img src="https://img.shields.io/github/stars/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Stars">
+  <img src="https://img.shields.io/github/forks/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Forks">
+  <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="License">
 </p>
 
 
