@@ -1867,6 +1867,7 @@ local function EnsureNotifyGui()
     NotifyGui.Name = "Sp3arNotifications"
     NotifyGui.DisplayOrder = 1000
     NotifyGui.IgnoreGuiInset = true
+    NotifyGui.Enabled = not Flags["Settings/GhostMode"]
     if gethui then 
         NotifyGui.Parent = gethui()
     elseif syn and syn.protect_gui then 
@@ -7896,7 +7897,9 @@ UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", F
         _G.StopFreecamFunc()
     end
 end)
-UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"])
+UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"], function(state)
+    if NotifyGui then NotifyGui.Enabled = not state end
+end)
 UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
     if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
@@ -8184,6 +8187,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             -- Ctrl+G: Toggle Gh0st Mode
             Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
             local state = Flags["Settings/GhostMode"]
+            if NotifyGui then NotifyGui.Enabled = not state end
             UI.Notify("Ghost Mode", string.format("Ghost Mode has been %s with 'Ctrl+G'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Period then
             -- Ctrl+.: Toggle D3v Tool
