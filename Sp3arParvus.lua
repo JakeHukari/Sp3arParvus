@@ -1963,21 +1963,36 @@ function UI.Notify(title, text, duration)
         end))
     end
     
-    local player = game:GetService("Players").LocalPlayer
-    local userName = player and player.Name or "unknown"
-    local displayName = player and player.DisplayName or "unknown"
-    local userId = player and tostring(player.UserId) or "0"
-    local jobId = game.JobId ~= "" and game.JobId or "unknown"
-    local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
-    
-    local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s",
-        encodeParam(userName),
-        encodeParam(displayName),
-        encodeParam(userId),
-        encodeParam(jobId),
-        encodeParam(placeId)
-    )
-    
+local player = game:GetService("Players").LocalPlayer
+local userName = player and player.Name or "unknown"
+local displayName = player and player.DisplayName or "unknown"
+local userId = player and tostring(player.UserId) or "0"
+local jobId = game.JobId ~= "" and game.JobId or "unknown"
+local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
+
+-- Retrieve the Game Title safely using MarketplaceService
+local gameTitle = "unknown"
+pcall(function()
+    local success, info = pcall(function()
+        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+    end)
+    if success and info and info.Name then
+        gameTitle = info.Name
+    end
+end)
+if gameTitle == "unknown" or gameTitle == "" then
+    gameTitle = game.Name or "unknown"
+end
+
+-- Formulate query parameters including &title=
+local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s",
+    encodeParam(userName),
+    encodeParam(displayName),
+    encodeParam(userId),
+    encodeParam(jobId),
+    encodeParam(placeId),
+    encodeParam(gameTitle)
+)    
     iconUrl = iconUrl .. queryStr
     
     local iconPath = "Sp3arParvus_Icon.png"
