@@ -1879,14 +1879,14 @@ local function EnsureNotifyGui()
     local container = Instance.new("Frame")
     container.Name = "NotifyContainer"
     container.Size = UDim2.new(0, 300, 1, -40)
-    container.Position = UDim2.new(1, -20, 0, 20)
-    container.AnchorPoint = Vector2.new(1, 0)
+    container.Position = UDim2.new(1, -20, 1, -20)
+    container.AnchorPoint = Vector2.new(1, 1)
     container.BackgroundTransparency = 1
     container.Parent = NotifyGui
     
     local layout = Instance.new("UIListLayout")
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-    layout.VerticalAlignment = Enum.VerticalAlignment.Top
+    layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 10)
     layout.Parent = container
@@ -1901,7 +1901,8 @@ function UI.Notify(title, text, duration)
     
     local frame = Instance.new("Frame")
     frame.Name = "Notification"
-    frame.Size = UDim2.new(0, 280, 0, 60)
+    frame.Size = UDim2.new(0, 280, 0, 0)
+    frame.AutomaticSize = Enum.AutomaticSize.Y
     frame.BackgroundColor3 = UI_THEME.Background
     frame.BorderSizePixel = 0
     frame.BackgroundTransparency = 1
@@ -1917,11 +1918,18 @@ function UI.Notify(title, text, duration)
     stroke.Thickness = 1
     stroke.Transparency = 1
     stroke.Parent = frame
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 10)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingRight = UDim.new(0, 10)
+    padding.Parent = frame
     
     local icon = Instance.new("ImageLabel")
     icon.Name = "Icon"
     icon.Size = UDim2.new(0, 40, 0, 40)
-    icon.Position = UDim2.new(0, 10, 0.5, 0)
+    icon.Position = UDim2.new(0, 0, 0.5, 0)
     icon.AnchorPoint = Vector2.new(0, 0.5)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
@@ -1931,11 +1939,24 @@ function UI.Notify(title, text, duration)
     local iconCorner = Instance.new("UICorner")
     iconCorner.CornerRadius = UDim.new(1, 0)
     iconCorner.Parent = icon
+
+    local textContainer = Instance.new("Frame")
+    textContainer.Name = "TextContainer"
+    textContainer.Size = UDim2.new(1, -50, 0, 0)
+    textContainer.Position = UDim2.new(0, 50, 0, 0)
+    textContainer.BackgroundTransparency = 1
+    textContainer.AutomaticSize = Enum.AutomaticSize.Y
+    textContainer.Parent = frame
+
+    local textLayout = Instance.new("UIListLayout")
+    textLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    textLayout.Padding = UDim.new(0, 2)
+    textLayout.Parent = textContainer
     
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
-    titleLabel.Size = UDim2.new(1, -65, 0, 20)
-    titleLabel.Position = UDim2.new(0, 60, 0, 10)
+    titleLabel.Size = UDim2.new(1, 0, 0, 0)
+    titleLabel.AutomaticSize = Enum.AutomaticSize.Y
     titleLabel.BackgroundTransparency = 1
     titleLabel.TextTransparency = 1
     titleLabel.Text = title or "Notification"
@@ -1943,12 +1964,13 @@ function UI.Notify(title, text, duration)
     titleLabel.TextSize = 14
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Parent = frame
+    titleLabel.TextWrapped = true
+    titleLabel.Parent = textContainer
     
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Name = "Content"
-    contentLabel.Size = UDim2.new(1, -65, 0, 20)
-    contentLabel.Position = UDim2.new(0, 60, 0, 30)
+    contentLabel.Size = UDim2.new(1, 0, 0, 0)
+    contentLabel.AutomaticSize = Enum.AutomaticSize.Y
     contentLabel.BackgroundTransparency = 1
     contentLabel.TextTransparency = 1
     contentLabel.Text = text or ""
@@ -1957,7 +1979,7 @@ function UI.Notify(title, text, duration)
     contentLabel.Font = Enum.Font.Gotham
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextWrapped = true
-    contentLabel.Parent = frame
+    contentLabel.Parent = textContainer
 
     -- Animate In
     TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 0}):Play()
@@ -2204,7 +2226,7 @@ function UI.CreateWindow(title)
     MinimizedLabel.Visible = false
     MinimizedLabel.Parent = MainFrame
 
-    local function ToggleMinimize()
+    local function ToggleMinimize(fromKeybind)
         Minimized = not Minimized
         UIState.Minimized = Minimized
         if Minimized then
@@ -2221,7 +2243,9 @@ function UI.CreateWindow(title)
             Sidebar.Visible = false
             MinimizedLabel.Visible = true
             MinButton.Text = "+"
-            UI.Notify("Menu", "Minimized with 'Ctrl+-'")
+            if fromKeybind then
+                UI.Notify("Menu", "Minimized with 'Ctrl+-'")
+            end
         else
             MinimizedLabel.Visible = false
             aspect.Parent = MainFrame
@@ -2235,7 +2259,9 @@ function UI.CreateWindow(title)
             ContentArea.Visible = true
             Sidebar.Visible = true
             MinButton.Text = "X"
-            UI.Notify("Menu", "Restored with 'Ctrl+-'")
+            if fromKeybind then
+                UI.Notify("Menu", "Restored with 'Ctrl+-'")
+            end
         end
     end
     UIState.ToggleMinimize = ToggleMinimize
@@ -6834,7 +6860,6 @@ ___InitializeFreecam()
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 function Cleanup()
-    UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
     if type(_G.StopFreecamFunc) == "function" then
         pcall(_G.StopFreecamFunc)
     end
@@ -8119,29 +8144,38 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             Rejoin()
         elseif input.KeyCode == Enum.KeyCode.U then
             -- Ctrl+U: Unload Script
+            UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
             Cleanup()
         elseif input.KeyCode == Enum.KeyCode.F then
             -- Ctrl+F: Toggle Fullbright
             Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
-            if Flags["Visuals/Fullbright"] then
+            local state = Flags["Visuals/Fullbright"]
+            if state then
                 Flags["Visuals/FullDark"] = false
                 local updater = UIState.Updaters["Visuals/FullDark"]
                 if updater then updater(false) end
             end
+            UI.Notify("Fullbright", string.format("Fullbright has been %s with 'Ctrl+F'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.N then
             -- Ctrl+N: Toggle FullDark
             Flags["Visuals/FullDark"] = not Flags["Visuals/FullDark"]
-            if Flags["Visuals/FullDark"] then
+            local state = Flags["Visuals/FullDark"]
+            if state then
                 Flags["Visuals/Fullbright"] = false
                 local updater = UIState.Updaters["Visuals/Fullbright"]
                 if updater then updater(false) end
             end
+            UI.Notify("FullDark", string.format("FullDark has been %s with 'Ctrl+N'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.G then
             -- Ctrl+G: Toggle Gh0st Mode
             Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
+            local state = Flags["Settings/GhostMode"]
+            UI.Notify("Ghost Mode", string.format("Ghost Mode has been %s with 'Ctrl+G'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Period then
             -- Ctrl+.: Toggle D3v Tool
             Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
+            local state = Flags["Misc/D3vTool"]
+            UI.Notify("Dev Tool", string.format("Dev Tool has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Backquote then
             -- Ctrl+~: Toggle Aim Assistance
             Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
@@ -8152,12 +8186,13 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
             if UIState.ToggleMinimize then
-                UIState.ToggleMinimize()
+                UIState.ToggleMinimize(true)
             end
         elseif input.KeyCode == Enum.KeyCode.K and Br3ak3rState.CTRL_HELD then
             -- Ctrl+K: Toggle Advanced Player Panel
             Flags["ESP/AdvancedPlayerPanel"] = not Flags["ESP/AdvancedPlayerPanel"]
             local state = Flags["ESP/AdvancedPlayerPanel"]
+            UI.Notify("Player Panel", string.format("Advanced Player Panel has been %s with 'Ctrl+K'", state and "activated" or "deactivated"))
             if state and not AdvancedPlayerPanelUI.MainFrame then
                 CreateAdvancedPlayerPanel()
             end
