@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.6" -- Minimal Notification System   
+local VERSION = "4.1.6" -- Notification System & Asset Handling
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -1933,7 +1933,21 @@ function UI.Notify(title, text, duration)
     icon.AnchorPoint = Vector2.new(0, 0.5)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
-    icon.Image = "https://www.pingbird.xyz/evil_pingbird_BlackBkgd.png"
+    
+    local iconUrl = "https://www.pingbird.xyz/evil_pingbird_BlackBkgd.png"
+    local iconPath = "Sp3arParvus_Icon.png"
+    
+    if writefile and getcustomasset and game.HttpGet then
+        if not isfile(iconPath) then
+            pcall(function()
+                writefile(iconPath, game:HttpGet(iconUrl))
+            end)
+        end
+        icon.Image = getcustomasset(iconPath)
+    else
+        icon.Image = iconUrl -- Fallback
+    end
+    
     icon.Parent = frame
     
     local iconCorner = Instance.new("UICorner")
