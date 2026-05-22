@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.5" -- Toggleable Mouse Teleport (Q Key)   
+local VERSION = "4.1.6" -- Minimal Notification System   
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -162,6 +162,7 @@ local UIState = {
     Tabs = {},
     CurrentTab = nil,
     Visible = true,
+    Minimized = false,
     ToggleMinimize = nil,
     DraggableFrames = {},
     Updaters = {},
@@ -1859,6 +1860,126 @@ function EnsureScreenGui()
     return ScreenGui
 end
 
+local NotifyGui = nil
+local function EnsureNotifyGui()
+    if NotifyGui and NotifyGui.Parent then return NotifyGui end
+    NotifyGui = Instance.new("ScreenGui")
+    NotifyGui.Name = "Sp3arNotifications"
+    NotifyGui.DisplayOrder = 1000
+    NotifyGui.IgnoreGuiInset = true
+    if gethui then 
+        NotifyGui.Parent = gethui()
+    elseif syn and syn.protect_gui then 
+        syn.protect_gui(NotifyGui) 
+        NotifyGui.Parent = game.CoreGui
+    else 
+        NotifyGui.Parent = game.CoreGui 
+    end
+    
+    local container = Instance.new("Frame")
+    container.Name = "NotifyContainer"
+    container.Size = UDim2.new(0, 300, 1, -40)
+    container.Position = UDim2.new(1, -20, 0, 20)
+    container.AnchorPoint = Vector2.new(1, 0)
+    container.BackgroundTransparency = 1
+    container.Parent = NotifyGui
+    
+    local layout = Instance.new("UIListLayout")
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    layout.VerticalAlignment = Enum.VerticalAlignment.Top
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 10)
+    layout.Parent = container
+    
+    return NotifyGui
+end
+
+function UI.Notify(title, text, duration)
+    duration = duration or 5
+    local gui = EnsureNotifyGui()
+    local container = gui:FindFirstChild("NotifyContainer")
+    
+    local frame = Instance.new("Frame")
+    frame.Name = "Notification"
+    frame.Size = UDim2.new(0, 280, 0, 60)
+    frame.BackgroundColor3 = UI_THEME.Background
+    frame.BorderSizePixel = 0
+    frame.BackgroundTransparency = 1
+    frame.ClipsDescendants = true
+    frame.Parent = container
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(45, 45, 45)
+    stroke.Thickness = 1
+    stroke.Transparency = 1
+    stroke.Parent = frame
+    
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "Icon"
+    icon.Size = UDim2.new(0, 40, 0, 40)
+    icon.Position = UDim2.new(0, 10, 0.5, 0)
+    icon.AnchorPoint = Vector2.new(0, 0.5)
+    icon.BackgroundTransparency = 1
+    icon.ImageTransparency = 1
+    icon.Image = "https://www.pingbird.xyz/evil_pingbird_BlackBkgd.png"
+    icon.Parent = frame
+    
+    local iconCorner = Instance.new("UICorner")
+    iconCorner.CornerRadius = UDim.new(1, 0)
+    iconCorner.Parent = icon
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, -65, 0, 20)
+    titleLabel.Position = UDim2.new(0, 60, 0, 10)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.TextTransparency = 1
+    titleLabel.Text = title or "Notification"
+    titleLabel.TextColor3 = UI_THEME.Accent
+    titleLabel.TextSize = 14
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = frame
+    
+    local contentLabel = Instance.new("TextLabel")
+    contentLabel.Name = "Content"
+    contentLabel.Size = UDim2.new(1, -65, 0, 20)
+    contentLabel.Position = UDim2.new(0, 60, 0, 30)
+    contentLabel.BackgroundTransparency = 1
+    contentLabel.TextTransparency = 1
+    contentLabel.Text = text or ""
+    contentLabel.TextColor3 = UI_THEME.Text
+    contentLabel.TextSize = 12
+    contentLabel.Font = Enum.Font.Gotham
+    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
+    contentLabel.TextWrapped = true
+    contentLabel.Parent = frame
+
+    -- Animate In
+    TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 0}):Play()
+    TweenService:Create(stroke, TWEENS.SMOOTH, {Transparency = 0}):Play()
+    TweenService:Create(titleLabel, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
+    TweenService:Create(contentLabel, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
+    TweenService:Create(icon, TWEENS.SMOOTH, {ImageTransparency = 0}):Play()
+    
+    task.delay(duration, function()
+        if not frame or not frame.Parent then return end
+        local t = TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 1})
+        TweenService:Create(stroke, TWEENS.SMOOTH, {Transparency = 1}):Play()
+        TweenService:Create(titleLabel, TWEENS.SMOOTH, {TextTransparency = 1}):Play()
+        TweenService:Create(contentLabel, TWEENS.SMOOTH, {TextTransparency = 1}):Play()
+        TweenService:Create(icon, TWEENS.SMOOTH, {ImageTransparency = 1}):Play()
+        t:Play()
+        t.Completed:Connect(function()
+            frame:Destroy()
+        end)
+    end)
+end
+
 function UI.CreateWindow(title)
     -- Destroy old instances
     EnsureScreenGui()
@@ -2085,6 +2206,7 @@ function UI.CreateWindow(title)
 
     local function ToggleMinimize()
         Minimized = not Minimized
+        UIState.Minimized = Minimized
         if Minimized then
             OldSize = MainFrame.Size
             aspect.Parent = nil
@@ -2099,6 +2221,7 @@ function UI.CreateWindow(title)
             Sidebar.Visible = false
             MinimizedLabel.Visible = true
             MinButton.Text = "+"
+            UI.Notify("Menu", "Minimized with 'Ctrl+-'")
         else
             MinimizedLabel.Visible = false
             aspect.Parent = MainFrame
@@ -2112,6 +2235,7 @@ function UI.CreateWindow(title)
             ContentArea.Visible = true
             Sidebar.Visible = true
             MinButton.Text = "X"
+            UI.Notify("Menu", "Restored with 'Ctrl+-'")
         end
     end
     UIState.ToggleMinimize = ToggleMinimize
@@ -6710,6 +6834,7 @@ ___InitializeFreecam()
 
 -- Cleanup Function (FIXED - properly clears global state for reload)
 function Cleanup()
+    UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
     if type(_G.StopFreecamFunc) == "function" then
         pcall(_G.StopFreecamFunc)
     end
@@ -8023,6 +8148,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             local state = Flags["Aim/AimLock"]
             local updater = UIState.Updaters["Aim/AimLock"]
             if updater then updater(state) end
+            UI.Notify("Aim Assist", string.format("'%s' has been %s with 'Ctrl+~'", "Aim Assist", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
             if UIState.ToggleMinimize then
@@ -8638,6 +8764,7 @@ TrackThread(perfThread)
 -- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
+UI.Notify("Sp3arParvus", string.format("Sp3arParvus v%s has executed successfully", VERSION))
 print(string.format("[Sp3arParvus v%s] Aim: %s | ESP: %s",
     VERSION,
     Flags["Aim/AimLock"] and "ON" or "OFF",
