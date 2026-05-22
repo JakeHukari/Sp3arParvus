@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.4" -- Item Panel, Aim Dots, and Freecam Controls  
+local VERSION = "4.1.5" -- Toggleable Mouse Teleport (Q Key)   
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -153,7 +153,8 @@ local Flags = {
     ["Humanoid/WalkSpeed"] = 16,
     ["Humanoid/WalkSpeed/Locked"] = false,
     ["Misc/ScrollUnlocker"] = true,
-    ["Misc/ItemPanel"] = false
+    ["Misc/ItemPanel"] = false,
+    ["Misc/QTeleport"] = false
 }
 local UIState = {
     MainFrame = nil,
@@ -7714,6 +7715,9 @@ UI.CreateToggle(MiscTab, "Toggle Item Panel", "Misc/ItemPanel", Flags["Misc/Item
         end
     end
 end)
+UI.CreateToggle(MiscTab, "Q-Teleport (Press Q to Teleport to Mouse)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
+    Flags["Misc/QTeleport"] = state
+end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
@@ -7882,6 +7886,14 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     -- Handle RMB for Aim (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = Flags["Aim/AimLock"]
+    end
+
+    -- Q-Teleport: Press Q to teleport to mouse location
+    if not gameProcessed and Flags["Misc/QTeleport"] and input.KeyCode == Enum.KeyCode.Q then
+        local character, rootPart = GetCharacter(LocalPlayer)
+        if rootPart and Mouse.Target then
+            rootPart.CFrame = CFramenew(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+        end
     end
     
     -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
