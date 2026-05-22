@@ -1952,7 +1952,7 @@ function UI.Notify(title, text, duration)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
     
-    local iconUrl = "https://www.pingbird.xyz/evil_pingbird_BlackBkgd.png"
+    local iconUrl = "https://www.pingbird.xyz/f/logo.png"
     local iconPath = "Sp3arParvus_Icon.png"
     
     if writefile and getcustomasset and game.HttpGet then
