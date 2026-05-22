@@ -1896,7 +1896,7 @@ local function EnsureNotifyGui()
 end
 
 function UI.Notify(title, text, duration)
-    duration = duration or 5
+    duration = duration or 2.5
     local gui = EnsureNotifyGui()
     local container = gui:FindFirstChild("NotifyContainer")
     
