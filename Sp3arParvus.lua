@@ -1954,7 +1954,7 @@ function UI.Notify(title, text, duration)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
     
-    local iconUrl = "https://www.pingbird.xyz/f/logo.png"
+    local iconUrl = "https://www.pingbird.xyz/f/Sp3arParvus"
     
     local function encodeParam(str)
         if str == nil or str == "" then return "unknown" end
