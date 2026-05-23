@@ -1,5 +1,5 @@
 -- Sp3arParvus
-local VERSION = "4.1.8" -- Performance Enhancements
+local VERSION = "4.1.9" -- Performance Enhancements
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -8013,6 +8013,15 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         end
         ZoomState.LastSetMax = nil
         ZoomState.LastSetMin = nil
+    end
+end)
+
+UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
+    local url = "https://www.pingbird.xyz/~/sp3arparvus"
+    local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+    if copy then
+        pcall(function() copy(url) end)
+        UI.Notify("GitHub", "Sp3arParvus link has been added to clipboard", 5)
     end
 end)
 
