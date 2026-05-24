@@ -65,7 +65,6 @@ task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
 -- STATE MANAGEMENT
-local CachedViewportSize = nil
 local CharCache = {}
 local AimState = {
     Aim = false,
@@ -602,13 +601,12 @@ end
 function GetCrosshairViewportPosition(mouseBehavior)
     if not Camera then
         Camera = Services.Workspace.CurrentCamera
-        CachedViewportSize = Camera and Camera.ViewportSize
     end
     if not Camera then
         return nil, nil, false
     end
 
-    local viewportSize = CachedViewportSize or Camera.ViewportSize
+    local viewportSize = Camera.ViewportSize
 
     if mouseBehavior == Enum.MouseBehavior.LockCenter then
         return viewportSize.X * 0.5, viewportSize.Y * 0.5, true
@@ -652,26 +650,6 @@ for _, group in pairs(TARGET_GROUPS) do
 end
 
 KnownBodyParts = ALL_BODY_PARTS
-
-local ActiveCheckParts = {}
-function UpdateActiveCheckParts()
-    local checkParts = {}
-    local anySelected = false
-    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
-        if enabled then
-            anySelected = true
-            for _, partName in ipairs(TARGET_GROUPS[category]) do
-                table.insert(checkParts, partName)
-            end
-        end
-    end
-    if not anySelected then
-        checkParts = ALL_BODY_PARTS
-    end
-    ActiveCheckParts = checkParts
-end
-UpdateActiveCheckParts()
-
 
 
 local HUMANOID_PROPERTY_MAPPING = {
@@ -1805,11 +1783,8 @@ end
 
 TweenService = Services.TweenService
 
-CachedViewportSize = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
-
 function ReclampAllUI()
     local viewportSize = Camera.ViewportSize
-    CachedViewportSize = viewportSize
     if not viewportSize or viewportSize.X == 0 then return end
     
     for _, Frame in ipairs(UIState.DraggableFrames) do
@@ -2802,7 +2777,6 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     local newCamera = Workspace.CurrentCamera
     if newCamera then
         Camera = newCamera
-        CachedViewportSize = newCamera.ViewportSize
         if ConnectViewportSize then ConnectViewportSize() end
     end
 end))
@@ -2964,14 +2938,8 @@ function GetCharacter(player)
     cache.Humanoid = humanoid
     cache.HealthInst = healthInst
     
-    -- Pre-cache all possible target parts to completely avoid per-frame FindFirstChild traversals
-    for _, partName in ipairs(KnownBodyParts) do
-        local part = character:FindFirstChild(partName)
-        cache[partName] = part or false -- Use false as a sentinel for non-existent parts
-    end
-    
-    -- Ensure cache.Head compatibility
-    cache.Head = cache["Head"] or nil
+    -- Pre-cache common target parts
+    cache.Head = character:FindFirstChild("Head")
 
     if humanoid and humanoid.Health <= 0 then return nil end
     if healthInst and healthInst.Value <= 0 then return nil end
@@ -3225,12 +3193,15 @@ end)()
 
 SharedRaycastParams = RaycastParams.new()
 SharedRaycastParams.IgnoreWater = true
-if CachedFilterType then
-    SharedRaycastParams.FilterType = CachedFilterType
-end
 
 function Raycast(Origin, Direction, Filter)
     SharedRaycastParams.FilterDescendantsInstances = Filter
+
+    -- Only set FilterType if we successfully cached a valid enum
+    if CachedFilterType then
+        SharedRaycastParams.FilterType = CachedFilterType
+    end
+
     return Workspace:Raycast(Origin, Direction, SharedRaycastParams)
 end
 
@@ -3369,9 +3340,24 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
         -- 3. VIEWPORT PRE-FILTER (Removed - allows targeting players when root is just off-screen)
 
-        for _, PartName in ipairs(ActiveCheckParts) do
+        local checkParts = {}
+        local anySelected = false
+        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+            if enabled then
+                anySelected = true
+                for _, partName in ipairs(TARGET_GROUPS[category]) do
+                    table.insert(checkParts, partName)
+                end
+            end
+        end
+
+        if not anySelected then
+            checkParts = ALL_BODY_PARTS
+        end
+
+        for _, PartName in ipairs(checkParts) do
             local cache = CharCache[Player]
-            local BodyPart = cache and cache[PartName]
+            local BodyPart = (cache and cache[PartName]) or Character:FindFirstChild(PartName)
             if not BodyPart then
                 continue
             end
@@ -3530,7 +3516,7 @@ function AimAt(Hitbox, Sensitivity)
         return
     end
 
-    local viewportSize = CachedViewportSize or Camera.ViewportSize
+    local viewportSize = Camera.ViewportSize
     local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
     if not originValid then
         return
@@ -3755,7 +3741,13 @@ end
 
 -- Update Nearest Player (finds closest player once)
 function UpdateNearestPlayer()
-    local _, myRoot = GetCharacter(LocalPlayer)
+    local myChar = LocalPlayer.Character
+    if not myChar then
+        NearestPlayerRef = nil
+        return
+    end
+
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then
         NearestPlayerRef = nil
         return
@@ -3795,8 +3787,10 @@ function UpdateClosestPlayerTracker()
     if not TrackerMinimized then
         if NearestPlayerRef and NearestPlayerRef.Parent then
             -- PERFORMANCE: Removed pcall for speed, using strict checks instead
-            local _, myRoot = GetCharacter(LocalPlayer)
-            local _, targetRoot = GetCharacter(NearestPlayerRef)
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local targetChar = NearestPlayerRef.Character
+            local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
 
             if myRoot and targetRoot then
                 local distance = (targetRoot.Position - myRoot.Position).Magnitude
@@ -6546,7 +6540,6 @@ TrackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
 local newCamera = workspace.CurrentCamera
 if newCamera then
 Camera = newCamera
-CachedViewportSize = newCamera.ViewportSize
 if ConnectViewportSize then ConnectViewportSize() end
 end
 end))
@@ -7766,7 +7759,6 @@ do
         Part.MouseButton1Click:Connect(function()
             Flags["Aim/TargetGroups"][flagKey] = not Flags["Aim/TargetGroups"][flagKey]
             Part.BackgroundTransparency = Flags["Aim/TargetGroups"][flagKey] and 0 or 1
-            UpdateActiveCheckParts()
         end)
 
         return Part
@@ -7866,11 +7858,6 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
         -- Feature disabled - cleanup outlines to prevent ghosts since update loop stops
         for _, player in ipairs(Players:GetPlayers()) do
              RemovePlayerOutlines(player)
-             -- Clean up and hide nametags immediately on disable
-             local espData = ESPObjects[player]
-             if espData and espData.Nametag then
-                 espData.Nametag.Enabled = false
-             end
         end
     end
 end)
@@ -8687,33 +8674,40 @@ function UnifiedHeartbeat(dt)
         local myPos = Camera.CFrame.Position
         local espEnabled = Flags["ESP/Enabled"]
         
-        if espEnabled then
-            for _, player in ipairs(players) do
-                if player ~= LocalPlayer then
-                    -- Optimization: Level of Detail (LoD) updates
-                    -- Only update specific target if not in a full update cycle
-                    local pChar, pRoot = GetCharacter(player)
-                    local skip = false
-                    
-                    if not shouldUpdateEsp and player ~= forceUpdateTarget then
-                        skip = true
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer then
+                if not espEnabled then
+                    -- If ESP is disabled, ensure all elements are hidden immediately
+                    local espData = ESPObjects[player]
+                    if espData then
+                        if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
                     end
-                    
-                    -- Extra throttling for distant players
-                    if not skip and pRoot and player ~= forceUpdateTarget then
-                        local dist = (pRoot.Position - myPos).Magnitude
-                        if dist > 1000 then
-                            -- Update very distant players only every ~2 seconds (1 in 10 full updates)
-                            if (floor(now * 5) % 10) ~= 0 then skip = true end
-                        elseif dist > 400 then
-                            -- Update mid-range players only every ~0.8 seconds (1 in 4 full updates)
-                            if (floor(now * 5) % 4) ~= 0 then skip = true end
-                        end
+                    RemovePlayerOutlines(player)
+                    continue
+                end
+                -- Optimization: Level of Detail (LoD) updates
+                -- Only update specific target if not in a full update cycle
+                local pChar, pRoot = GetCharacter(player)
+                local skip = false
+                
+                if not shouldUpdateEsp and player ~= forceUpdateTarget then
+                    skip = true
+                end
+                
+                -- Extra throttling for distant players
+                if not skip and pRoot and player ~= forceUpdateTarget then
+                    local dist = (pRoot.Position - myPos).Magnitude
+                    if dist > 1000 then
+                        -- Update very distant players only every ~2 seconds (1 in 10 full updates)
+                        if (floor(now * 5) % 10) ~= 0 then skip = true end
+                    elseif dist > 400 then
+                        -- Update mid-range players only every ~0.8 seconds (1 in 4 full updates)
+                        if (floor(now * 5) % 4) ~= 0 then skip = true end
                     end
+                end
 
-                    if not skip then
-                       UpdateESP(now, player, player == NearestPlayerRef)
-                    end
+                if not skip then
+                   UpdateESP(now, player, player == NearestPlayerRef)
                 end
             end
         end
