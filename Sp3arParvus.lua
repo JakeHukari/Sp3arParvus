@@ -1985,15 +1985,13 @@ end
 
 local joinLink = "https://www.roblox.com/games/start?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. tostring(game.JobId)
 
-local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s&gameInstanceId=%s&joinLink=%s&gameInstanceIdLink=%s",
+local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s&gameInstanceId=%s",
     encodeParam(userName),
     encodeParam(displayName),
     encodeParam(userId),
     encodeParam(jobId),
     encodeParam(placeId),
     encodeParam(gameTitle),
-    encodeParam(jobId),
-    encodeParam(joinLink),
     encodeParam(joinLink)
 )    
     iconUrl = iconUrl .. queryStr
