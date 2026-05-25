@@ -7243,6 +7243,21 @@ function Cleanup()
     warn("[Sp3arParvus] Script Unloaded! You can now reload the script.")
 end
 
+-- Reload Function (fully unload & cleanup -> re-execute)
+function Reload()
+    UI.Notify("Sp3arParvus", "Reloading script...")
+    task.wait(0.1)
+    Cleanup()
+    task.wait(0.2) -- Safe brief delay for cleanup to complete
+    if isfile and isfile("Sp3arParvus.lua") then
+        loadstring(readfile("Sp3arParvus.lua"))()
+    elseif isfile and isfile("Sp3arParvus/Sp3arParvus.lua") then
+        loadstring(readfile("Sp3arParvus/Sp3arParvus.lua"))()
+    else
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()
+    end
+end
+
 -- Create Main Window
 local Window = UI.CreateWindow("Sp3arParvus")
 
@@ -7995,6 +8010,7 @@ UI.CreateButton(MiscTab, "Copy gameInstanceId Link", function()
     end
 end)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
+UI.CreateButton(MiscTab, "Reload Script", Reload)
 
 UI.CreateSection(MiscTab, "Configuration")
 UI.CreateButton(MiscTab, "Activate/Deactivate Freecam", function()
