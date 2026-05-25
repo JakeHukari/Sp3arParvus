@@ -1970,7 +1970,6 @@ local userId = player and tostring(player.UserId) or "0"
 local jobId = game.JobId ~= "" and game.JobId or "unknown"
 local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
 
--- Retrieve the Game Title safely using MarketplaceService
 local gameTitle = "unknown"
 pcall(function()
     local success, info = pcall(function()
@@ -1984,14 +1983,18 @@ if gameTitle == "unknown" or gameTitle == "" then
     gameTitle = game.Name or "unknown"
 end
 
--- Formulate query parameters including &title=
-local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s",
+local joinLink = "https://www.roblox.com/games/start?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. tostring(game.JobId)
+
+local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s&gameInstanceId=%s&joinLink=%s&gameInstanceIdLink=%s",
     encodeParam(userName),
     encodeParam(displayName),
     encodeParam(userId),
     encodeParam(jobId),
     encodeParam(placeId),
-    encodeParam(gameTitle)
+    encodeParam(gameTitle),
+    encodeParam(jobId),
+    encodeParam(joinLink),
+    encodeParam(joinLink)
 )    
     iconUrl = iconUrl .. queryStr
     
