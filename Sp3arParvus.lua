@@ -7983,6 +7983,16 @@ UI.CreateToggle(MiscTab, "Q-Teleport (Press Q to Teleport to Mouse)", "Misc/QTel
     Flags["Misc/QTeleport"] = state
 end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
+UI.CreateButton(MiscTab, "Copy gameInstanceId Link", function()
+    local url = "https://www.roblox.com/games/start?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. tostring(game.JobId)
+    local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+    if copy then
+        pcall(function() copy(url) end)
+        UI.Notify("Game Join Link", "Game join link has been copied to clipboard", 5)
+    else
+        UI.Notify("Game Join Link", "Clipboard function not supported by your exploit", 5)
+    end
+end)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 
 UI.CreateSection(MiscTab, "Configuration")
