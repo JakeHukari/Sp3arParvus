@@ -5,7 +5,7 @@
 -- ╚══════════════════════════════════════════════════════════════════╝
 
 local VERSION = "4.1.9"
-local SAFE_MODE = false  --←
+local SAFE_MODE = false  -- ← Set to 'true' to enable SafeMode (disables 'dangerous' script-elements)
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
