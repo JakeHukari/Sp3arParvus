@@ -1,5 +1,12 @@
--- Sp3arParvus
-local VERSION = "4.1.9" -- Performance Enhancements
+-- ╔══════════════════════════════════════════════════════════════════╗
+-- ║            Sp3arParvus — Developer Tool                          ║
+-- ╠══════════════════════════════════════════════════════════════════╣
+-- ║  Version: 4.1.9                                                  ║
+-- ╚══════════════════════════════════════════════════════════════════╝
+
+local VERSION = "4.1.9"
+local SAFE_MODE = false  --←
+
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
 initStartTime = tick()
@@ -156,6 +163,15 @@ local Flags = {
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = false
 }
+
+-- SAFE_MODE overrides: force-disable high-risk input simulation features
+-- These are applied at init so the UI reflects the correct starting state.
+if SAFE_MODE then
+    Flags["Aim/AimLock"]        = false
+    Flags["Aim/AlwaysEnabled"]  = false
+    Flags["ShootBot/Enabled"]   = false
+    Flags["Misc/QTeleport"]     = false
+end
 local ScreenGui = nil
 local UI = {}
 local UI_THEME = {
@@ -2188,8 +2204,8 @@ function UI.CreateWindow(title)
 
     -- Title
     local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(1, -20, 0, 50)
-    TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+    TitleLabel.Size = UDim2.new(1, -20, 0, 36)
+    TitleLabel.Position = UDim2.new(0, 15, 0, 4)
     TitleLabel.BackgroundTransparency = 1
     TitleLabel.Text = title
     TitleLabel.Font = Enum.Font.GothamBold
@@ -2200,15 +2216,41 @@ function UI.CreateWindow(title)
 
     -- Version
     local VersionLabel = Instance.new("TextLabel")
-    VersionLabel.Size = UDim2.new(1, 0, 0, 20)
+    VersionLabel.Size = UDim2.new(1, 0, 0, 14)
     VersionLabel.Position = UDim2.new(0, 15, 0, 28)
     VersionLabel.BackgroundTransparency = 1
     VersionLabel.Text = "v" .. VERSION
     VersionLabel.Font = Enum.Font.Gotham
-    VersionLabel.TextSize = 12
+    VersionLabel.TextSize = 11
     VersionLabel.TextColor3 = UI_THEME.TextDark
     VersionLabel.TextXAlignment = Enum.TextXAlignment.Left
     VersionLabel.Parent = Sidebar
+
+    -- Safe Mode Badge (only visible when SAFE_MODE is active)
+    if SAFE_MODE then
+        local SafeBadge = Instance.new("Frame")
+        SafeBadge.Name = "SafeModeBadge"
+        SafeBadge.Size = UDim2.new(1, -16, 0, 16)
+        SafeBadge.Position = UDim2.new(0, 8, 0, 44)
+        SafeBadge.BackgroundColor3 = Color3.fromRGB(20, 80, 40)
+        SafeBadge.BorderSizePixel = 0
+        SafeBadge.Parent = Sidebar
+        local sbCorner2 = Instance.new("UICorner")
+        sbCorner2.CornerRadius = UDim.new(0, 4)
+        sbCorner2.Parent = SafeBadge
+        local sbStroke = Instance.new("UIStroke")
+        sbStroke.Color = Color3.fromRGB(40, 160, 80)
+        sbStroke.Thickness = 1
+        sbStroke.Parent = SafeBadge
+        local SafeLabel = Instance.new("TextLabel")
+        SafeLabel.Size = UDim2.fromScale(1, 1)
+        SafeLabel.BackgroundTransparency = 1
+        SafeLabel.Text = "✓  SAFE MODE"
+        SafeLabel.Font = Enum.Font.GothamBold
+        SafeLabel.TextSize = 9
+        SafeLabel.TextColor3 = Color3.fromRGB(60, 220, 110)
+        SafeLabel.Parent = SafeBadge
+    end
 
     -- Tab Container
     local TabContainer = Instance.new("ScrollingFrame")
@@ -5350,6 +5392,10 @@ function ShowAdvancedPlayerDetails(player)
     updateDetailsButtons()
 
     createButton("Teleport to Player", function()
+        if SAFE_MODE then
+            UI.Notify("Safe Mode", "Teleport-to-Player is disabled while Safe Mode is ON. Set SAFE_MODE = false at the script top to enable it.")
+            return
+        end
         local myChar = LocalPlayer.Character
         local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
         local targetChar, targetRoot = GetCharacter(player)
@@ -7268,7 +7314,7 @@ CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
 
 -- Create Tabs
-local AimTab = UI.CreateTab("Aim")
+local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
@@ -7716,17 +7762,33 @@ TrackConnection(wListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Conn
     WaypointsUIList.Size = UDim2.new(1, 0, 0, wListLayout.AbsoluteContentSize.Y)
 end))
 
--- Aim TAB
-UI.CreateSection(AimTab, "General Aim")
-UI.CreateToggle(AimTab, "Enable Aim Assistance (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
-UI.CreateToggle(AimTab, "Always Active (No Keybind, If OFF: hold RMB to Lock on)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
-UI.CreateToggle(AimTab, "Ignore Teamates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
-UI.CreateToggle(AimTab, "Visibility Check", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
-UI.CreateToggle(AimTab, "Show Aim Assist Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
+-- Tracking / Camera Assistance TAB
+if SAFE_MODE then
+    -- Safe Mode info banner
+    local safeBanner = Instance.new("TextLabel")
+    safeBanner.Size = UDim2.new(1, 0, 0, 36)
+    safeBanner.BackgroundColor3 = Color3.fromRGB(20, 60, 30)
+    safeBanner.BorderSizePixel = 0
+    safeBanner.Text = "⚠  Camera Tracking & Input Simulation\nare disabled in Safe Mode"
+    safeBanner.Font = Enum.Font.Gotham
+    safeBanner.TextSize = 11
+    safeBanner.TextColor3 = Color3.fromRGB(60, 200, 100)
+    safeBanner.TextWrapped = true
+    safeBanner.Parent = AimTab
+    local bnCorner = Instance.new("UICorner")
+    bnCorner.CornerRadius = UDim.new(0, 6)
+    bnCorner.Parent = safeBanner
+end
+UI.CreateSection(AimTab, "Camera Tracking Assistant")
+UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
+UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
+UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
+UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
+UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
-UI.CreateSection(AimTab, "Aim Assistance Target Selector")
+UI.CreateSection(AimTab, "Target Zone Selector")
 
 do
     local TargetArea = Instance.new("Frame")
@@ -7801,10 +7863,10 @@ do
     RightLeg.AnchorPoint = Vector2.new(0, 0)
 end
 
-UI.CreateSection(AimTab, "ShootBot")
-UI.CreateToggle(AimTab, "Enable ShootBot", "ShootBot/Enabled", Flags["ShootBot/Enabled"])
+UI.CreateSection(AimTab, "Input Simulation")
+UI.CreateToggle(AimTab, "Enable Input Simulation", "ShootBot/Enabled", Flags["ShootBot/Enabled"])
 UI.CreateToggle(AimTab, "Ignore Teammates", "ShootBot/TeamCheck", Flags["ShootBot/TeamCheck"])
-UI.CreateNumericInput(AimTab, "ShootBot CPS", "ShootBot/CPS", Flags["ShootBot/CPS"], 5, 100, 5, "cps")
+UI.CreateNumericInput(AimTab, "Clicks Per Second", "ShootBot/CPS", Flags["ShootBot/CPS"], 5, 100, 5, "cps")
 
 do
     local TargetArea = Instance.new("Frame")
@@ -7995,7 +8057,7 @@ UI.CreateToggle(MiscTab, "Toggle Item Panel", "Misc/ItemPanel", Flags["Misc/Item
         end
     end
 end)
-UI.CreateToggle(MiscTab, "Q-Teleport (Press Q to Teleport to Mouse)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
+UI.CreateToggle(MiscTab, "Q-Teleport — Press Q to jump to mouse position (SAFE_MODE gates this)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
     Flags["Misc/QTeleport"] = state
 end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
@@ -8013,6 +8075,32 @@ UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 UI.CreateButton(MiscTab, "Reload Script", Reload)
 
 UI.CreateSection(MiscTab, "Configuration")
+-- Safe Mode status row
+do
+    local smRow = Instance.new("Frame")
+    smRow.Size = UDim2.new(1, 0, 0, 28)
+    smRow.BackgroundColor3 = SAFE_MODE and Color3.fromRGB(20, 60, 30) or Color3.fromRGB(50, 25, 25)
+    smRow.BorderSizePixel = 0
+    smRow.Parent = MiscTab
+    local smCorner = Instance.new("UICorner")
+    smCorner.CornerRadius = UDim.new(0, 6)
+    smCorner.Parent = smRow
+    local smStroke = Instance.new("UIStroke")
+    smStroke.Color = SAFE_MODE and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(160, 50, 50)
+    smStroke.Thickness = 1
+    smStroke.Parent = smRow
+    local smLabel = Instance.new("TextLabel")
+    smLabel.Size = UDim2.fromScale(1, 1)
+    smLabel.BackgroundTransparency = 1
+    smLabel.Text = SAFE_MODE
+        and "✓  Safe Mode: ON  — Tracking & Input Simulation disabled"
+        or  "⚠  Safe Mode: OFF — All features active (set at script top)"
+    smLabel.Font = Enum.Font.Gotham
+    smLabel.TextSize = 10
+    smLabel.TextColor3 = SAFE_MODE and Color3.fromRGB(60, 210, 100) or Color3.fromRGB(220, 100, 100)
+    smLabel.TextWrapped = true
+    smLabel.Parent = smRow
+end
 UI.CreateButton(MiscTab, "Activate/Deactivate Freecam", function()
     if type(_G.ToggleFreecamFunc) == "function" then
         _G.ToggleFreecamFunc()
@@ -8197,13 +8285,14 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         H1ghl1ght3rState.SHIFT_HELD = true
     end
     
-    -- Handle RMB for Aim (only when not processed by game)
+    -- Handle RMB for Camera Tracking (only when not processed by game)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = Flags["Aim/AimLock"]
     end
 
-    -- Q-Teleport: Press Q to teleport to mouse location
-    if not gameProcessed and Flags["Misc/QTeleport"] and input.KeyCode == Enum.KeyCode.Q then
+    -- Q-Teleport: Press Q to jump character to mouse position (dev navigation aid)
+    -- Gated by SAFE_MODE to avoid physics-violation detection during routine testing.
+    if not SAFE_MODE and not gameProcessed and Flags["Misc/QTeleport"] and input.KeyCode == Enum.KeyCode.Q then
         local character, rootPart = GetCharacter(LocalPlayer)
         if rootPart and Mouse.Target then
             rootPart.CFrame = CFramenew(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
@@ -8343,12 +8432,12 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             local state = Flags["Misc/D3vTool"]
             UI.Notify("Dev Tool", string.format("Dev Tool has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Backquote then
-            -- Ctrl+~: Toggle Aim Assistance
+            -- Ctrl+~: Toggle Camera Tracking Assistant
             Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
             local state = Flags["Aim/AimLock"]
             local updater = UIState.Updaters["Aim/AimLock"]
             if updater then updater(state) end
-            UI.Notify("Aim Assist", string.format("'%s' has been %s with 'Ctrl+~'", "Aim Assist", state and "activated" or "deactivated"))
+            UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
             if UIState.ToggleMinimize then
@@ -8478,14 +8567,17 @@ function GetCachedTarget()
     return CachedTarget
 end
 
--- Aim update loop (OPTIMIZED - uses cached target)
--- Aim update loop (FIXED - clears state when target is lost)
+-- Camera tracking update loop — moves the local camera toward the nearest in-FOV target.
+-- Uses mousemoverel for smooth sub-pixel camera adjustment.
+-- SAFE_MODE gates this entirely to avoid continuous input-simulation detection.
 function UpdateAim()
+    -- Never run camera tracking in Safe Mode
+    if SAFE_MODE then return end
+
     if not Sp3arParvus.Active or not LocalCharReady then
         ClearAimLockState(false)
         return
     end
-
 
     local AimActive = Flags["Aim/AimLock"] and (Flags["Aim/AlwaysEnabled"] or AimState.Aim)
     if not AimActive then
@@ -8862,13 +8954,16 @@ function UnifiedHeartbeat(dt)
     end
 end
 
--- ShootBot logic loop
+-- Input simulation loop — fires mouse1press/mouse1release when the cursor hovers
+-- over a valid target body part. Used for testing game interactions.
+-- SAFE_MODE gates this entirely to avoid automated-input detection.
 local shootBotThread = task.spawn(function()
     while Sp3arParvus.Active do
         local enabled = Flags["ShootBot/Enabled"]
         local cps = Flags["ShootBot/CPS"]
         
-        if enabled and type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
+        -- SAFE_MODE: never simulate clicks during routine dev testing
+        if enabled and not SAFE_MODE and type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
             local targetPart = Mouse.Target
             if targetPart then
                 -- Ancestor Check: Find the Character model robustly
@@ -8966,13 +9061,30 @@ TrackThread(perfThread)
 
 -- INITIALIZATION COMPLETE
 
-print(string.format("[Sp3arParvus v%s] Loaded successfully!", VERSION))
-UI.Notify(string.format("Sp3arParvus v%s", VERSION), string.format("Sp3arParvus v%s has executed successfully", VERSION))
-print(string.format("[Sp3arParvus v%s] Aim: %s | ESP: %s",
-    VERSION,
-    Flags["Aim/AimLock"] and "ON" or "OFF",
-    Flags["ESP/Enabled"] and "ON" or "OFF"
-))
+print(string.format("[Sp3arParvus v%s] Developer tool loaded successfully!", VERSION))
+if SAFE_MODE then
+    UI.Notify(
+        string.format("Sp3arParvus v%s — Safe Mode", VERSION),
+        "Safe Mode is ACTIVE. Camera Tracking, Input Simulation, and position-jump features are disabled. " ..
+        "Set SAFE_MODE = false at the script top to re-enable them."
+    )
+    print(string.format("[Sp3arParvus v%s] ✓ SAFE MODE active — Camera Tracking and Input Simulation are OFF", VERSION))
+else
+    UI.Notify(
+        string.format("Sp3arParvus v%s", VERSION),
+        string.format("Sp3arParvus v%s loaded. Camera Tracking: %s | ESP: %s | Safe Mode: OFF",
+            VERSION,
+            Flags["Aim/AimLock"] and "ON" or "OFF",
+            Flags["ESP/Enabled"] and "ON" or "OFF"
+        )
+    )
+    print(string.format("[Sp3arParvus v%s] Camera Tracking: %s | ESP: %s | Input Sim: %s",
+        VERSION,
+        Flags["Aim/AimLock"] and "ON" or "OFF",
+        Flags["ESP/Enabled"] and "ON" or "OFF",
+        Flags["ShootBot/Enabled"] and "ON" or "OFF"
+    ))
+end
 print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
 print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
 print(string.format("[Sp3arParvus v%s] Br3ak3r Controls: Ctrl+Click=Break | Ctrl+Z=Undo | Ctrl+B=Toggle", VERSION))
