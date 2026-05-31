@@ -112,12 +112,20 @@ local Flags = {
     },
     ["ESP/Enabled"] = true,
     ["ESP/MaxDistance"] = 5000,
-    ["ESP/Nametags"] = true,
+    ["ESP/TeamCheck"] = false,
+    ["ESP/ShowStatus"] = true,
+    ["ESP/ShowNickname"] = true,
+    ["ESP/ShowUsername"] = true,
+    ["ESP/ShowDistance"] = true,
+    ["ESP/HealthIndicator"] = true,
+    ["ESP/ShowEquipped"] = true,
     ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
-    ["Performance/Enabled"] = true,
+    ["LocalUI/PerformancePanel"] = true,
+    ["LocalUI/LocalHealthIndicator"] = true,
+    ["LocalUI/ClosestPlayerTracker"] = true,
     ["Br3ak3r/Enabled"] = true,
     ["Waypoints/Enabled"] = true,
     ["Settings/Freecam Toggle"] = true,
@@ -3818,7 +3826,7 @@ end
 
 -- Update Closest Player Tracker display
 function UpdateClosestPlayerTracker()
-    if not Flags["ESP/Enabled"] or not ClosestPlayerTrackerLabel then
+    if not Flags["LocalUI/ClosestPlayerTracker"] or not ClosestPlayerTrackerLabel then
         if ClosestPlayerTrackerLabel then
             ClosestPlayerTrackerLabel.Visible = false
         end
@@ -6026,7 +6034,8 @@ function UpdateESP(now, player, isClosest)
         statusEmoji = "✅"
     end
 
-    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] or (isWhitelisted and statusEmoji == "") then
+    local isTeammate = Flags["ESP/TeamCheck"] and player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team
+    if not Flags["ESP/Enabled"] or Flags["Settings/GhostMode"] or (isWhitelisted and statusEmoji == "") or isTeammate then
         if espData then
             if espData.Nametag then espData.Nametag.Enabled = false end
         end
@@ -6083,7 +6092,7 @@ function UpdateESP(now, player, isClosest)
     -- Distance culling REMOVED: All nametags visible at any distance
 
     -- Update nametag
-    if Flags["ESP/Nametags"] and espData.Nametag then
+    if espData.Nametag then
         local nametag = espData.Nametag
         -- Ensure nametag is attached and enabled
         if nametag.Adornee ~= rootPart then
@@ -6103,9 +6112,10 @@ function UpdateESP(now, player, isClosest)
         
         -- Update Status Emoji
         if espData.StatusLabel then
-            if espData.lastStatus ~= statusEmoji then
+            local showStatus = Flags["ESP/ShowStatus"] and (statusEmoji ~= "")
+            if espData.lastStatus ~= statusEmoji or espData.StatusLabel.Visible ~= showStatus then
                 espData.StatusLabel.Text = statusEmoji
-                espData.StatusLabel.Visible = (statusEmoji ~= "")
+                espData.StatusLabel.Visible = showStatus
                 espData.lastStatus = statusEmoji
             end
         end
@@ -6115,10 +6125,16 @@ function UpdateESP(now, player, isClosest)
             espData.NicknameLabel.Text = nickname
             espData.lastNickname = nickname
         end
+        if espData.NicknameLabel.Visible ~= Flags["ESP/ShowNickname"] then
+            espData.NicknameLabel.Visible = Flags["ESP/ShowNickname"]
+        end
         
         if espData.lastUsername ~= username then
             espData.UsernameLabel.Text = username
             espData.lastUsername = username
+        end
+        if espData.UsernameLabel.Visible ~= Flags["ESP/ShowUsername"] then
+            espData.UsernameLabel.Visible = Flags["ESP/ShowUsername"]
         end
         
         if espData.lastTeamColor ~= teamColor then
@@ -6132,6 +6148,9 @@ function UpdateESP(now, player, isClosest)
         if math.abs(espData.lastDistance - distRounded) > 5 then
             espData.DistanceLabel.Text = string.format("%d studs", distRounded)
             espData.lastDistance = distRounded
+        end
+        if espData.DistanceLabel.Visible ~= Flags["ESP/ShowDistance"] then
+            espData.DistanceLabel.Visible = Flags["ESP/ShowDistance"]
         end
         
         local distanceColor = GetDistanceColor(distance, isClosest)
@@ -6151,14 +6170,23 @@ function UpdateESP(now, player, isClosest)
                 espData.EquippedLabel.Text = equippedString
                 espData.lastEquipped = equippedString
             end
+            if espData.EquippedLabel.Visible ~= Flags["ESP/ShowEquipped"] then
+                espData.EquippedLabel.Visible = Flags["ESP/ShowEquipped"]
+            end
         end
 
         -- Update Health indicators visibility based on line-of-sight
         local isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
         local healthVisible = not isOccluded
         
-        if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= healthVisible then
-            espData.HealthBarContainer.Visible = healthVisible
+        local settingEnabled = Flags["ESP/HealthIndicator"]
+        
+        if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= (healthVisible and settingEnabled) then
+            espData.HealthBarContainer.Visible = healthVisible and settingEnabled
+        end
+        
+        if espData.HealthNumericalLabel and espData.HealthNumericalLabel.Visible ~= settingEnabled then
+            espData.HealthNumericalLabel.Visible = settingEnabled
         end
 
         -- Update Health visuals
@@ -6475,7 +6503,14 @@ end
 
 local lastLocalH, lastLocalMH = -1, -1
 function UpdateLocalHealthHUD()
-    if not LocalHealthValueLabel then return end
+    if not LocalHealthValueLabel or not LocalHealthHUD then return end
+    
+    if not Flags["LocalUI/LocalHealthIndicator"] then
+        if LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
+        return
+    else
+        if not LocalHealthHUD.Visible and not Flags["Settings/GhostMode"] then LocalHealthHUD.Visible = true end
+    end
     
     local h, mh = GetHealth(LocalPlayer)
     if h ~= lastLocalH or mh ~= lastLocalMH then
@@ -6485,7 +6520,12 @@ function UpdateLocalHealthHUD()
 end
 
 function UpdatePerformanceDisplay()
-    if not Flags["Performance/Enabled"] or not PerformanceLabel or PerfMinimized then return end
+    if not Flags["LocalUI/PerformancePanel"] or not PerformanceLabel or PerfMinimized then
+        if PerformanceLabel and not Flags["LocalUI/PerformancePanel"] and PerformanceLabel.Visible then
+            PerformanceLabel.Visible = false
+        end
+        return
+    end
 
     -- Only update if visible (performance optimization)
     if not PerformanceLabel.Visible then return end
@@ -7930,7 +7970,7 @@ do
 end
 
 -- VISUALS TAB
-UI.CreateSection(VisualsTab, "Player ESP")
+UI.CreateSection(VisualsTab, "Other-Player ESP Elements")
 UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], function(state)
     if not state then
         -- Feature disabled - cleanup outlines to prevent ghosts since update loop stops
@@ -7940,7 +7980,13 @@ UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], f
     end
 end)
 UI.CreateNumericInput(VisualsTab, "Max ESP Distance", "ESP/MaxDistance", Flags["ESP/MaxDistance"], 100, 10000, 100, " studs")
-UI.CreateToggle(VisualsTab, "Draw Names", "ESP/Nametags", Flags["ESP/Nametags"])
+UI.CreateToggle(VisualsTab, "Non-Teammates Only", "ESP/TeamCheck", Flags["ESP/TeamCheck"])
+UI.CreateToggle(VisualsTab, "Draw Status Emoji", "ESP/ShowStatus", Flags["ESP/ShowStatus"])
+UI.CreateToggle(VisualsTab, "Draw Nickname", "ESP/ShowNickname", Flags["ESP/ShowNickname"])
+UI.CreateToggle(VisualsTab, "Draw Username", "ESP/ShowUsername", Flags["ESP/ShowUsername"])
+UI.CreateToggle(VisualsTab, "Draw Distance", "ESP/ShowDistance", Flags["ESP/ShowDistance"])
+UI.CreateToggle(VisualsTab, "Draw Health Indicator", "ESP/HealthIndicator", Flags["ESP/HealthIndicator"])
+UI.CreateToggle(VisualsTab, "Draw Equipped Item", "ESP/ShowEquipped", Flags["ESP/ShowEquipped"])
 UI.CreateToggle(VisualsTab, "Advanced Player Panel (Ctrl+K)", "ESP/AdvancedPlayerPanel", Flags["ESP/AdvancedPlayerPanel"], function(state)
     if state and not AdvancedPlayerPanelUI.MainFrame then
         CreateAdvancedPlayerPanel()
@@ -7961,6 +8007,18 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
         table.clear(PlayerOutlineObjects)
     end
 end)
+
+UI.CreateSection(VisualsTab, "Local UI Elements")
+UI.CreateToggle(VisualsTab, "Show Performance Panel", "LocalUI/PerformancePanel", Flags["LocalUI/PerformancePanel"], function(state)
+    if PerformanceLabel then PerformanceLabel.Visible = state end
+end)
+UI.CreateToggle(VisualsTab, "Show Local Health Indicator", "LocalUI/LocalHealthIndicator", Flags["LocalUI/LocalHealthIndicator"], function(state)
+    if LocalHealthHUD then LocalHealthHUD.Visible = state end
+end)
+UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlayerTracker", Flags["LocalUI/ClosestPlayerTracker"], function(state)
+    if ClosestPlayerTrackerLabel then ClosestPlayerTrackerLabel.Visible = state end
+end)
+
 UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
     if state then
         Flags["Visuals/FullDark"] = false
@@ -8113,9 +8171,6 @@ UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", F
 end)
 UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"], function(state)
     if NotifyGui then NotifyGui.Enabled = not state end
-end)
-UI.CreateToggle(MiscTab, "Show Performance Stats", "Performance/Enabled", Flags["Performance/Enabled"], function(state)
-    if PerformanceLabel then PerformanceLabel.Visible = state end
 end)
 UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+.)", "Misc/D3vTool", Flags["Misc/D3vTool"])
 UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/ScrollUnlocker"], function(state)
@@ -8626,13 +8681,13 @@ function UnifiedHeartbeat(dt)
 
     if ghostModeChanged and not ghostMode then
         -- Restore visibility when Gh0st mode toggled off
-        if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["ESP/Enabled"] then
+        if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["LocalUI/ClosestPlayerTracker"] then
             ClosestPlayerTrackerLabel.Visible = true
         end
-        if PerformanceLabel and not PerformanceLabel.Visible and Flags["Performance/Enabled"] then
+        if PerformanceLabel and not PerformanceLabel.Visible and Flags["LocalUI/PerformancePanel"] then
             PerformanceLabel.Visible = true
         end
-        if LocalHealthHUD and not LocalHealthHUD.Visible then
+        if LocalHealthHUD and not LocalHealthHUD.Visible and Flags["LocalUI/LocalHealthIndicator"] then
             LocalHealthHUD.Visible = true
         end
     end
