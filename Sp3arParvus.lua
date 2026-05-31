@@ -2329,24 +2329,45 @@ function UI.CreateWindow(title)
     local function MakeDraggable(Frame)
         table.insert(UIState.DraggableFrames, Frame)
         
-        TrackConnection(Frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local absoluteSize = Frame.AbsoluteSize
-                local anchor = Frame.AnchorPoint
-                local minX = anchor.X * absoluteSize.X
-                local maxX = Camera.ViewportSize.X - (1 - anchor.X) * absoluteSize.X
-                local minY = anchor.Y * absoluteSize.Y
-                local maxY = Camera.ViewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
-                
-                local mouseLoc = UserInputService:GetMouseLocation()
-                if mouseLoc.X >= (Frame.AbsolutePosition.X) and mouseLoc.X <= (Frame.AbsolutePosition.X + absoluteSize.X) and
-                   mouseLoc.Y >= (Frame.AbsolutePosition.Y) and mouseLoc.Y <= (Frame.AbsolutePosition.Y + absoluteSize.Y) then
-                    UIState.ActiveDraggedFrame = Frame
-                    UIState.DragStart = input.Position
-                    UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
-                end
+        local function attach(obj)
+            if obj:IsA("GuiObject") and not obj:IsA("TextButton") and not obj:IsA("ImageButton") and not obj:IsA("TextBox") and not obj:IsA("ScrollingFrame") then
+                TrackConnection(obj.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        local current = obj
+                        local insideInteractive = false
+                        while current and current ~= Frame do
+                            if current:IsA("TextButton") or current:IsA("ImageButton") or current:IsA("TextBox") or current:IsA("ScrollingFrame") then
+                                insideInteractive = true
+                                break
+                            end
+                            current = current.Parent
+                        end
+                        
+                        if not insideInteractive then
+                            local absoluteSize = Frame.AbsoluteSize
+                            local absolutePosition = Frame.AbsolutePosition
+                            local posX = input.Position.X
+                            local posY = input.Position.Y
+                            
+                            if posX >= absolutePosition.X and posX <= (absolutePosition.X + absoluteSize.X) and
+                               posY >= absolutePosition.Y and posY <= (absolutePosition.Y + absoluteSize.Y) then
+                                
+                                UIState.ActiveDraggedFrame = Frame
+                                UIState.DragStart = input.Position
+                                UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
+                            end
+                        end
+                    end
+                end))
             end
-        end))
+        end
+        
+        attach(Frame)
+        for _, child in ipairs(Frame:GetDescendants()) do
+            attach(child)
+        end
+        
+        TrackConnection(Frame.DescendantAdded:Connect(attach))
     end
     UI.MakeDraggable = MakeDraggable
 
@@ -9143,4 +9164,4 @@ end
 print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Enabled"] and "ON" or "OFF"))
 print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
 print(string.format("[Sp3arParvus v%s] Br3ak3r Controls: Ctrl+Click=Break | Ctrl+Z=Undo | Ctrl+B=Toggle", VERSION))
-print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤2000 | Yellow≤4000 | Green>4000", VERSION))
+print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤750 | Yellow≤1875 | Green>1875", VERSION))
