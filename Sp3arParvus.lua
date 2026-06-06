@@ -795,6 +795,8 @@ function ApplyHumanoidSettings()
         local presets = {
             ["Humanoid/JumpHeight"] = 8,
             ["Humanoid/UseJumpPower"] = false,
+            ["Humanoid/PlatformStand"] = false,
+            ["Humanoid/AutoRotate"] = true,
             ["Humanoid/MaxSlopeAngle"] = 90
         }
         for flag, val in pairs(presets) do
