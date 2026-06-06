@@ -7070,6 +7070,7 @@ local function CreateFreecamUI()
     local binds = {
         "W/A/S/D - Move",
         "E/Q - Move Up/Down",
+        "↑/↓ - Adjust Speed Up/Down",
         "Shift - Slow Speed",
         "Scroll - Adjust FOV",
         "Ctrl+P - Toggle Freecam",
