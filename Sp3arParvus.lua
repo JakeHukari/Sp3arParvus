@@ -6770,15 +6770,15 @@ MouseWheel = 0,
 }
 
 local NAV_GAMEPAD_SPEED  = Vector3.new(1, 1, 1)
-local NAV_KEYBOARD_SPEED = Vector3.new(1, 1, 1)
-local PAN_MOUSE_SPEED    = Vector2.new(1, 1)*(pi/64)
-local PAN_GAMEPAD_SPEED  = Vector2.new(1, 1)*(pi/8)
-local FOV_WHEEL_SPEED    = 2.0
+local NAV_KEYBOARD_SPEED = Vector3.new(5, 5, 5)
+local PAN_MOUSE_SPEED    = Vector2.new(2, 2)*(pi/64)
+local PAN_GAMEPAD_SPEED  = Vector2.new(2, 2)*(pi/8)
+local FOV_WHEEL_SPEED    = 1.0
 local FOV_GAMEPAD_SPEED  = 5
 local NAV_ADJ_SPEED      = 1
 local NAV_SHIFT_MUL      = 0.50
 
-local navSpeed = 3.5
+local navSpeed = 1
 
 function Input.Vel(dt)
 navSpeed = clamp(navSpeed + dt*(keyboard.Up - keyboard.Down)*NAV_ADJ_SPEED, 0.1, 4)
