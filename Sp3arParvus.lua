@@ -6764,13 +6764,13 @@ MouseWheel = 0,
 }
 
 local NAV_GAMEPAD_SPEED  = Vector3.new(1, 1, 1)
-local NAV_KEYBOARD_SPEED = Vector3.new(5, 5, 5)
-local PAN_MOUSE_SPEED    = Vector2.new(2, 2)*(pi/64)
-local PAN_GAMEPAD_SPEED  = Vector2.new(2, 2)*(pi/8)
+local NAV_KEYBOARD_SPEED = Vector3.new(3.8, 3.8, 3.8)
+local PAN_MOUSE_SPEED    = Vector2.new(1.7, 1.7)*(pi/64)
+local PAN_GAMEPAD_SPEED  = Vector2.new(1.7, 1.7)*(pi/8)
 local FOV_WHEEL_SPEED    = 1.0
-local FOV_GAMEPAD_SPEED  = 5
-local NAV_ADJ_SPEED      = 1
-local NAV_SHIFT_MUL      = 0.50
+local FOV_GAMEPAD_SPEED  = 3
+local NAV_ADJ_SPEED      = 2
+local NAV_SHIFT_MUL      = 0.30
 
 local navSpeed = 1
 
