@@ -6849,6 +6849,22 @@ mouse[input.UserInputType.Name] = -input.Position.z
 return Enum.ContextActionResult.Sink
 end
 
+function TeleportAction(action, state, input)
+if state == Enum.UserInputState.Begin then
+local character = LocalPlayer.Character
+if character then
+local hrp = character:FindFirstChild("HumanoidRootPart")
+if hrp then
+character:PivotTo(Camera.CFrame)
+if type(_G.StopFreecamFunc) == "function" then
+_G.StopFreecamFunc()
+end
+end
+end
+end
+return Enum.ContextActionResult.Sink
+end
+
 function Zero(t)
 for k, v in pairs(t) do
 t[k] = v*0
@@ -6870,6 +6886,7 @@ ContextActionService:BindActionAtPriority("FreecamMouseWheel",        MouseWheel
 ContextActionService:BindActionAtPriority("FreecamGamepadButton",     GpButton,   false, INPUT_PRIORITY, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY)
 ContextActionService:BindActionAtPriority("FreecamGamepadTrigger",    Trigger,    false, INPUT_PRIORITY, Enum.KeyCode.ButtonR2, Enum.KeyCode.ButtonL2)
 ContextActionService:BindActionAtPriority("FreecamGamepadThumbstick", Thumb,      false, INPUT_PRIORITY, Enum.KeyCode.Thumbstick1, Enum.KeyCode.Thumbstick2)
+ContextActionService:BindActionAtPriority("FreecamTeleport",          TeleportAction, false, INPUT_PRIORITY, Enum.KeyCode.T)
 end
 
 function Input.StopCapture()
@@ -6883,6 +6900,7 @@ ContextActionService:UnbindAction("FreecamMouseWheel")
 ContextActionService:UnbindAction("FreecamGamepadButton")
 ContextActionService:UnbindAction("FreecamGamepadTrigger")
 ContextActionService:UnbindAction("FreecamGamepadThumbstick")
+ContextActionService:UnbindAction("FreecamTeleport")
 end
 end
 end
@@ -6920,9 +6938,9 @@ end
 ------------------------------------------------------------------------
 
 local function StepFreecam(dt)
-local vel = velSpring:Update(dt, Input.Vel(dt))
-local pan = panSpring:Update(dt, Input.Pan(dt))
-local fov = fovSpring:Update(dt, Input.Fov(dt))
+local vel = Input.Vel(dt)
+local pan = Input.Pan(dt)
+local fov = Input.Fov(dt)
 
 local zoomFactor = sqrt(tan(rad(70/2))/tan(rad(cameraFov/2)))
 
@@ -6934,7 +6952,7 @@ local cameraCFrame = CFrame.new(cameraPos)*CFrame.fromOrientation(cameraRot.x, c
 cameraPos = cameraCFrame.p
 
 Camera.CFrame = cameraCFrame
-Camera.Focus = cameraCFrame*CFrame.new(0, 0, -GetFocusDistance(cameraCFrame))
+Camera.Focus = cameraCFrame*CFrame.new(0, 0, -1)
 Camera.FieldOfView = cameraFov
 end
 
@@ -7003,6 +7021,75 @@ mouseBehavior = nil
 end
 end
 
+local FreecamUI = nil
+local function CreateFreecamUI()
+    if FreecamUI then FreecamUI:Destroy() end
+    FreecamUI = Instance.new("ScreenGui")
+    FreecamUI.Name = "FreecamKeybindsUI"
+    FreecamUI.IgnoreGuiInset = true
+    FreecamUI.DisplayOrder = 999
+    
+    local targetParent = game:GetService("CoreGui")
+    if not pcall(function() FreecamUI.Parent = targetParent end) then
+        targetParent = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        FreecamUI.Parent = targetParent
+    end
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 220, 0, 180)
+    frame.Position = UDim2.new(0, 10, 0.5, -90)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BackgroundTransparency = 0.2
+    frame.BorderSizePixel = 0
+    frame.Parent = FreecamUI
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(100, 100, 100)
+    stroke.Thickness = 1
+    stroke.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Text = "  Freecam Keybinds"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.LayoutOrder = 1
+    title.Parent = frame
+
+    local binds = {
+        "W/A/S/D - Move",
+        "E/Q - Move Up/Down",
+        "Shift - Slow Speed",
+        "Scroll - Adjust FOV",
+        "Ctrl+P - Toggle Freecam",
+        "T - Teleport Here & Exit"
+    }
+
+    for i, bind in ipairs(binds) do
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.Text = "    " .. bind
+        lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.LayoutOrder = i + 1
+        lbl.Parent = frame
+    end
+end
+
 local function StartFreecam()
 local cameraCFrame = Camera.CFrame
 cameraRot = Vector2.new(cameraCFrame:toEulerAnglesYXZ())
@@ -7016,12 +7103,21 @@ fovSpring:Reset(0)
 PlayerState.Push()
 RunService:BindToRenderStep("Freecam", Enum.RenderPriority.Camera.Value, StepFreecam)
 Input.StartCapture()
+
+if not FreecamUI then
+CreateFreecamUI()
+end
 end
 
 local function StopFreecam()
 Input.StopCapture()
 RunService:UnbindFromRenderStep("Freecam")
 PlayerState.Pop()
+
+if FreecamUI then
+FreecamUI:Destroy()
+FreecamUI = nil
+end
 end
 
 ------------------------------------------------------------------------
