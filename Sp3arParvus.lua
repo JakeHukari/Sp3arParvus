@@ -6764,7 +6764,9 @@ Up = 0,
 Down = 0,
 LeftShift = 0,
 RightShift = 0,
+Space = 0,
 }
+Input.keyboard = keyboard
 
 local mouse = {
 Delta = Vector2.new(),
@@ -6792,9 +6794,9 @@ thumbstickCurve(-gamepad.Thumbstick1.y)
 )*NAV_GAMEPAD_SPEED
 
 local kKeyboard = Vector3.new(
-keyboard.D - keyboard.A + keyboard.K - keyboard.H,
-keyboard.E - keyboard.Q + keyboard.I - keyboard.Y,
-keyboard.S - keyboard.W + keyboard.J - keyboard.U
+keyboard.D - keyboard.A,
+keyboard.E - keyboard.Q,
+keyboard.S - keyboard.W
 )*NAV_KEYBOARD_SPEED
 
 local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
@@ -6821,7 +6823,25 @@ end
 
 do
 function Keypress(action, state, input)
-keyboard[input.KeyCode.Name] = state == Enum.UserInputState.Begin and 1 or 0
+local isBegin = state == Enum.UserInputState.Begin
+keyboard[input.KeyCode.Name] = isBegin and 1 or 0
+
+if isBegin then
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if input.KeyCode == Enum.KeyCode.I then
+            hum.PlatformStand = not hum.PlatformStand
+            if hum.PlatformStand then
+                hum:ChangeState(Enum.HumanoidStateType.Physics)
+            else
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        elseif input.KeyCode == Enum.KeyCode.Y then
+            hum.Health = 0
+        end
+    end
+end
 return Enum.ContextActionResult.Sink
 end
 
@@ -6881,7 +6901,8 @@ Enum.KeyCode.S, Enum.KeyCode.J,
 Enum.KeyCode.D, Enum.KeyCode.K,
 Enum.KeyCode.E, Enum.KeyCode.I,
 Enum.KeyCode.Q, Enum.KeyCode.Y,
-Enum.KeyCode.Up, Enum.KeyCode.Down
+Enum.KeyCode.Up, Enum.KeyCode.Down,
+Enum.KeyCode.Space
 )
 ContextActionService:BindActionAtPriority("FreecamMousePan",          MousePan,   false, INPUT_PRIORITY, Enum.UserInputType.MouseMovement)
 ContextActionService:BindActionAtPriority("FreecamMouseWheel",        MouseWheel, false, INPUT_PRIORITY, Enum.UserInputType.MouseWheel)
@@ -6956,6 +6977,31 @@ cameraPos = cameraCFrame.p
 Camera.CFrame = cameraCFrame
 Camera.Focus = cameraCFrame*CFrame.new(0, 0, -1)
 Camera.FieldOfView = cameraFov
+
+local char = LocalPlayer.Character
+if char then
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        local moveZ = Input.keyboard.J - Input.keyboard.U
+        local moveX = Input.keyboard.K - Input.keyboard.H
+        local moveVector = Vector3.new(moveX, 0, moveZ)
+        
+        local look = cameraCFrame.LookVector
+        look = Vector3.new(look.X, 0, look.Z).Unit
+        local right = cameraCFrame.RightVector
+        right = Vector3.new(right.X, 0, right.Z).Unit
+        
+        local walkDir = Vector3.new()
+        if moveVector.Magnitude > 0 then
+            walkDir = (look * -moveZ + right * moveX).Unit
+        end
+        hum:Move(walkDir, false)
+        
+        if Input.keyboard.Space == 1 then
+            hum.Jump = true
+        end
+    end
+end
 end
 
 ------------------------------------------------------------------------
@@ -7038,8 +7084,8 @@ local function CreateFreecamUI()
     end
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 220, 0, 180)
-    frame.Position = UDim2.new(0, 10, 0.5, -90)
+    frame.Size = UDim2.new(0, 220, 0, 260)
+    frame.Position = UDim2.new(0, 10, 0.5, -130)
     frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     frame.BackgroundTransparency = 0.2
     frame.BorderSizePixel = 0
@@ -7070,8 +7116,12 @@ local function CreateFreecamUI()
     title.Parent = frame
 
     local binds = {
-        "W/A/S/D - Move",
-        "E/Q - Move Up/Down",
+        "W/A/S/D - Move Cam",
+        "E/Q - Move Cam Up/Down",
+        "U/H/J/K - Move Player",
+        "Space - Jump Player",
+        "I - Ragdoll Player",
+        "Y - Respawn Player",
         "↑/↓ - Adjust Speed Up/Down",
         "Shift - Slow Speed",
         "Scroll - Adjust FOV",
