@@ -7038,7 +7038,7 @@ cameraCFrame = Camera.CFrame
 cameraFocus = Camera.Focus
 
 mouseBehavior = UserInputService.MouseBehavior
-UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 end
 
 -- Restore state
