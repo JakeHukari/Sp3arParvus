@@ -6715,6 +6715,7 @@ local cameraFov = 0
 local velSpring = Spring.new(VEL_STIFFNESS, Vector3.new())
 local panSpring = Spring.new(PAN_STIFFNESS, Vector2.new())
 local fovSpring = Spring.new(FOV_STIFFNESS, 0)
+local freecamMouseLocked = true
 
 ------------------------------------------------------------------------
 
@@ -6887,6 +6888,13 @@ end
 return Enum.ContextActionResult.Sink
 end
 
+function MouseLockToggle(action, state, input)
+if state == Enum.UserInputState.Begin then
+freecamMouseLocked = not freecamMouseLocked
+end
+return Enum.ContextActionResult.Sink
+end
+
 function Zero(t)
 for k, v in pairs(t) do
 t[k] = v*0
@@ -6910,6 +6918,8 @@ ContextActionService:BindActionAtPriority("FreecamGamepadButton",     GpButton, 
 ContextActionService:BindActionAtPriority("FreecamGamepadTrigger",    Trigger,    false, INPUT_PRIORITY, Enum.KeyCode.ButtonR2, Enum.KeyCode.ButtonL2)
 ContextActionService:BindActionAtPriority("FreecamGamepadThumbstick", Thumb,      false, INPUT_PRIORITY, Enum.KeyCode.Thumbstick1, Enum.KeyCode.Thumbstick2)
 ContextActionService:BindActionAtPriority("FreecamTeleport",          TeleportAction, false, INPUT_PRIORITY, Enum.KeyCode.T)
+ContextActionService:BindActionAtPriority("FreecamMouseLockToggle",   MouseLockToggle, false, INPUT_PRIORITY, Enum.KeyCode.LeftAlt)
+ContextActionService:BindActionAtPriority("FreecamDisableRMB",        function() return Enum.ContextActionResult.Sink end, false, INPUT_PRIORITY, Enum.UserInputType.MouseButton2)
 end
 
 function Input.StopCapture()
@@ -6924,6 +6934,8 @@ ContextActionService:UnbindAction("FreecamGamepadButton")
 ContextActionService:UnbindAction("FreecamGamepadTrigger")
 ContextActionService:UnbindAction("FreecamGamepadThumbstick")
 ContextActionService:UnbindAction("FreecamTeleport")
+ContextActionService:UnbindAction("FreecamMouseLockToggle")
+ContextActionService:UnbindAction("FreecamDisableRMB")
 end
 end
 end
@@ -6961,6 +6973,12 @@ end
 ------------------------------------------------------------------------
 
 local function StepFreecam(dt)
+if freecamMouseLocked then
+UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+else
+UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+end
+
 local vel = Input.Vel(dt)
 local pan = Input.Pan(dt)
 local fov = Input.Fov(dt)
@@ -7038,7 +7056,7 @@ cameraCFrame = Camera.CFrame
 cameraFocus = Camera.Focus
 
 mouseBehavior = UserInputService.MouseBehavior
-UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
 
 -- Restore state
@@ -7125,6 +7143,7 @@ local function CreateFreecamUI()
         "↑/↓ - Adjust Speed Up/Down",
         "Shift - Slow Speed",
         "Scroll - Adjust FOV",
+        "L-Alt - Toggle Mouse Lock",
         "Ctrl+P - Toggle Freecam",
         "T - Teleport Here & Exit"
     }
@@ -7152,6 +7171,7 @@ cameraFov = Camera.FieldOfView
 velSpring:Reset(Vector3.new())
 panSpring:Reset(Vector2.new())
 fovSpring:Reset(0)
+freecamMouseLocked = true
 
 PlayerState.Push()
 RunService:BindToRenderStep("Freecam", Enum.RenderPriority.Camera.Value, StepFreecam)
