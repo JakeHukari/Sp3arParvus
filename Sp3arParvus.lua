@@ -1650,7 +1650,7 @@ function RefreshWaypointUI()
         nameBox.Position = UDim2.new(0, 5, 0, 0)
         nameBox.BackgroundTransparency = 1
         nameBox.Text = wpData.Name
-        nameBox.Font = Enum.Font.SciFi
+        nameBox.Font = Enum.Font.Code
         nameBox.TextSize = 13
         nameBox.TextColor3 = wpData.Color
         nameBox.TextXAlignment = Enum.TextXAlignment.Left
