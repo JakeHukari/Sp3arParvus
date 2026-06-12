@@ -1691,7 +1691,7 @@ function RefreshWaypointUI()
         delBtn.Position = UDim2.new(1, -30, 0.5, -12)
         delBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         delBtn.Text = "X"
-        delBtn.Font = Enum.Font.SciFi
+        delBtn.Font = Enum.Font.Code
         delBtn.TextColor3 = Color3.fromRGB(255,255,255)
         delBtn.TextSize = 12
         delBtn.Parent = row
