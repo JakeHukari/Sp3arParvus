@@ -1455,7 +1455,7 @@ function markHighlighted(part)
     lbl.BackgroundTransparency = 1
     lbl.Text = GetFullPath(part)
     lbl.TextColor3 = Color3.fromRGB(255, 105, 180)
-    lbl.Font = Enum.Font.GothamBold
+    lbl.Font = Enum.Font.SourceSansBold
     lbl.TextSize = 12
     lbl.TextStrokeTransparency = 0.5
     lbl.Parent = bg
@@ -1650,7 +1650,7 @@ function RefreshWaypointUI()
         nameBox.Position = UDim2.new(0, 5, 0, 0)
         nameBox.BackgroundTransparency = 1
         nameBox.Text = wpData.Name
-        nameBox.Font = Enum.Font.Gotham
+        nameBox.Font = Enum.Font.SourceSans
         nameBox.TextSize = 13
         nameBox.TextColor3 = wpData.Color
         nameBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -1691,7 +1691,7 @@ function RefreshWaypointUI()
         delBtn.Position = UDim2.new(1, -30, 0.5, -12)
         delBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         delBtn.Text = "X"
-        delBtn.Font = Enum.Font.GothamBold
+        delBtn.Font = Enum.Font.SourceSansBold
         delBtn.TextColor3 = Color3.fromRGB(255,255,255)
         delBtn.TextSize = 12
         delBtn.Parent = row
@@ -1761,7 +1761,7 @@ function CreateWaypoint(position)
     label.BackgroundTransparency = 1
     label.Text = string.format("%s\n0 studs", name)
     label.TextColor3 = color
-    label.Font = Enum.Font.GothamBold
+    label.Font = Enum.Font.SourceSansBold
     label.TextSize = 14
     label.TextStrokeTransparency = 0.2
     label.Parent = bg
@@ -2064,7 +2064,7 @@ local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%
     titleLabel.Text = title or "Notification"
     titleLabel.TextColor3 = UI_THEME.Accent
     titleLabel.TextSize = 14
-    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Font = Enum.Font.SourceSansBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextWrapped = true
     titleLabel.Parent = textContainer
@@ -2078,7 +2078,7 @@ local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%
     contentLabel.Text = text or ""
     contentLabel.TextColor3 = UI_THEME.Text
     contentLabel.TextSize = 12
-    contentLabel.Font = Enum.Font.Gotham
+    contentLabel.Font = Enum.Font.SourceSans
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextWrapped = true
     contentLabel.Parent = textContainer
@@ -2094,7 +2094,7 @@ local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%
         hint.Text = "(Click to copy coordinates)"
         hint.TextColor3 = UI_THEME.Accent
         hint.TextSize = 10
-        hint.Font = Enum.Font.GothamItalic
+        hint.Font = Enum.Font.SourceSansItalic
         hint.TextXAlignment = Enum.TextXAlignment.Left
         hint.Parent = textContainer
 
@@ -2218,7 +2218,7 @@ function UI.CreateWindow(title)
     TitleLabel.Position = UDim2.new(0, 15, 0, 4)
     TitleLabel.BackgroundTransparency = 1
     TitleLabel.Text = title
-    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.Font = Enum.Font.SourceSansBold
     TitleLabel.TextSize = 18
     TitleLabel.TextColor3 = UI_THEME.Accent
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -2230,7 +2230,7 @@ function UI.CreateWindow(title)
     VersionLabel.Position = UDim2.new(0, 15, 0, 28)
     VersionLabel.BackgroundTransparency = 1
     VersionLabel.Text = "v" .. VERSION
-    VersionLabel.Font = Enum.Font.Gotham
+    VersionLabel.Font = Enum.Font.SourceSans
     VersionLabel.TextSize = 11
     VersionLabel.TextColor3 = UI_THEME.TextDark
     VersionLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -2256,7 +2256,7 @@ function UI.CreateWindow(title)
         SafeLabel.Size = UDim2.fromScale(1, 1)
         SafeLabel.BackgroundTransparency = 1
         SafeLabel.Text = "✓  SAFE MODE"
-        SafeLabel.Font = Enum.Font.GothamBold
+        SafeLabel.Font = Enum.Font.SourceSansBold
         SafeLabel.TextSize = 9
         SafeLabel.TextColor3 = Color3.fromRGB(60, 220, 110)
         SafeLabel.Parent = SafeBadge
@@ -2383,7 +2383,7 @@ function UI.CreateWindow(title)
     MinButton.BackgroundTransparency = 0
     MinButton.BackgroundColor3 = Color3.fromRGB(252, 149, 175)
     MinButton.Text = "X"
-    MinButton.Font = Enum.Font.GothamBold
+    MinButton.Font = Enum.Font.SourceSansBold
     MinButton.TextSize = 20
     MinButton.TextColor3 = Color3.fromRGB(0, 0, 0)
     MinButton.Parent = MainFrame
@@ -2392,13 +2392,13 @@ function UI.CreateWindow(title)
     local OldSize = MainFrame.Size
     
     local minimizedText = "Sp3arParvus v" .. VERSION
-    local textSize = TextService:GetTextSize(minimizedText, 14, Enum.Font.GothamBold, Vector2.new(1000, 1000))
+    local textSize = TextService:GetTextSize(minimizedText, 14, Enum.Font.SourceSansBold, Vector2.new(1000, 1000))
     local minimizedWidth = textSize.X + 45
 
     local MinimizedLabel = Instance.new("TextLabel")
     MinimizedLabel.Name = "MinimizedLabel"
     MinimizedLabel.Text = minimizedText
-    MinimizedLabel.Font = Enum.Font.GothamBold
+    MinimizedLabel.Font = Enum.Font.SourceSansBold
     MinimizedLabel.TextSize = 14
     MinimizedLabel.TextColor3 = UI_THEME.Accent
     MinimizedLabel.Position = UDim2.fromOffset(10, 0)
@@ -2482,7 +2482,7 @@ function UI.CreateTab(name, icon)
     TabLabel.Position = UDim2.new(0, 15, 0, 0)
     TabLabel.BackgroundTransparency = 1
     TabLabel.Text = name
-    TabLabel.Font = Enum.Font.GothamMedium
+    TabLabel.Font = Enum.Font.SourceSansSemibold
     TabLabel.TextSize = 14
     TabLabel.TextColor3 = UI_THEME.TextDark
     TabLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -2561,7 +2561,7 @@ function UI.CreateSection(page, name)
     Label.Position = UDim2.new(0, 2, 0, 5)
     Label.BackgroundTransparency = 1
     Label.Text = string.upper(name)
-    Label.Font = Enum.Font.GothamBold
+    Label.Font = Enum.Font.SourceSansBold
     Label.TextSize = 11
     Label.TextColor3 = UI_THEME.Accent
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -2584,7 +2584,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
-    Label.Font = Enum.Font.GothamMedium
+    Label.Font = Enum.Font.SourceSansSemibold
     Label.TextSize = 13
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -2598,7 +2598,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         LockBtn.Position = UDim2.new(1, -64, 0.5, 0)
         LockBtn.BackgroundTransparency = 1
         LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
-        LockBtn.Font = Enum.Font.GothamBold
+        LockBtn.Font = Enum.Font.SourceSansBold
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
@@ -2677,7 +2677,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
-    Label.Font = Enum.Font.GothamMedium
+    Label.Font = Enum.Font.SourceSansSemibold
     Label.TextSize = 13
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -2691,7 +2691,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         LockBtn.Position = UDim2.new(0.6, -12, 0.5, 0)
         LockBtn.BackgroundTransparency = 1
         LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
-        LockBtn.Font = Enum.Font.GothamBold
+        LockBtn.Font = Enum.Font.SourceSansBold
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
@@ -2716,7 +2716,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Input.Position = UDim2.new(0, 25, 0, 0)
     Input.BackgroundTransparency = 1
     Input.Text = tostring(default)
-    Input.Font = Enum.Font.GothamBold
+    Input.Font = Enum.Font.SourceSansBold
     Input.TextSize = 13
     Input.TextColor3 = UI_THEME.Accent
     Input.ClearTextOnFocus = false
@@ -2752,7 +2752,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         btn.Position = pos
         btn.BackgroundTransparency = 1
         btn.Text = t
-        btn.Font = Enum.Font.GothamBold
+        btn.Font = Enum.Font.SourceSansBold
         btn.TextSize = 16
         btn.TextColor3 = UI_THEME.TextDark
         btn.Parent = InputFrame
@@ -2780,7 +2780,7 @@ function UI.CreateButton(page, text, callback)
     Button.BackgroundTransparency = 0.2
     Button.BorderSizePixel = 0
     Button.Text = text
-    Button.Font = Enum.Font.GothamBold
+    Button.Font = Enum.Font.SourceSansBold
     Button.TextSize = 13
     Button.TextColor3 = Color3.fromRGB(255, 255, 255)
     Button.Parent = page
@@ -3742,7 +3742,7 @@ function CreateClosestPlayerTracker()
     TrackerHeaderLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerHeaderLabel.BackgroundTransparency = 1
     TrackerHeaderLabel.TextColor3 = COLORS.CLOSEST
-    TrackerHeaderLabel.Font = Enum.Font.GothamBold
+    TrackerHeaderLabel.Font = Enum.Font.SourceSansBold
     TrackerHeaderLabel.TextSize = 14
     TrackerHeaderLabel.Text = "Closest Player"
     TrackerHeaderLabel.LayoutOrder = 1
@@ -3754,7 +3754,7 @@ function CreateClosestPlayerTracker()
     TrackerNameLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerNameLabel.BackgroundTransparency = 1
     TrackerNameLabel.TextColor3 = COLORS.NORMAL
-    TrackerNameLabel.Font = Enum.Font.GothamBold
+    TrackerNameLabel.Font = Enum.Font.SourceSansBold
     TrackerNameLabel.TextSize = 14
     TrackerNameLabel.Text = "Searching..."
     TrackerNameLabel.LayoutOrder = 2
@@ -3766,7 +3766,7 @@ function CreateClosestPlayerTracker()
     TrackerDistanceLabel.Size = UDim2.new(1, 0, 0, 18)
     TrackerDistanceLabel.BackgroundTransparency = 1
     TrackerDistanceLabel.TextColor3 = COLORS.CLOSEST
-    TrackerDistanceLabel.Font = Enum.Font.GothamBold
+    TrackerDistanceLabel.Font = Enum.Font.SourceSansBold
     TrackerDistanceLabel.TextSize = 14
     TrackerDistanceLabel.Text = ""
     TrackerDistanceLabel.LayoutOrder = 3
@@ -3781,7 +3781,7 @@ function CreateClosestPlayerTracker()
     minimizeBtn.Size = UDim2.fromOffset(20, 20)
     minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
     minimizeBtn.Text = "−"
-    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.Font = Enum.Font.SourceSansBold
     minimizeBtn.TextSize = 14
     minimizeBtn.TextColor3 = COLORS.CLOSEST
     minimizeBtn.Parent = ClosestPlayerTrackerLabel
@@ -3974,7 +3974,7 @@ function CreateItemPanel()
     title.Position = UDim2.fromOffset(12, 0)
     title.BackgroundTransparency = 1
     title.Text = "🎒 Item Panel"
-    title.Font = Enum.Font.GothamBold
+    title.Font = Enum.Font.SourceSansBold
     title.TextSize = 16
     title.TextColor3 = UI_THEME.Accent
     title.TextXAlignment = Enum.TextXAlignment.Left
@@ -3987,7 +3987,7 @@ function CreateItemPanel()
     closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     closeBtn.BackgroundTransparency = 0.5
     closeBtn.Text = "X"
-    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Font = Enum.Font.SourceSansBold
     closeBtn.TextSize = 14
     closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     closeBtn.BorderSizePixel = 0
@@ -4055,7 +4055,7 @@ function CreateItemPanel()
     pfTitle.Position = UDim2.fromOffset(10, 0)
     pfTitle.BackgroundTransparency = 1
     pfTitle.Text = "Properties"
-    pfTitle.Font = Enum.Font.GothamBold
+    pfTitle.Font = Enum.Font.SourceSansBold
     pfTitle.TextSize = 12
     pfTitle.TextColor3 = UI_THEME.Accent
     pfTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -4068,7 +4068,7 @@ function CreateItemPanel()
     pfSearch.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     pfSearch.Text = ""
     pfSearch.PlaceholderText = "Search..."
-    pfSearch.Font = Enum.Font.Gotham
+    pfSearch.Font = Enum.Font.SourceSans
     pfSearch.TextSize = 11
     pfSearch.TextColor3 = UI_THEME.Text
     pfSearch.Parent = pfHeader
@@ -4157,7 +4157,7 @@ function CreateAdvancedPlayerPanel()
     title.Position = UDim2.fromOffset(12, 0)
     title.BackgroundTransparency = 1
     title.Text = "👥 Player Panel"
-    title.Font = Enum.Font.GothamBold
+    title.Font = Enum.Font.SourceSansBold
     title.TextSize = 16
     title.TextColor3 = UI_THEME.Accent
     title.TextXAlignment = Enum.TextXAlignment.Left
@@ -4170,7 +4170,7 @@ function CreateAdvancedPlayerPanel()
     closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     closeBtn.BackgroundTransparency = 0.5
     closeBtn.Text = "X"
-    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Font = Enum.Font.SourceSansBold
     closeBtn.TextSize = 14
     closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     closeBtn.BorderSizePixel = 0
@@ -4195,7 +4195,7 @@ function CreateAdvancedPlayerPanel()
     teamsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     teamsBtn.BackgroundTransparency = 0.5
     teamsBtn.Text = "🛡️"
-    teamsBtn.Font = Enum.Font.GothamBold
+    teamsBtn.Font = Enum.Font.SourceSansBold
     teamsBtn.TextSize = 14
     teamsBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     teamsBtn.BorderSizePixel = 0
@@ -4231,7 +4231,7 @@ function CreateAdvancedPlayerPanel()
     searchBox.BackgroundColor3 = UI_THEME.Element
     searchBox.Text = ""
     searchBox.PlaceholderText = "Search players..."
-    searchBox.Font = Enum.Font.Gotham
+    searchBox.Font = Enum.Font.SourceSans
     searchBox.TextSize = 13
     searchBox.TextColor3 = UI_THEME.Text
     searchBox.PlaceholderColor3 = UI_THEME.TextDark
@@ -4257,7 +4257,7 @@ function CreateAdvancedPlayerPanel()
         btn.Size = UDim2.new(0.33, -3, 1, 0)
         btn.BackgroundColor3 = (AdvancedPlayerPanelState.ListTab == name) and UI_THEME.Accent or UI_THEME.Element
         btn.Text = label
-        btn.Font = Enum.Font.GothamBold
+        btn.Font = Enum.Font.SourceSansBold
         btn.TextSize = 12
         btn.TextColor3 = UI_THEME.Text
         btn.Parent = tabFrame
@@ -4311,7 +4311,7 @@ function CreateAdvancedPlayerPanel()
     backBtn.Position = UDim2.fromOffset(10, 10)
     backBtn.BackgroundColor3 = UI_THEME.Element
     backBtn.Text = "← Back"
-    backBtn.Font = Enum.Font.GothamBold
+    backBtn.Font = Enum.Font.SourceSansBold
     backBtn.TextSize = 12
     backBtn.TextColor3 = UI_THEME.Text
     backBtn.Parent = DetailsFrame
@@ -4342,7 +4342,7 @@ function CreateAdvancedPlayerPanel()
         btn.Size = UDim2.new(0.33, -3, 1, 0)
         btn.BackgroundColor3 = (AdvancedPlayerPanelState.DetailsTab == name) and UI_THEME.Accent or UI_THEME.Element
         btn.Text = label
-        btn.Font = Enum.Font.GothamBold
+        btn.Font = Enum.Font.SourceSansBold
         btn.TextSize = 12
         btn.TextColor3 = UI_THEME.Text
         btn.Parent = detailsTabFrame
@@ -4409,7 +4409,7 @@ function CreateAdvancedPlayerPanel()
     pfTitle.Position = UDim2.fromOffset(10, 0)
     pfTitle.BackgroundTransparency = 1
     pfTitle.Text = "Properties"
-    pfTitle.Font = Enum.Font.GothamBold
+    pfTitle.Font = Enum.Font.SourceSansBold
     pfTitle.TextSize = 12
     pfTitle.TextColor3 = UI_THEME.Accent
     pfTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -4422,7 +4422,7 @@ function CreateAdvancedPlayerPanel()
     pfSearch.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     pfSearch.Text = ""
     pfSearch.PlaceholderText = "Search properties..."
-    pfSearch.Font = Enum.Font.Gotham
+    pfSearch.Font = Enum.Font.SourceSans
     pfSearch.TextSize = 11
     pfSearch.TextColor3 = UI_THEME.Text
     pfSearch.Parent = pfHeader
@@ -4469,7 +4469,7 @@ function CreateAdvancedPlayerPanel()
     teamBackBtn.Position = UDim2.fromOffset(10, 10)
     teamBackBtn.BackgroundColor3 = UI_THEME.Element
     teamBackBtn.Text = "← Back"
-    teamBackBtn.Font = Enum.Font.GothamBold
+    teamBackBtn.Font = Enum.Font.SourceSansBold
     teamBackBtn.TextSize = 12
     teamBackBtn.TextColor3 = UI_THEME.Text
     teamBackBtn.Parent = TeamFrame
@@ -4550,7 +4550,7 @@ function UpdateTeamPanelList()
         nameLabel.Position = UDim2.fromOffset(10, 0)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = string.format("%s [%d Players]", teamName, playerCount)
-        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.Font = Enum.Font.SourceSansBold
         nameLabel.TextSize = 14
         nameLabel.TextColor3 = teamColor
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -4561,7 +4561,7 @@ function UpdateTeamPanelList()
         expandBtn.Position = UDim2.new(1, -35, 0.5, -12)
         expandBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         expandBtn.Text = isExpanded and "⬇️" or "➡️"
-        expandBtn.Font = Enum.Font.GothamBold
+        expandBtn.Font = Enum.Font.SourceSansBold
         expandBtn.TextSize = 12
         expandBtn.TextColor3 = Color3.new(1, 1, 1)
         expandBtn.Parent = row
@@ -4577,7 +4577,7 @@ function UpdateTeamPanelList()
         wBtn.Position = UDim2.new(1, -65, 0.5, -12)
         wBtn.BackgroundColor3 = isWhitelisted and UI_THEME.Success or Color3.fromRGB(40, 40, 40)
         wBtn.Text = "W"
-        wBtn.Font = Enum.Font.GothamBold
+        wBtn.Font = Enum.Font.SourceSansBold
         wBtn.TextSize = 12
         wBtn.TextColor3 = Color3.new(1, 1, 1)
         wBtn.Parent = row
@@ -4593,7 +4593,7 @@ function UpdateTeamPanelList()
         bBtn.Position = UDim2.new(1, -95, 0.5, -12)
         bBtn.BackgroundColor3 = isBlacklisted and UI_THEME.Fail or Color3.fromRGB(40, 40, 40)
         bBtn.Text = "B"
-        bBtn.Font = Enum.Font.GothamBold
+        bBtn.Font = Enum.Font.SourceSansBold
         bBtn.TextSize = 12
         bBtn.TextColor3 = Color3.new(1, 1, 1)
         bBtn.Parent = row
@@ -4622,7 +4622,7 @@ function UpdateTeamPanelList()
                 pLabel.Position = UDim2.fromOffset(10, 0)
                 pLabel.BackgroundTransparency = 1
                 pLabel.Text = player.DisplayName or player.Name
-                pLabel.Font = Enum.Font.Gotham
+                pLabel.Font = Enum.Font.SourceSans
                 pLabel.TextSize = 12
                 pLabel.TextColor3 = Color3.new(1, 1, 1)
                 pLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -4633,7 +4633,7 @@ function UpdateTeamPanelList()
                 pwBtn.Position = UDim2.new(1, -25, 0.5, -10)
                 pwBtn.BackgroundColor3 = pWhitelisted and UI_THEME.Success or Color3.fromRGB(45, 45, 45)
                 pwBtn.Text = "W"
-                pwBtn.Font = Enum.Font.GothamBold
+                pwBtn.Font = Enum.Font.SourceSansBold
                 pwBtn.TextSize = 10
                 pwBtn.TextColor3 = Color3.new(1, 1, 1)
                 pwBtn.Parent = pRow
@@ -4649,7 +4649,7 @@ function UpdateTeamPanelList()
                 pbBtn.Position = UDim2.new(1, -50, 0.5, -10)
                 pbBtn.BackgroundColor3 = pBlacklisted and UI_THEME.Fail or Color3.fromRGB(45, 45, 45)
                 pbBtn.Text = "B"
-                pbBtn.Font = Enum.Font.GothamBold
+                pbBtn.Font = Enum.Font.SourceSansBold
                 pbBtn.TextSize = 10
                 pbBtn.TextColor3 = Color3.new(1, 1, 1)
                 pbBtn.Parent = pRow
@@ -4767,7 +4767,7 @@ function UpdateAdvancedPlayerList()
 
                 local copyBtn = Instance.new("TextButton")
                 copyBtn.Text = "📋"
-                copyBtn.Font = Enum.Font.Gotham
+                copyBtn.Font = Enum.Font.SourceSans
                 copyBtn.TextSize = 12
                 copyBtn.TextColor3 = UI_THEME.Text
                 copyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -4788,9 +4788,9 @@ function UpdateAdvancedPlayerList()
                 return container
             end
 
-            createCopyableLabel(frame, nickname, UDim2.fromOffset(55, 5), Enum.Font.GothamBold, 14, UI_THEME.Text)
-            createCopyableLabel(frame, "@" .. username, UDim2.fromOffset(55, 25), Enum.Font.Gotham, 12, UI_THEME.TextDark)
-            createCopyableLabel(frame, tostring(player.UserId), UDim2.fromOffset(55, 45), Enum.Font.Gotham, 12, UI_THEME.TextDark)
+            createCopyableLabel(frame, nickname, UDim2.fromOffset(55, 5), Enum.Font.SourceSansBold, 14, UI_THEME.Text)
+            createCopyableLabel(frame, "@" .. username, UDim2.fromOffset(55, 25), Enum.Font.SourceSans, 12, UI_THEME.TextDark)
+            createCopyableLabel(frame, tostring(player.UserId), UDim2.fromOffset(55, 45), Enum.Font.SourceSans, 12, UI_THEME.TextDark)
 
             local distLbl = Instance.new("TextLabel")
             distLbl.Name = "Distance"
@@ -4798,7 +4798,7 @@ function UpdateAdvancedPlayerList()
             distLbl.Position = UDim2.new(1, -65, 0, 0)
             distLbl.BackgroundTransparency = 1
             distLbl.Text = "---"
-            distLbl.Font = Enum.Font.GothamBold
+            distLbl.Font = Enum.Font.SourceSansBold
             distLbl.TextSize = 12
             distLbl.TextColor3 = UI_THEME.Accent
             distLbl.TextXAlignment = Enum.TextXAlignment.Right
@@ -4826,7 +4826,7 @@ function UpdateAdvancedPlayerList()
             wBtn.Position = UDim2.new(1, -100, 0.5, -12)
             wBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
             wBtn.Text = "W"
-            wBtn.Font = Enum.Font.GothamBold
+            wBtn.Font = Enum.Font.SourceSansBold
             wBtn.TextSize = 12
             wBtn.TextColor3 = Color3.new(1, 1, 1)
             wBtn.ZIndex = 2
@@ -4843,7 +4843,7 @@ function UpdateAdvancedPlayerList()
             bBtn.Position = UDim2.new(1, -130, 0.5, -12)
             bBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
             bBtn.Text = "B"
-            bBtn.Font = Enum.Font.GothamBold
+            bBtn.Font = Enum.Font.SourceSansBold
             bBtn.TextSize = 12
             bBtn.TextColor3 = Color3.new(1, 1, 1)
             bBtn.ZIndex = 2
@@ -4921,7 +4921,7 @@ local function UpdateItemPropertyPane(instance)
             catLabel.Position = UDim2.fromOffset(5, 0)
             catLabel.BackgroundTransparency = 1
             catLabel.Text = "v " .. catName
-            catLabel.Font = Enum.Font.GothamBold
+            catLabel.Font = Enum.Font.SourceSansBold
             catLabel.TextSize = 11
             catLabel.TextColor3 = UI_THEME.TextDark
             catLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -4945,7 +4945,7 @@ local function UpdateItemPropertyPane(instance)
                         lockBtn.Position = UDim2.new(0, 5, 0.5, -10)
                         lockBtn.BackgroundTransparency = 1
                         lockBtn.Text = isLocked and "🔒" or "🔓"
-                        lockBtn.Font = Enum.Font.GothamBold
+                        lockBtn.Font = Enum.Font.SourceSansBold
                         lockBtn.TextSize = 12
                         lockBtn.TextColor3 = isLocked and UI_THEME.Accent or UI_THEME.TextDark
                         lockBtn.Parent = row
@@ -4973,7 +4973,7 @@ local function UpdateItemPropertyPane(instance)
                         nameLabel.Position = UDim2.fromOffset(30, 0)
                         nameLabel.BackgroundTransparency = 1
                         nameLabel.Text = prop
-                        nameLabel.Font = Enum.Font.Gotham
+                        nameLabel.Font = Enum.Font.SourceSans
                         nameLabel.TextSize = 10
                         nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
                         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -4984,7 +4984,7 @@ local function UpdateItemPropertyPane(instance)
                         valInput.Position = UDim2.new(0.4, 5, 0.1, 0)
                         valInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
                         valInput.Text = tostring(val)
-                        valInput.Font = Enum.Font.Gotham
+                        valInput.Font = Enum.Font.SourceSans
                         valInput.TextSize = 10
                         valInput.TextColor3 = Color3.new(1, 1, 1)
                         valInput.ClearTextOnFocus = false
@@ -5068,7 +5068,7 @@ local function UpdatePropertyPane(instance)
             catLabel.Position = UDim2.fromOffset(5, 0)
             catLabel.BackgroundTransparency = 1
             catLabel.Text = "v " .. catName
-            catLabel.Font = Enum.Font.GothamBold
+            catLabel.Font = Enum.Font.SourceSansBold
             catLabel.TextSize = 11
             catLabel.TextColor3 = UI_THEME.TextDark
             catLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -5091,7 +5091,7 @@ local function UpdatePropertyPane(instance)
                         nameLabel.Position = UDim2.fromOffset(10, 0)
                         nameLabel.BackgroundTransparency = 1
                         nameLabel.Text = prop
-                        nameLabel.Font = Enum.Font.Gotham
+                        nameLabel.Font = Enum.Font.SourceSans
                         nameLabel.TextSize = 11
                         nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
                         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -5102,7 +5102,7 @@ local function UpdatePropertyPane(instance)
                         valueLabel.Position = UDim2.new(0.4, 5, 0, 0)
                         valueLabel.BackgroundTransparency = 1
                         valueLabel.Text = tostring(val)
-                        valueLabel.Font = Enum.Font.Gotham
+                        valueLabel.Font = Enum.Font.SourceSans
                         valueLabel.TextSize = 11
                         valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
                         valueLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -5145,7 +5145,7 @@ local function VisualizeItemInstance(instance, content, depth)
                 toggleBtn.Position = UDim2.fromOffset(indent, 0)
                 toggleBtn.BackgroundTransparency = 1
                 toggleBtn.Text = isExpanded and "▼" or "▶"
-                toggleBtn.Font = Enum.Font.GothamBold
+                toggleBtn.Font = Enum.Font.SourceSansBold
                 toggleBtn.TextSize = 10
                 toggleBtn.TextColor3 = UI_THEME.Accent
                 toggleBtn.Parent = row
@@ -5161,7 +5161,7 @@ local function VisualizeItemInstance(instance, content, depth)
             selectBtn.Position = UDim2.fromOffset(indent + 20, 0)
             selectBtn.BackgroundTransparency = 1
             selectBtn.Text = child.Name .. " (" .. child.ClassName .. ")"
-            selectBtn.Font = Enum.Font.Gotham
+            selectBtn.Font = Enum.Font.SourceSans
             selectBtn.TextSize = 11
             selectBtn.TextColor3 = isSelected and Color3.new(1, 1, 1) or UI_THEME.Text
             selectBtn.TextXAlignment = Enum.TextXAlignment.Left
@@ -5199,7 +5199,7 @@ function UpdateItemPanelUI()
         lbl.Size = UDim2.new(1, 0, 0, 25)
         lbl.BackgroundTransparency = 1
         lbl.Text = "  " .. name:upper()
-        lbl.Font = Enum.Font.GothamBold
+        lbl.Font = Enum.Font.SourceSansBold
         lbl.TextSize = 12
         lbl.TextColor3 = UI_THEME.Accent
         lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -5261,7 +5261,7 @@ local function VisualizeInstance(instance, content, depth)
                 toggleBtn.Position = UDim2.fromOffset(indent, 0)
                 toggleBtn.BackgroundTransparency = 1
                 toggleBtn.Text = isExpanded and "⬇️" or "➡️"
-                toggleBtn.Font = Enum.Font.GothamBold
+                toggleBtn.Font = Enum.Font.SourceSansBold
                 toggleBtn.TextSize = 10
                 toggleBtn.TextColor3 = UI_THEME.Accent
                 toggleBtn.Parent = row
@@ -5277,7 +5277,7 @@ local function VisualizeInstance(instance, content, depth)
             selectBtn.Position = UDim2.fromOffset(indent + 24, 0)
             selectBtn.BackgroundTransparency = 1
             selectBtn.Text = child.Name .. " (" .. child.ClassName .. ")"
-            selectBtn.Font = Enum.Font.Gotham
+            selectBtn.Font = Enum.Font.SourceSans
             selectBtn.TextSize = 12
             selectBtn.TextColor3 = isSelected and Color3.new(1, 1, 1) or UI_THEME.Text
             selectBtn.TextXAlignment = Enum.TextXAlignment.Left
@@ -5313,7 +5313,7 @@ function ShowAdvancedPlayerDetails(player)
         lbl.Size = UDim2.new(1, 0, 0, 25)
         lbl.BackgroundTransparency = 1
         lbl.Text = name:upper()
-        lbl.Font = Enum.Font.GothamBold
+        lbl.Font = Enum.Font.SourceSansBold
         lbl.TextSize = 12
         lbl.TextColor3 = UI_THEME.Accent
         lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -5330,7 +5330,7 @@ function ShowAdvancedPlayerDetails(player)
         n.Size = UDim2.new(0.4, 0, 1, 0)
         n.BackgroundTransparency = 1
         n.Text = name .. ":"
-        n.Font = Enum.Font.GothamMedium
+        n.Font = Enum.Font.SourceSansSemibold
         n.TextSize = 13
         n.TextColor3 = UI_THEME.TextDark
         n.TextXAlignment = Enum.TextXAlignment.Left
@@ -5341,7 +5341,7 @@ function ShowAdvancedPlayerDetails(player)
         v.Position = UDim2.new(0.4, 0, 0, 0)
         v.BackgroundTransparency = 1
         v.Text = initialValue
-        v.Font = Enum.Font.GothamBold
+        v.Font = Enum.Font.SourceSansBold
         v.TextSize = 13
         v.TextColor3 = UI_THEME.Text
         v.TextXAlignment = Enum.TextXAlignment.Right
@@ -5356,7 +5356,7 @@ function ShowAdvancedPlayerDetails(player)
         btn.Size = UDim2.new(1, 0, 0, 30)
         btn.BackgroundColor3 = UI_THEME.Element
         btn.Text = name
-        btn.Font = Enum.Font.GothamBold
+        btn.Font = Enum.Font.SourceSansBold
         btn.TextSize = 13
         btn.TextColor3 = UI_THEME.Text
         btn.Parent = content
@@ -5492,7 +5492,7 @@ function ShowAdvancedPlayerDetails(player)
             lbl.Size = UDim2.new(1, 0, 0, 30)
             lbl.BackgroundTransparency = 1
             lbl.Text = "Character not found in Workspace"
-            lbl.Font = Enum.Font.Gotham
+            lbl.Font = Enum.Font.SourceSans
             lbl.TextSize = 13
             lbl.TextColor3 = UI_THEME.TextDark
             lbl.Parent = content
@@ -5627,7 +5627,7 @@ local function CreateESP(player)
     statusLabel.BackgroundTransparency = 1
     statusLabel.TextColor3 = Color3.new(1, 1, 1)
     statusLabel.TextStrokeTransparency = 0
-    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.Font = Enum.Font.SourceSansBold
     statusLabel.TextSize = 16
     statusLabel.LayoutOrder = 0
     statusLabel.Visible = false
@@ -5641,7 +5641,7 @@ local function CreateESP(player)
     nicknameLabel.BackgroundTransparency = 1
     nicknameLabel.TextColor3 = COLORS.NORMAL
     nicknameLabel.TextStrokeTransparency = 0
-    nicknameLabel.Font = Enum.Font.GothamBold
+    nicknameLabel.Font = Enum.Font.SourceSansBold
     nicknameLabel.TextSize = 14
     nicknameLabel.LayoutOrder = 1
     nicknameLabel.Parent = container
@@ -5654,7 +5654,7 @@ local function CreateESP(player)
     usernameLabel.BackgroundTransparency = 1
     usernameLabel.TextColor3 = COLORS.NORMAL
     usernameLabel.TextStrokeTransparency = 0
-    usernameLabel.Font = Enum.Font.GothamBold
+    usernameLabel.Font = Enum.Font.SourceSansBold
     usernameLabel.TextSize = 14
     usernameLabel.LayoutOrder = 2
     usernameLabel.Parent = container
@@ -5667,7 +5667,7 @@ local function CreateESP(player)
     distanceLabel.BackgroundTransparency = 1
     distanceLabel.TextColor3 = COLORS.NORMAL
     distanceLabel.TextStrokeTransparency = 0
-    distanceLabel.Font = Enum.Font.GothamBold
+    distanceLabel.Font = Enum.Font.SourceSansBold
     distanceLabel.TextSize = 14
     distanceLabel.LayoutOrder = 3
     distanceLabel.Parent = container
@@ -5679,7 +5679,7 @@ local function CreateESP(player)
     healthNumLabel.BackgroundTransparency = 1
     healthNumLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     healthNumLabel.TextStrokeTransparency = 0
-    healthNumLabel.Font = Enum.Font.GothamBold
+    healthNumLabel.Font = Enum.Font.SourceSansBold
     healthNumLabel.TextSize = 14
     healthNumLabel.LayoutOrder = 4
     healthNumLabel.Text = "100/100"
@@ -5711,7 +5711,7 @@ local function CreateESP(player)
     equippedLabel.BackgroundTransparency = 1
     equippedLabel.TextColor3 = GetTeamColor(player)
     equippedLabel.TextStrokeTransparency = 0
-    equippedLabel.Font = Enum.Font.GothamBold
+    equippedLabel.Font = Enum.Font.SourceSansBold
     equippedLabel.TextSize = 14
     equippedLabel.LayoutOrder = 6
     equippedLabel.Parent = container
@@ -6287,7 +6287,7 @@ function CreateD3vToolHUD(parent)
     D3vToolLabel.Name = "D3vToolLabel"
     D3vToolLabel.Text = ""
     D3vToolLabel.BackgroundTransparency = 1
-    D3vToolLabel.Font = Enum.Font.GothamBold
+    D3vToolLabel.Font = Enum.Font.SourceSansBold
     D3vToolLabel.TextSize = 15
     D3vToolLabel.TextColor3 = Color3.new(1, 1, 1)
     D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -6381,7 +6381,7 @@ function CreatePerformanceDisplay(parent)
     headerTitle.Position = UDim2.fromOffset(8, 2)
     headerTitle.BackgroundTransparency = 1
     headerTitle.Text = "Performance"
-    headerTitle.Font = Enum.Font.GothamBold
+    headerTitle.Font = Enum.Font.SourceSansBold
     headerTitle.TextSize = 12
     headerTitle.TextColor3 = UI_THEME.Accent
     headerTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -6410,7 +6410,7 @@ function CreatePerformanceDisplay(parent)
         label.Size = UDim2.new(0.4, 0, 1, 0)
         label.BackgroundTransparency = 1
         label.Text = name .. ":"
-        label.Font = Enum.Font.GothamMedium
+        label.Font = Enum.Font.SourceSansSemibold
         label.TextSize = 11
         label.TextColor3 = Color3.fromRGB(200, 200, 200)
         label.TextXAlignment = Enum.TextXAlignment.Left
@@ -6421,7 +6421,7 @@ function CreatePerformanceDisplay(parent)
         value.Position = UDim2.new(0.4, 0, 0, 0)
         value.BackgroundTransparency = 1
         value.Text = initialValue
-        value.Font = Enum.Font.GothamBold
+        value.Font = Enum.Font.SourceSansBold
         value.TextSize = 11
         value.TextColor3 = Color3.fromRGB(255, 255, 255)
         value.TextXAlignment = Enum.TextXAlignment.Right
@@ -6446,7 +6446,7 @@ function CreatePerformanceDisplay(parent)
     minimizeBtn.Size = UDim2.fromOffset(18, 18)
     minimizeBtn.Position = UDim2.new(1, -22, 0, 4)
     minimizeBtn.Text = "−"
-    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.Font = Enum.Font.SourceSansBold
     minimizeBtn.TextSize = 14
     minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     minimizeBtn.BorderSizePixel = 0
@@ -6513,7 +6513,7 @@ function CreateLocalHealthHUD(parent)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = "100/100"
-    label.Font = Enum.Font.GothamBold
+    label.Font = Enum.Font.SourceSansBold
     label.TextSize = 16
     label.TextColor3 = Color3.fromRGB(255, 255, 255)
     label.Parent = LocalHealthHUD
@@ -7127,7 +7127,7 @@ local function CreateFreecamUI()
     title.Text = "  Freecam Keybinds"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBold
+    title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.LayoutOrder = 1
@@ -7154,7 +7154,7 @@ local function CreateFreecamUI()
         lbl.Text = "    " .. bind
         lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
         lbl.BackgroundTransparency = 1
-        lbl.Font = Enum.Font.Gotham
+        lbl.Font = Enum.Font.SourceSans
         lbl.TextSize = 12
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.LayoutOrder = i + 1
@@ -7577,7 +7577,7 @@ function ShowWorldHumList(page)
     refreshBtn.Size = UDim2.new(1, 0, 0, 30)
     refreshBtn.BackgroundColor3 = UI_THEME.Element
     refreshBtn.Text = "Refresh Scan"
-    refreshBtn.Font = Enum.Font.GothamBold
+    refreshBtn.Font = Enum.Font.SourceSansBold
     refreshBtn.TextSize = 13
     refreshBtn.TextColor3 = UI_THEME.Accent
     refreshBtn.Parent = page
@@ -7592,7 +7592,7 @@ function ShowWorldHumList(page)
         lbl.Size = UDim2.new(1, 0, 0, 30)
         lbl.BackgroundTransparency = 1
         lbl.Text = "No non-local humanoids found."
-        lbl.Font = Enum.Font.Gotham
+        lbl.Font = Enum.Font.SourceSans
         lbl.TextSize = 13
         lbl.TextColor3 = UI_THEME.TextDark
         lbl.Parent = page
@@ -7634,7 +7634,7 @@ function ShowWorldHumList(page)
         nameLabel.Position = UDim2.new(0, 12, 0, 4)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = model.Name
-        nameLabel.Font = Enum.Font.GothamMedium
+        nameLabel.Font = Enum.Font.SourceSansSemibold
         nameLabel.TextSize = 14
         nameLabel.TextColor3 = UI_THEME.Text
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -7645,7 +7645,7 @@ function ShowWorldHumList(page)
         distanceLabel.Position = UDim2.new(0, 12, 0, 22)
         distanceLabel.BackgroundTransparency = 1
         distanceLabel.Text = math.floor(data.dist) .. " studs away"
-        distanceLabel.Font = Enum.Font.Gotham
+        distanceLabel.Font = Enum.Font.SourceSans
         distanceLabel.TextSize = 12
         distanceLabel.TextColor3 = UI_THEME.TextDark
         distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -7667,7 +7667,7 @@ function ShowWorldHumList(page)
         editBtn.AnchorPoint = Vector2.new(1, 0.5)
         editBtn.BackgroundColor3 = UI_THEME.Accent
         editBtn.Text = "Edit"
-        editBtn.Font = Enum.Font.GothamBold
+        editBtn.Font = Enum.Font.SourceSansBold
         editBtn.TextSize = 12
         editBtn.TextColor3 = Color3.new(1, 1, 1)
         editBtn.Visible = false
@@ -7740,7 +7740,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
-    Label.Font = Enum.Font.GothamMedium
+    Label.Font = Enum.Font.SourceSansSemibold
     Label.TextSize = 13
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -7753,7 +7753,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     LockBtn.Position = UDim2.new(1, -64, 0.5, 0)
     LockBtn.BackgroundTransparency = 1
     LockBtn.Text = initialLocked and "🔒" or "🔓"
-    LockBtn.Font = Enum.Font.GothamBold
+    LockBtn.Font = Enum.Font.SourceSansBold
     LockBtn.TextSize = 14
     LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
     LockBtn.Parent = Frame
@@ -7825,7 +7825,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
-    Label.Font = Enum.Font.GothamMedium
+    Label.Font = Enum.Font.SourceSansSemibold
     Label.TextSize = 13
     Label.TextColor3 = UI_THEME.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -7838,7 +7838,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     LockBtn.Position = UDim2.new(0.6, -12, 0.5, 0)
     LockBtn.BackgroundTransparency = 1
     LockBtn.Text = initialLocked and "🔒" or "🔓"
-    LockBtn.Font = Enum.Font.GothamBold
+    LockBtn.Font = Enum.Font.SourceSansBold
     LockBtn.TextSize = 14
     LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
     LockBtn.Parent = Frame
@@ -7856,7 +7856,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     Input.Position = UDim2.new(0, 25, 0, 0)
     Input.BackgroundTransparency = 1
     Input.Text = tostring(math.floor(targetHum[prop] * 100) / 100)
-    Input.Font = Enum.Font.GothamBold
+    Input.Font = Enum.Font.SourceSansBold
     Input.TextSize = 13
     Input.TextColor3 = UI_THEME.Accent
     Input.ClearTextOnFocus = false
@@ -7896,7 +7896,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     mBtn.Size = UDim2.new(0, 25, 1, 0)
     mBtn.BackgroundTransparency = 1
     mBtn.Text = "-"
-    mBtn.Font = Enum.Font.GothamBold
+    mBtn.Font = Enum.Font.SourceSansBold
     mBtn.TextSize = 16
     mBtn.TextColor3 = UI_THEME.TextDark
     mBtn.Parent = InputFrame
@@ -7907,7 +7907,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     pBtn.Position = UDim2.new(1, -25, 0, 0)
     pBtn.BackgroundTransparency = 1
     pBtn.Text = "+"
-    pBtn.Font = Enum.Font.GothamBold
+    pBtn.Font = Enum.Font.SourceSansBold
     pBtn.TextSize = 16
     pBtn.TextColor3 = UI_THEME.TextDark
     pBtn.Parent = InputFrame
@@ -7929,7 +7929,7 @@ function ShowWorldHumEditor(page, hum)
     backBtn.Size = UDim2.new(0, 80, 0, 24)
     backBtn.BackgroundColor3 = UI_THEME.Element
     backBtn.Text = "← Back"
-    backBtn.Font = Enum.Font.GothamBold
+    backBtn.Font = Enum.Font.SourceSansBold
     backBtn.TextSize = 12
     backBtn.TextColor3 = UI_THEME.Text
     backBtn.Parent = page
@@ -8000,7 +8000,7 @@ if SAFE_MODE then
     safeBanner.BackgroundColor3 = Color3.fromRGB(20, 60, 30)
     safeBanner.BorderSizePixel = 0
     safeBanner.Text = "⚠  Camera Tracking & Input Simulation\nare disabled in Safe Mode"
-    safeBanner.Font = Enum.Font.Gotham
+    safeBanner.Font = Enum.Font.SourceSans
     safeBanner.TextSize = 11
     safeBanner.TextColor3 = Color3.fromRGB(60, 200, 100)
     safeBanner.TextWrapped = true
@@ -8033,7 +8033,7 @@ do
     PriorityLabel.Position = UDim2.new(0, 0, 0, 0)
     PriorityLabel.BackgroundTransparency = 1
     PriorityLabel.Text = "Priority: Head"
-    PriorityLabel.Font = Enum.Font.GothamBold
+    PriorityLabel.Font = Enum.Font.SourceSansBold
     PriorityLabel.TextSize = 14
     PriorityLabel.TextColor3 = UI_THEME.Text
     PriorityLabel.Parent = TargetArea
@@ -8343,7 +8343,7 @@ do
     smLabel.Text = SAFE_MODE
         and "✓  Safe Mode: ON  — Tracking & Input Simulation disabled"
         or  "⚠  Safe Mode: OFF — All features active (set at script top)"
-    smLabel.Font = Enum.Font.Gotham
+    smLabel.Font = Enum.Font.SourceSans
     smLabel.TextSize = 10
     smLabel.TextColor3 = SAFE_MODE and Color3.fromRGB(60, 210, 100) or Color3.fromRGB(220, 100, 100)
     smLabel.TextWrapped = true
