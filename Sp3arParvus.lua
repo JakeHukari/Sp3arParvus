@@ -6989,10 +6989,15 @@ cameraFov = clamp(cameraFov + fov*FOV_GAIN*(dt/zoomFactor), 1, 120)
 cameraRot = cameraRot + pan*PAN_GAIN*(dt/zoomFactor)
 cameraRot = Vector2.new(clamp(cameraRot.x, -PITCH_LIMIT, PITCH_LIMIT), cameraRot.y%(2*pi))
 
-local cameraCFrameXZ = CFrame.new(cameraPos)*CFrame.fromOrientation(cameraRot.x, cameraRot.y, 0)*CFrame.new(vel.X*NAV_GAIN*dt, 0, vel.Z*NAV_GAIN*dt)
-cameraPos = cameraCFrameXZ.p + Vector3.new(0, vel.Y*NAV_GAIN*dt, 0)
+local moveX = vel.X * NAV_GAIN.X * dt
+local moveY = vel.Y * NAV_GAIN.Y * dt
+local moveZ = vel.Z * NAV_GAIN.Z * dt
 
-local cameraCFrame = CFrame.new(cameraPos)*CFrame.fromOrientation(cameraRot.x, cameraRot.y, 0)
+local rotCFrame = CFrame.fromOrientation(cameraRot.x, cameraRot.y, 0)
+local cameraCFrameXZ = CFrame.new(cameraPos) * rotCFrame * CFrame.new(moveX, 0, moveZ)
+
+cameraPos = cameraCFrameXZ.p + Vector3.new(0, moveY, 0)
+local cameraCFrame = CFrame.new(cameraPos) * rotCFrame
 
 Camera.CFrame = cameraCFrame
 Camera.Focus = cameraCFrame*CFrame.new(0, 0, -1)
