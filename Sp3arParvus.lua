@@ -2392,7 +2392,7 @@ function UI.CreateWindow(title)
     local OldSize = MainFrame.Size
     
     local minimizedText = "Sp3arParvus v" .. VERSION
-    local textSize = TextService:GetTextSize(minimizedText, 1, Enum.Font.SourceSansBold, Vector2.new(1000, 1000))
+    local textSize = TextService:GetTextSize(minimizedText, 16, Enum.Font.SourceSansBold, Vector2.new(1000, 1000))
     local minimizedWidth = textSize.X + 45
 
     local MinimizedLabel = Instance.new("TextLabel")
