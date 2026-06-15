@@ -1840,7 +1840,7 @@ function EnsureScreenGui()
                 ScreenGui.Parent = game.CoreGui
             end
         end)
-        if success and ScreenGui.Parent then
+        if success then
             return ScreenGui
         end
     end
