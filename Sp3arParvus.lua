@@ -1649,6 +1649,29 @@ function RefreshWaypointUI()
             end
         end))
         
+        -- TP button
+        local tpBtn = Instance.new("TextButton")
+        tpBtn.Size = UDim2.new(0, 24, 0, 24)
+        tpBtn.Position = UDim2.new(1, -90, 0.5, -12)
+        tpBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+        tpBtn.Text = "TP"
+        tpBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        tpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tpBtn.TextSize = 12
+        tpBtn.Parent = row
+        local tC = Instance.new("UICorner", tpBtn)
+        tC.CornerRadius = UDim.new(0, 4)
+        
+        table.insert(WaypointConnections, tpBtn.MouseButton1Click:Connect(function()
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
+                return
+            end
+            if LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(wpData.Position + Vector3.new(0, 3, 0))
+            end
+        end))
+
         -- Del button
         local delBtn = Instance.new("TextButton")
         delBtn.Size = UDim2.new(0, 24, 0, 24)
@@ -8693,6 +8716,28 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                     if UIState.Updaters["Aim/TargetGroups"][k] then
                         UIState.Updaters["Aim/TargetGroups"][k](v)
                     end
+                end
+            end
+        elseif input.KeyCode == Enum.KeyCode.Y then
+            -- Ctrl+Y: Teleport to last placed waypoint
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
+            else
+                local highestId = -1
+                for id, _ in pairs(ActiveWaypoints) do
+                    if type(id) == "number" and id > highestId then
+                        highestId = id
+                    end
+                end
+                
+                if highestId > -1 then
+                    local wpData = ActiveWaypoints[highestId]
+                    if wpData and LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(wpData.Position + Vector3.new(0, 3, 0))
+                        UI.Notify("Teleport", "Teleported to " .. wpData.Name)
+                    end
+                else
+                    UI.Notify("Teleport", "No active waypoints.")
                 end
             end
         elseif input.KeyCode == Enum.KeyCode.Minus then
