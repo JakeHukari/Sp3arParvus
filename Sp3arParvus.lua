@@ -90,10 +90,10 @@ local Flags = {
     ["Aim/Sensitivity"] = 20,
     ["Aim/FOV/Radius"] = 75,
     ["Aim/Priority"] = "Head",
-    ["Aim/BodyParts"] = {"Head", "HumanoidRootPart"},
+    ["Aim/BodyParts"] = {"Head"},
     ["Aim/TargetGroups"] = {
         Head = true,
-        Torso = true,
+        Torso = false,
         LeftArm = false,
         RightArm = false,
         LeftLeg = false,
@@ -8662,40 +8662,38 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             if updater then updater(state) end
             UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.H then
-            -- Ctrl+H: Toggle Headshot Only mode
-            if not Flags["Aim/HeadshotOnlySavedGroups"] then
-                -- Turn ON Headshot Only
-                Flags["Aim/HeadshotOnlySavedGroups"] = {}
-                for k, v in pairs(Flags["Aim/TargetGroups"]) do
-                    Flags["Aim/HeadshotOnlySavedGroups"][k] = v
-                    Flags["Aim/TargetGroups"][k] = (k == "Head")
-                    if UIState.Updaters["Aim/TargetGroups"] and UIState.Updaters["Aim/TargetGroups"][k] then
-                        UIState.Updaters["Aim/TargetGroups"][k](k == "Head")
-                    end
-                end
-                Flags["Aim/HeadshotOnlySavedBodyParts"] = {}
-                for k, v in pairs(Flags["Aim/BodyParts"]) do
-                    Flags["Aim/HeadshotOnlySavedBodyParts"][k] = v
-                end
+            -- Ctrl+H: Toggle Headshot/Torso Mode
+            if Flags["Aim/HeadshotOnlyState"] == nil then
+                Flags["Aim/HeadshotOnlyState"] = true -- True because it's default
+            end
+            
+            Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
+            local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
+            
+            -- Clear all groups first to strictly enforce the mode
+            for k in pairs(Flags["Aim/TargetGroups"]) do
+                Flags["Aim/TargetGroups"][k] = false
+            end
+            Flags["Aim/TargetGroups"]["Head"] = true
+            
+            if isHeadshotOnly then
                 Flags["Aim/BodyParts"] = {"Head"}
-                Flags["Aim/HeadshotOnlySavedPriority"] = Flags["Aim/Priority"]
                 Flags["Aim/Priority"] = "Head"
                 UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
             else
-                -- Turn OFF Headshot Only
-                for k, v in pairs(Flags["Aim/HeadshotOnlySavedGroups"]) do
-                    Flags["Aim/TargetGroups"][k] = v
-                    if UIState.Updaters["Aim/TargetGroups"] and UIState.Updaters["Aim/TargetGroups"][k] then
+                Flags["Aim/TargetGroups"]["Torso"] = true
+                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart"}
+                Flags["Aim/Priority"] = "Head"
+                UI.Notify("Camera Tracking", "Head/Torso Mode ACTIVATED with 'Ctrl+H'")
+            end
+            
+            -- Update UI for all parts
+            if UIState.Updaters["Aim/TargetGroups"] then
+                for k, v in pairs(Flags["Aim/TargetGroups"]) do
+                    if UIState.Updaters["Aim/TargetGroups"][k] then
                         UIState.Updaters["Aim/TargetGroups"][k](v)
                     end
                 end
-                Flags["Aim/BodyParts"] = Flags["Aim/HeadshotOnlySavedBodyParts"]
-                Flags["Aim/Priority"] = Flags["Aim/HeadshotOnlySavedPriority"]
-                
-                Flags["Aim/HeadshotOnlySavedGroups"] = nil
-                Flags["Aim/HeadshotOnlySavedBodyParts"] = nil
-                Flags["Aim/HeadshotOnlySavedPriority"] = nil
-                UI.Notify("Camera Tracking", "Headshot Only Mode DEACTIVATED with 'Ctrl+H'")
             end
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
