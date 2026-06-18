@@ -8656,6 +8656,14 @@ local function handleShortcuts(actionName, inputState, inputObject)
         elseif inputObject.KeyCode == Enum.KeyCode.B then
             Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
             Flags["Br3ak3r/Enabled"] = Br3ak3rState.CLICKBREAK_ENABLED
+            
+            -- Update UI toggle state
+            local updater = UIState.Updaters["Br3ak3r/Enabled"]
+            if updater then updater(Br3ak3rState.CLICKBREAK_ENABLED) end
+            
+            -- Display notification
+            UI.Notify("Br3ak3r", string.format("Br3ak3r has been %s with 'Ctrl+B'", Br3ak3rState.CLICKBREAK_ENABLED and "activated" or "deactivated"))
+            
             if not Br3ak3rState.CLICKBREAK_ENABLED and Br3ak3rState.hoverHL then
                 Br3ak3rState.hoverHL.Enabled = false
             end
