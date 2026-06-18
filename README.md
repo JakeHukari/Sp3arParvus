@@ -81,6 +81,8 @@ Execute the script in your testing environment workspace.
 *   **Camera Tracking Toggle**: `Ctrl + ~`
 *   **Camera Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
 *   **Mouse Teleport**: `Q`
+*   **Teleport to Last Waypoint**: `Ctrl + Y`
+*   **Toggle Full-Body Camera Tracking**: `Ctrl + H`
 
 ### Visuals & Analytics
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
@@ -95,6 +97,16 @@ Execute the script in your testing environment workspace.
 *   **D3v Tool**: `Ctrl + .` (Period)
 *   **Br3ak3r**: `Ctrl + Left Click` to **Break** objects, `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
 *   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, `Ctrl + Shift + Z` to **Undo** last highlight
+
+### Free-cam Controls
+*   **Free-cam Toggle**: `Ctrl + P`
+*   **Camera Movement**: `W`, `A`, `S`, `D`, `Q` (Down), `E` (Up)
+*   **Humanoid Movement**: `U`, `H`, `J`, `K`, `Space` (Jump)
+*   **Camera Speed Clutch**: `Left Shift`
+*   **Fov Control**: `Mouse Wheel`
+*   **Humanoid Crash**: `I`
+*   **Reset Humanoid**: `Y`
+*   **Camera Speed**: `↑/↓ (Arrow keys)`
 
 
 ## Community & Contributing
