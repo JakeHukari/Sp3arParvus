@@ -8744,6 +8744,13 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                     UI.Notify("Teleport", "No active waypoints.")
                 end
             end
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            -- Ctrl+Q: Toggle Q-Teleport
+            Flags["Misc/QTeleport"] = not Flags["Misc/QTeleport"]
+            local state = Flags["Misc/QTeleport"]
+            local updater = UIState.Updaters["Misc/QTeleport"]
+            if updater then updater(state) end
+            UI.Notify("Q-Teleport", string.format("Q-Teleport has been %s with 'Ctrl+Q'", state and "activated" or "deactivated"))
         elseif input.KeyCode == Enum.KeyCode.Minus then
             -- Ctrl+-: Toggle Minimize
             if UIState.ToggleMinimize then
