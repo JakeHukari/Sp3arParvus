@@ -601,6 +601,8 @@ function GetCrosshairViewportPosition(mouseBehavior)
     end
 
     local mouseLoc = Services.UserInputService:GetMouseLocation()
+    local inset = Services.GuiService:GetGuiInset()
+    mouseLoc = mouseLoc - inset
 
     local crosshairX = mouseLoc.X
     local crosshairY = mouseLoc.Y
@@ -1140,11 +1142,14 @@ end
 -- Get ray from mouse cursor position
 function GetMouseRay()
     local mouseLocation = Services.UserInputService:GetMouseLocation()
+    local inset = Services.GuiService:GetGuiInset()
+    local adjustedLocation = mouseLocation - inset
+
     if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return nil end
     
-    -- Use ScreenPointToRay with raw MouseLocation (which is Screen space, includes TopBar)
-    local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
+    -- Use ScreenPointToRay with adjusted Location
+    local ray = Camera:ScreenPointToRay(adjustedLocation.X, adjustedLocation.Y)
     if not ray then return nil end
     
     return ray.Origin, ray.Direction * RAYCAST_MAX_DISTANCE, mouseLocation.X, mouseLocation.Y
@@ -1876,6 +1881,7 @@ function EnsureScreenGui()
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.DisplayOrder = 999
     ScreenGui.IgnoreGuiInset = true
+    pcall(function() ScreenGui.ScreenInsets = Enum.ScreenInsets.None end)
 
     if gethui then
         ScreenGui.Parent = gethui()
@@ -1896,6 +1902,7 @@ local function EnsureNotifyGui()
     NotifyGui.Name = "Sp3arNotifications"
     NotifyGui.DisplayOrder = 1000
     NotifyGui.IgnoreGuiInset = true
+    pcall(function() NotifyGui.ScreenInsets = Enum.ScreenInsets.None end)
     NotifyGui.Enabled = not Flags["Settings/GhostMode"]
     if gethui then 
         NotifyGui.Parent = gethui()
@@ -7089,6 +7096,7 @@ local function CreateFreecamUI()
     FreecamUI = Instance.new("ScreenGui")
     FreecamUI.Name = "FreecamKeybindsUI"
     FreecamUI.IgnoreGuiInset = true
+    pcall(function() FreecamUI.ScreenInsets = Enum.ScreenInsets.None end)
     FreecamUI.DisplayOrder = 999
     
     local targetParent = game:GetService("CoreGui")
@@ -8565,6 +8573,8 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         if Flags["Waypoints/Enabled"] then
             -- First check for deletion (click on existing waypoint screen pos)
             local mouseLoc = UserInputService:GetMouseLocation()
+            local inset = Services.GuiService:GetGuiInset()
+            mouseLoc = mouseLoc - inset
             local origin, direction = GetMouseRay()
             local raycastHit = nil
             if origin and direction then
