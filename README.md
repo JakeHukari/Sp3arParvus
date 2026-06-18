@@ -41,6 +41,7 @@ Execute the script in your testing environment workspace.
 *   **Camera Tracking Assistant**: Smoothing-based viewport tracking to automatically focus the camera on nearby targets, simulating player focus.
 *   **Input Simulation**: Automated click simulation for testing UI interactions, hitboxes, and event triggers without manual repetition.
 *   **Target Indicators**: Dynamic Indicators on target parts that turn **Red** when focused by the camera tracking system.
+*   **Position-Force**: Instantly move your humanoid in any direction using direction inputs.
 
 ### Visuals & Analytics
 *   **Gh0st Mode**: Removes obstructive UI elements to provide a cleaner debugging experience.
@@ -83,6 +84,7 @@ Execute the script in your testing environment workspace.
 *   **Mouse Teleport**: `Ctrl + Q` to toggle, `Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
 *   **Toggle Full-Body Camera Tracking**: `Ctrl + H`
+*   **Position-Force**: `Ctrl` + `Up↑`, `Down↓`, `Left←`, `Right→` (Arrow keys)
 
 ### Visuals & Analytics
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
