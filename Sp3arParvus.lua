@@ -88,6 +88,7 @@ local Flags = {
     ["Aim/TeamCheck"] = false,
     ["Aim/VisibilityCheck"] = true,
     ["Aim/Sensitivity"] = 20,
+    ["Aim/AttractionStrength"] = 100,
     ["Aim/FOV/Radius"] = 75,
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head"},
@@ -3597,8 +3598,9 @@ function AimAt(Hitbox, Sensitivity)
         return
     end
 
-    local deltaX = dx * Sensitivity
-    local deltaY = dy * Sensitivity
+    local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
+    local deltaX = dx * Sensitivity * attractionMultiplier
+    local deltaY = dy * Sensitivity * attractionMultiplier
 
     if deltaX ~= deltaX or deltaY ~= deltaY then
         return
@@ -8010,6 +8012,7 @@ UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamChec
 UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Smoothing", "Aim/Sensitivity", Flags["Aim/Sensitivity"], 0, 100, 1, "%")
+UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 200, 1, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
 UI.CreateSection(AimTab, "Target Zone Selector")
