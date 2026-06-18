@@ -2286,7 +2286,7 @@ function UI.CreateWindow(title)
     UIState.TabContainer = TabContainer
     UIState.ActiveDraggedFrame = nil
     UIState.DragStart = nil
-    UIState.StartAbsPos = nil
+    UIState.StartPos = nil
 
     -- Centralized Dragging Handler
     TrackConnection(UserInputService.InputChanged:Connect(function(input)
@@ -2294,7 +2294,6 @@ function UI.CreateWindow(title)
         if not Frame or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
         
         local delta = input.Position - UIState.DragStart
-        local newAbsPos = UIState.StartAbsPos + Vector2new(delta.X, delta.Y)
         
         local screenGui = Frame:FindFirstAncestorOfClass("ScreenGui")
         local screenSize = screenGui and screenGui.AbsoluteSize or Camera.ViewportSize
@@ -2307,8 +2306,14 @@ function UI.CreateWindow(title)
         local minY = anchor.Y * absoluteSize.Y
         local maxY = screenSize.Y - (1 - anchor.Y) * absoluteSize.Y
         
-        local clampedX = math.clamp(newAbsPos.X, minX, maxX)
-        local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
+        local startTargetX = (UIState.StartPos.X.Scale * screenSize.X) + UIState.StartPos.X.Offset
+        local startTargetY = (UIState.StartPos.Y.Scale * screenSize.Y) + UIState.StartPos.Y.Offset
+        
+        local targetX = startTargetX + delta.X
+        local targetY = startTargetY + delta.Y
+        
+        local clampedX = math.clamp(targetX, minX, maxX)
+        local clampedY = math.clamp(targetY, minY, maxY)
         
         pcall(function()
             Frame.Position = UDim2new(clampedX / screenSize.X, 0, clampedY / screenSize.Y, 0)
@@ -2350,7 +2355,7 @@ function UI.CreateWindow(title)
                                 
                                 UIState.ActiveDraggedFrame = Frame
                                 UIState.DragStart = input.Position
-                                UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
+                                UIState.StartPos = Frame.Position
                             end
                         end
                     end
