@@ -8705,9 +8705,13 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                 UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
             else
                 Flags["Aim/TargetGroups"]["Torso"] = true
-                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart"}
+                Flags["Aim/TargetGroups"]["LeftArm"] = true
+                Flags["Aim/TargetGroups"]["RightArm"] = true
+                Flags["Aim/TargetGroups"]["LeftLeg"] = true
+                Flags["Aim/TargetGroups"]["RightLeg"] = true
+                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
                 Flags["Aim/Priority"] = "Head"
-                UI.Notify("Camera Tracking", "Head/Torso Mode ACTIVATED with 'Ctrl+H'")
+                UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
             end
             
             -- Update UI for all parts
