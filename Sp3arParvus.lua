@@ -169,7 +169,7 @@ local UIState = {
     Updaters = {},
     ActiveDraggedFrame = nil,
     DragStart = nil,
-    StartAbsPos = nil
+    StartPos = nil
 }
 local PROPERTY_CATEGORIES = {
     Data = {"Name", "ClassName", "Value", "Text"},
@@ -601,8 +601,6 @@ function GetCrosshairViewportPosition(mouseBehavior)
     end
 
     local mouseLoc = Services.UserInputService:GetMouseLocation()
-    local inset = Services.GuiService:GetGuiInset()
-    mouseLoc = mouseLoc - inset
 
     local crosshairX = mouseLoc.X
     local crosshairY = mouseLoc.Y
@@ -2286,7 +2284,7 @@ function UI.CreateWindow(title)
     UIState.TabContainer = TabContainer
     UIState.ActiveDraggedFrame = nil
     UIState.DragStart = nil
-    UIState.StartAbsPos = nil
+    UIState.StartPos = nil
 
     -- Centralized Dragging Handler
     TrackConnection(UserInputService.InputChanged:Connect(function(input)
@@ -2294,10 +2292,14 @@ function UI.CreateWindow(title)
         if not Frame or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
         
         local delta = input.Position - UIState.DragStart
-        local newAbsPos = UIState.StartAbsPos + Vector2new(delta.X, delta.Y)
-        
         local screenGui = Frame:FindFirstAncestorOfClass("ScreenGui")
         local screenSize = screenGui and screenGui.AbsoluteSize or Camera.ViewportSize
+        
+        local startRelX = UIState.StartPos.X.Scale * screenSize.X + UIState.StartPos.X.Offset
+        local startRelY = UIState.StartPos.Y.Scale * screenSize.Y + UIState.StartPos.Y.Offset
+        
+        local newRelX = startRelX + delta.X
+        local newRelY = startRelY + delta.Y
         
         local absoluteSize = Frame.AbsoluteSize
         local anchor = Frame.AnchorPoint
@@ -2307,8 +2309,8 @@ function UI.CreateWindow(title)
         local minY = anchor.Y * absoluteSize.Y
         local maxY = screenSize.Y - (1 - anchor.Y) * absoluteSize.Y
         
-        local clampedX = math.clamp(newAbsPos.X, minX, maxX)
-        local clampedY = math.clamp(newAbsPos.Y, minY, maxY)
+        local clampedX = math.clamp(newRelX, minX, maxX)
+        local clampedY = math.clamp(newRelY, minY, maxY)
         
         pcall(function()
             Frame.Position = UDim2new(clampedX / screenSize.X, 0, clampedY / screenSize.Y, 0)
@@ -2350,7 +2352,7 @@ function UI.CreateWindow(title)
                                 
                                 UIState.ActiveDraggedFrame = Frame
                                 UIState.DragStart = input.Position
-                                UIState.StartAbsPos = Frame.AbsolutePosition + (Frame.AbsoluteSize * Frame.AnchorPoint)
+                                UIState.StartPos = Frame.Position
                             end
                         end
                     end
@@ -7301,7 +7303,7 @@ function Cleanup()
     UIState.TabContainer = nil
     UIState.ActiveDraggedFrame = nil
     UIState.DragStart = nil
-    UIState.StartAbsPos = nil
+    UIState.StartPos = nil
     
     -- Cleanup ESP objects
     for player, espData in pairs(ESPObjects) do
@@ -8573,8 +8575,6 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         if Flags["Waypoints/Enabled"] then
             -- First check for deletion (click on existing waypoint screen pos)
             local mouseLoc = UserInputService:GetMouseLocation()
-            local inset = Services.GuiService:GetGuiInset()
-            mouseLoc = mouseLoc - inset
             local origin, direction = GetMouseRay()
             local raycastHit = nil
             if origin and direction then
