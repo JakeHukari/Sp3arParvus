@@ -8820,6 +8820,37 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     ItemPanelUI.MainFrame.Visible = false
                 end
             end
+        elseif inputObject.KeyCode == Enum.KeyCode.Up then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
+            else
+                local character, rootPart = GetCharacter(LocalPlayer)
+                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 0.5, 0) end
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Down then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
+            else
+                local character, rootPart = GetCharacter(LocalPlayer)
+                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -0.5, 0) end
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Left then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
+            else
+                local character, rootPart = GetCharacter(LocalPlayer)
+                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(-0.5, 0, 0) end
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Right then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
+            else
+                local character, rootPart = GetCharacter(LocalPlayer)
+                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(0.5, 0, 0) end
+            end
             return Enum.ContextActionResult.Sink
         end
     else
@@ -8848,7 +8879,8 @@ game:GetService("ContextActionService"):BindActionAtPriority(
     Enum.KeyCode.R, Enum.KeyCode.U, Enum.KeyCode.F, Enum.KeyCode.N, 
     Enum.KeyCode.G, Enum.KeyCode.Period, Enum.KeyCode.Backquote, 
     Enum.KeyCode.H, Enum.KeyCode.Minus, Enum.KeyCode.K, Enum.KeyCode.Y, 
-    Enum.KeyCode.Q, Enum.KeyCode.J
+    Enum.KeyCode.Q, Enum.KeyCode.J, Enum.KeyCode.Up, Enum.KeyCode.Down, 
+    Enum.KeyCode.Left, Enum.KeyCode.Right
 )
 
 -- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
