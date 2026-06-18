@@ -8899,10 +8899,34 @@ game:GetService("ContextActionService"):BindActionAtPriority(
 -- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
 local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
 
+local function IsCursorOverMenu()
+    local mouseLoc = Services.UserInputService:GetMouseLocation()
+    local mx, my = mouseLoc.X, mouseLoc.Y
+    
+    local function isOverFrame(frame)
+        if not frame or not frame.Visible or not frame.Parent then return false end
+        local pos = frame.AbsolutePosition
+        local size = frame.AbsoluteSize
+        return mx >= pos.X and mx <= pos.X + size.X and my >= pos.Y and my <= pos.Y + size.Y
+    end
+    
+    if isOverFrame(UIState.MainFrame) then return true end
+    if isOverFrame(AdvancedPlayerPanelUI.MainFrame) then return true end
+    if isOverFrame(ItemPanelUI.MainFrame) then return true end
+    return false
+end
+
 function GetCachedTarget()
     local now = os.clock()
     if CachedTarget and (now - CachedTargetTime) < TARGET_CACHE_DURATION then
         return CachedTarget
+    end
+    
+    -- Prevent aimlock target acquisition while interacting with menus
+    if IsCursorOverMenu() then
+        CachedTarget = nil
+        CachedTargetTime = now
+        return nil
     end
     
     -- Use broadest settings to find targets (Aim settings as primary)
