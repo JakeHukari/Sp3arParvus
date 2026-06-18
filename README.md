@@ -80,7 +80,7 @@ Execute the script in your testing environment workspace.
 ### Interaction & Testing
 *   **Camera Tracking Toggle**: `Ctrl + ~`
 *   **Camera Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
-*   **Mouse Teleport**: `Q`
+*   **Mouse Teleport**: `Ctrl + Q` to toggle `Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
 *   **Toggle Full-Body Camera Tracking**: `Ctrl + H`
 
