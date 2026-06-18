@@ -1,11 +1,11 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.1.9                                                  ║
+-- ║  Version: 4.2.0                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.1.9"
-local SAFE_MODE = false  -- ← Set to 'true' to enable SafeMode (disables 'dangerous' script-elements)
+local VERSION = "4.2.0"
+local SAFE_MODE = false  -- ← refactored keyboard shortcut system to take priority over game input & other QOL
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
@@ -8536,14 +8536,6 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         AimState.Aim = Flags["Aim/AimLock"]
     end
 
-    -- Q-Teleport: Press Q to jump character to mouse position (dev navigation aid)
-    -- Gated by SAFE_MODE to avoid physics-violation detection during routine testing.
-    if not SAFE_MODE and not gameProcessed and Flags["Misc/QTeleport"] and input.KeyCode == Enum.KeyCode.Q then
-        local character, rootPart = GetCharacter(LocalPlayer)
-        if rootPart and Mouse.Target then
-            rootPart.CFrame = CFramenew(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
-        end
-    end
     
     -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -8615,183 +8607,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         end
     end
     
-    -- Br3ak3r / H1ghl1ght3r keyboard shortcuts (only when not processed by game)
-    if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.Keyboard then
-        if input.KeyCode == Enum.KeyCode.Z then
-            if H1ghl1ght3rState.SHIFT_HELD then
-                -- Ctrl+Shift+Z: Undo last highlight
-                unhighlightLast()
-            else
-                -- Ctrl+Z: Undo last break
-                unbreakLast()
-            end
-        elseif input.KeyCode == Enum.KeyCode.X then
-            -- Ctrl+X: Clear all breaks
-            unbreakAll()
-        elseif input.KeyCode == Enum.KeyCode.B then
-            -- Ctrl+B: Toggle Br3ak3r
-            Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
-            Flags["Br3ak3r/Enabled"] = Br3ak3rState.CLICKBREAK_ENABLED
-            if not Br3ak3rState.CLICKBREAK_ENABLED and Br3ak3rState.hoverHL then
-                Br3ak3rState.hoverHL.Enabled = false
-            end
-        elseif input.KeyCode == Enum.KeyCode.E then
-            -- Ctrl+E: Load Any-Item-ESP
-            UI.Notify("Any-Item-ESP", "Executing Any-Item-ESP...")
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
-        elseif input.KeyCode == Enum.KeyCode.R then
-            -- Ctrl+R: Rejoin
-            Rejoin()
-        elseif input.KeyCode == Enum.KeyCode.U then
-            -- Ctrl+U: Unload Script
-            UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
-            Cleanup()
-        elseif input.KeyCode == Enum.KeyCode.F then
-            -- Ctrl+F: Toggle Fullbright
-            Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
-            local state = Flags["Visuals/Fullbright"]
-            if state then
-                Flags["Visuals/FullDark"] = false
-                local updater = UIState.Updaters["Visuals/FullDark"]
-                if updater then updater(false) end
-            end
-            UI.Notify("Fullbright", string.format("Fullbright has been %s with 'Ctrl+F'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.N then
-            -- Ctrl+N: Toggle FullDark
-            Flags["Visuals/FullDark"] = not Flags["Visuals/FullDark"]
-            local state = Flags["Visuals/FullDark"]
-            if state then
-                Flags["Visuals/Fullbright"] = false
-                local updater = UIState.Updaters["Visuals/Fullbright"]
-                if updater then updater(false) end
-            end
-            UI.Notify("FullDark", string.format("FullDark has been %s with 'Ctrl+N'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.G then
-            -- Ctrl+G: Toggle Gh0st Mode
-            Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
-            local state = Flags["Settings/GhostMode"]
-            if NotifyGui then NotifyGui.Enabled = not state end
-            UI.Notify("Ghost Mode", string.format("Ghost Mode has been %s with 'Ctrl+G'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.Period then
-            -- Ctrl+.: Toggle D3v Tool
-            Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
-            local state = Flags["Misc/D3vTool"]
-            UI.Notify("Dev Tool", string.format("Dev Tool has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.Backquote then
-            -- Ctrl+~: Toggle Camera Tracking Assistant
-            Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
-            local state = Flags["Aim/AimLock"]
-            local updater = UIState.Updaters["Aim/AimLock"]
-            if updater then updater(state) end
-            UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.H then
-            -- Ctrl+H: Toggle Headshot/Torso Mode
-            if Flags["Aim/HeadshotOnlyState"] == nil then
-                Flags["Aim/HeadshotOnlyState"] = true -- True because it's default
-            end
-            
-            Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
-            local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
-            
-            -- Clear all groups first to strictly enforce the mode
-            for k in pairs(Flags["Aim/TargetGroups"]) do
-                Flags["Aim/TargetGroups"][k] = false
-            end
-            Flags["Aim/TargetGroups"]["Head"] = true
-            
-            if isHeadshotOnly then
-                Flags["Aim/BodyParts"] = {"Head"}
-                Flags["Aim/Priority"] = "Head"
-                UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
-            else
-                Flags["Aim/TargetGroups"]["Torso"] = true
-                Flags["Aim/TargetGroups"]["LeftArm"] = true
-                Flags["Aim/TargetGroups"]["RightArm"] = true
-                Flags["Aim/TargetGroups"]["LeftLeg"] = true
-                Flags["Aim/TargetGroups"]["RightLeg"] = true
-                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-                Flags["Aim/Priority"] = "Head"
-                UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
-            end
-            
-            -- Update UI for all parts
-            if UIState.Updaters["Aim/TargetGroups"] then
-                for k, v in pairs(Flags["Aim/TargetGroups"]) do
-                    if UIState.Updaters["Aim/TargetGroups"][k] then
-                        UIState.Updaters["Aim/TargetGroups"][k](v)
-                    end
-                end
-            end
-        elseif input.KeyCode == Enum.KeyCode.Y then
-            -- Ctrl+Y: Teleport to last placed waypoint
-            if SAFE_MODE then
-                UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
-            else
-                local highestId = -1
-                for id, _ in pairs(ActiveWaypoints) do
-                    if type(id) == "number" and id > highestId then
-                        highestId = id
-                    end
-                end
-                
-                if highestId > -1 then
-                    local wpData = ActiveWaypoints[highestId]
-                    if wpData and LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(wpData.Position + Vector3.new(0, 3, 0))
-                        UI.Notify("Teleport", "Teleported to " .. wpData.Name)
-                    end
-                else
-                    UI.Notify("Teleport", "No active waypoints.")
-                end
-            end
-        elseif input.KeyCode == Enum.KeyCode.Q then
-            -- Ctrl+Q: Toggle Q-Teleport
-            Flags["Misc/QTeleport"] = not Flags["Misc/QTeleport"]
-            local state = Flags["Misc/QTeleport"]
-            local updater = UIState.Updaters["Misc/QTeleport"]
-            if updater then updater(state) end
-            UI.Notify("Q-Teleport", string.format("Q-Teleport has been %s with 'Ctrl+Q'", state and "activated" or "deactivated"))
-        elseif input.KeyCode == Enum.KeyCode.Minus then
-            -- Ctrl+-: Toggle Minimize
-            if UIState.ToggleMinimize then
-                UIState.ToggleMinimize(true)
-            end
-        elseif input.KeyCode == Enum.KeyCode.K and Br3ak3rState.CTRL_HELD then
-            -- Ctrl+K: Toggle Advanced Player Panel
-            Flags["ESP/AdvancedPlayerPanel"] = not Flags["ESP/AdvancedPlayerPanel"]
-            local state = Flags["ESP/AdvancedPlayerPanel"]
-            UI.Notify("Player Panel", string.format("Advanced Player Panel has been %s with 'Ctrl+K'", state and "activated" or "deactivated"))
-            if state and not AdvancedPlayerPanelUI.MainFrame then
-                CreateAdvancedPlayerPanel()
-            end
-            if AdvancedPlayerPanelUI.MainFrame then
-                AdvancedPlayerPanelUI.MainFrame.Visible = state
-                AdvancedPlayerPanelState.Visible = state
-            end
-            local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
-            if updater then updater(state) end
-        elseif input.KeyCode == Enum.KeyCode.J and Br3ak3rState.CTRL_HELD then
-            -- Ctrl+J: Toggle Item Panel
-            ItemPanelState.Visible = not ItemPanelState.Visible
-            Flags["Misc/ItemPanel"] = ItemPanelState.Visible
-            local updater = UIState.Updaters["Misc/ItemPanel"]
-            if updater then updater(ItemPanelState.Visible) end
-            
-            UI.Notify("Item Panel", "Item Panel is now " .. (ItemPanelState.Visible and "ON" or "OFF"))
 
-            if ItemPanelState.Visible then
-                if not ItemPanelUI.MainFrame then
-                    CreateItemPanel()
-                end
-                UpdateItemPanelUI()
-                ItemPanelUI.MainFrame.Visible = true
-            else
-                if ItemPanelUI.MainFrame then
-                    ItemPanelUI.MainFrame.Visible = false
-                end
-            end
-        end
-    end
 end))
 
 -- CONSOLIDATED InputEnded Handler (includes Ctrl key tracking)
@@ -8817,6 +8633,215 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
         AimState.Aim = false
     end
 end))
+
+-- CONSOLIDATED ContextActionService Shortcuts Handler (High Priority)
+local function handleShortcuts(actionName, inputState, inputObject)
+    if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+    if Services.UserInputService:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
+
+    local ctrlHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+    local shiftHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+
+    if ctrlHeld then
+        if inputObject.KeyCode == Enum.KeyCode.Z then
+            if shiftHeld then
+                unhighlightLast()
+            else
+                unbreakLast()
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.X then
+            unbreakAll()
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.B then
+            Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
+            Flags["Br3ak3r/Enabled"] = Br3ak3rState.CLICKBREAK_ENABLED
+            if not Br3ak3rState.CLICKBREAK_ENABLED and Br3ak3rState.hoverHL then
+                Br3ak3rState.hoverHL.Enabled = false
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.E then
+            UI.Notify("Any-Item-ESP", "Executing Any-Item-ESP...")
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.R then
+            Rejoin()
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.U then
+            UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
+            Cleanup()
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.F then
+            Flags["Visuals/Fullbright"] = not Flags["Visuals/Fullbright"]
+            local state = Flags["Visuals/Fullbright"]
+            if state then
+                Flags["Visuals/FullDark"] = false
+                local updater = UIState.Updaters["Visuals/FullDark"]
+                if updater then updater(false) end
+            end
+            UI.Notify("Fullbright", string.format("Fullbright has been %s with 'Ctrl+F'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.N then
+            Flags["Visuals/FullDark"] = not Flags["Visuals/FullDark"]
+            local state = Flags["Visuals/FullDark"]
+            if state then
+                Flags["Visuals/Fullbright"] = false
+                local updater = UIState.Updaters["Visuals/Fullbright"]
+                if updater then updater(false) end
+            end
+            UI.Notify("FullDark", string.format("FullDark has been %s with 'Ctrl+N'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.G then
+            Flags["Settings/GhostMode"] = not Flags["Settings/GhostMode"]
+            local state = Flags["Settings/GhostMode"]
+            if NotifyGui then NotifyGui.Enabled = not state end
+            UI.Notify("Ghost Mode", string.format("Ghost Mode has been %s with 'Ctrl+G'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Period then
+            Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
+            local state = Flags["Misc/D3vTool"]
+            UI.Notify("Dev Tool", string.format("Dev Tool has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Backquote then
+            Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
+            local state = Flags["Aim/AimLock"]
+            local updater = UIState.Updaters["Aim/AimLock"]
+            if updater then updater(state) end
+            UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.H then
+            if Flags["Aim/HeadshotOnlyState"] == nil then
+                Flags["Aim/HeadshotOnlyState"] = true
+            end
+            
+            Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
+            local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
+            
+            for k in pairs(Flags["Aim/TargetGroups"]) do
+                Flags["Aim/TargetGroups"][k] = false
+            end
+            Flags["Aim/TargetGroups"]["Head"] = true
+            
+            if isHeadshotOnly then
+                Flags["Aim/BodyParts"] = {"Head"}
+                Flags["Aim/Priority"] = "Head"
+                UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
+            else
+                Flags["Aim/TargetGroups"]["Torso"] = true
+                Flags["Aim/TargetGroups"]["LeftArm"] = true
+                Flags["Aim/TargetGroups"]["RightArm"] = true
+                Flags["Aim/TargetGroups"]["LeftLeg"] = true
+                Flags["Aim/TargetGroups"]["RightLeg"] = true
+                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+                Flags["Aim/Priority"] = "Head"
+                UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
+            end
+            
+            if UIState.Updaters["Aim/TargetGroups"] then
+                for k, v in pairs(Flags["Aim/TargetGroups"]) do
+                    if UIState.Updaters["Aim/TargetGroups"][k] then
+                        UIState.Updaters["Aim/TargetGroups"][k](v)
+                    end
+                end
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Y then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
+            else
+                local highestId = -1
+                for id, _ in pairs(ActiveWaypoints) do
+                    if type(id) == "number" and id > highestId then
+                        highestId = id
+                    end
+                end
+                
+                if highestId > -1 then
+                    local wpData = ActiveWaypoints[highestId]
+                    if wpData and LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(wpData.Position + Vector3.new(0, 3, 0))
+                        UI.Notify("Teleport", "Teleported to " .. wpData.Name)
+                    end
+                else
+                    UI.Notify("Teleport", "No active waypoints.")
+                end
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Q then
+            Flags["Misc/QTeleport"] = not Flags["Misc/QTeleport"]
+            local state = Flags["Misc/QTeleport"]
+            local updater = UIState.Updaters["Misc/QTeleport"]
+            if updater then updater(state) end
+            UI.Notify("Q-Teleport", string.format("Q-Teleport has been %s with 'Ctrl+Q'", state and "activated" or "deactivated"))
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.Minus then
+            if UIState.ToggleMinimize then
+                UIState.ToggleMinimize(true)
+            end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.K then
+            Flags["ESP/AdvancedPlayerPanel"] = not Flags["ESP/AdvancedPlayerPanel"]
+            local state = Flags["ESP/AdvancedPlayerPanel"]
+            UI.Notify("Player Panel", string.format("Advanced Player Panel has been %s with 'Ctrl+K'", state and "activated" or "deactivated"))
+            if state and not AdvancedPlayerPanelUI.MainFrame then
+                CreateAdvancedPlayerPanel()
+            end
+            if AdvancedPlayerPanelUI.MainFrame then
+                AdvancedPlayerPanelUI.MainFrame.Visible = state
+                AdvancedPlayerPanelState.Visible = state
+            end
+            local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
+            if updater then updater(state) end
+            return Enum.ContextActionResult.Sink
+        elseif inputObject.KeyCode == Enum.KeyCode.J then
+            ItemPanelState.Visible = not ItemPanelState.Visible
+            Flags["Misc/ItemPanel"] = ItemPanelState.Visible
+            local updater = UIState.Updaters["Misc/ItemPanel"]
+            if updater then updater(ItemPanelState.Visible) end
+            
+            UI.Notify("Item Panel", "Item Panel is now " .. (ItemPanelState.Visible and "ON" or "OFF"))
+
+            if ItemPanelState.Visible then
+                if not ItemPanelUI.MainFrame then
+                    CreateItemPanel()
+                end
+                UpdateItemPanelUI()
+                ItemPanelUI.MainFrame.Visible = true
+            else
+                if ItemPanelUI.MainFrame then
+                    ItemPanelUI.MainFrame.Visible = false
+                end
+            end
+            return Enum.ContextActionResult.Sink
+        end
+    else
+        -- Ctrl is NOT held
+        if inputObject.KeyCode == Enum.KeyCode.Q then
+            if not SAFE_MODE and Flags["Misc/QTeleport"] then
+                local character, rootPart = GetCharacter(LocalPlayer)
+                if rootPart and Mouse.Target then
+                    rootPart.CFrame = CFramenew(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+                end
+                return Enum.ContextActionResult.Sink
+            end
+        end
+    end
+
+    return Enum.ContextActionResult.Pass
+end
+
+-- Bind the action with high priority so it sinks inputs before the game processes them (like gun reloading on 'R')
+game:GetService("ContextActionService"):BindActionAtPriority(
+    "Sp3arParvusShortcuts",
+    handleShortcuts,
+    false,
+    Enum.ContextActionPriority.High.Value + 100,
+    Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.B, Enum.KeyCode.E, 
+    Enum.KeyCode.R, Enum.KeyCode.U, Enum.KeyCode.F, Enum.KeyCode.N, 
+    Enum.KeyCode.G, Enum.KeyCode.Period, Enum.KeyCode.Backquote, 
+    Enum.KeyCode.H, Enum.KeyCode.Minus, Enum.KeyCode.K, Enum.KeyCode.Y, 
+    Enum.KeyCode.Q, Enum.KeyCode.J
+)
 
 -- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
 -- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
