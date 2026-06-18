@@ -8825,7 +8825,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
                 local character, rootPart = GetCharacter(LocalPlayer)
-                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 1.5, 0) end
+                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 3.5, 0) end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Down then
@@ -8833,7 +8833,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
                 local character, rootPart = GetCharacter(LocalPlayer)
-                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -1.5, 0) end
+                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -3.5, 0) end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Left then
@@ -8841,7 +8841,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
                 local character, rootPart = GetCharacter(LocalPlayer)
-                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(-0.5, 0, 0) end
+                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(-3.5, 0, 0) end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Right then
@@ -8849,7 +8849,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
                 local character, rootPart = GetCharacter(LocalPlayer)
-                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(0.5, 0, 0) end
+                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(3.5, 0, 0) end
             end
             return Enum.ContextActionResult.Sink
         end
