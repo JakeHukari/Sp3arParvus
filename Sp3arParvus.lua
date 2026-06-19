@@ -8602,50 +8602,63 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         end
     end
 
-    -- Waypoints: Ctrl+MiddleClick to add/remove
+    -- Waypoints: Ctrl+MiddleClick to add/remove, Ctrl+Shift+MiddleClick to clear all
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
         if Flags["Waypoints/Enabled"] then
-            -- First check for deletion (click on existing waypoint screen pos)
-            local mouseLoc = UserInputService:GetMouseLocation()
-            local origin, direction = GetMouseRay()
-            local raycastHit = nil
-            if origin and direction then
-                raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
-            end
-            
-            local deleted = false
-            for id, wpData in pairs(ActiveWaypoints) do
-                local screenPos, onScreen = GetViewportPoint(wpData.Position)
-                
-                -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
-                local screenClose = false
-                if onScreen then
-                    local dist = math.sqrt((mouseLoc.X - screenPos.X)^2 + (mouseLoc.Y - screenPos.Y)^2)
-                    if dist < 60 then 
-                        screenClose = true
-                    end
+            if H1ghl1ght3rState.SHIFT_HELD then
+                local ids = {}
+                for id in pairs(ActiveWaypoints) do
+                    table.insert(ids, id)
                 end
-                
-                -- Check 2: Is it close in 3D World Space? (15 studs buffer if raycast hit)
-                local worldClose = false
-                if raycastHit and raycastHit.Position then
-                    local dist3D = (wpData.Position - raycastHit.Position).Magnitude
-                    if dist3D < 15 then
-                        worldClose = true
-                    end
-                end
-                
-                if screenClose or worldClose then
+                for _, id in ipairs(ids) do
                     DestroyWaypoint(id)
-                    deleted = true
-                    -- Note: Intentionally NOT breaking here, so we can delete multiple clustered waypoints at once
                 end
-            end
-            
-            -- If not deleted, create a new one via raycast
-            if not deleted then
-                if raycastHit then
-                    CreateWaypoint(raycastHit.Position)
+                if #ids > 0 then
+                    UI.Notify("Waypoints", "All waypoints destroyed")
+                end
+            else
+                -- First check for deletion (click on existing waypoint screen pos)
+                local mouseLoc = UserInputService:GetMouseLocation()
+                local origin, direction = GetMouseRay()
+                local raycastHit = nil
+                if origin and direction then
+                    raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
+                end
+                
+                local deleted = false
+                for id, wpData in pairs(ActiveWaypoints) do
+                    local screenPos, onScreen = GetViewportPoint(wpData.Position)
+                    
+                    -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
+                    local screenClose = false
+                    if onScreen then
+                        local dist = math.sqrt((mouseLoc.X - screenPos.X)^2 + (mouseLoc.Y - screenPos.Y)^2)
+                        if dist < 60 then 
+                            screenClose = true
+                        end
+                    end
+                    
+                    -- Check 2: Is it close in 3D World Space? (15 studs buffer if raycast hit)
+                    local worldClose = false
+                    if raycastHit and raycastHit.Position then
+                        local dist3D = (wpData.Position - raycastHit.Position).Magnitude
+                        if dist3D < 15 then
+                            worldClose = true
+                        end
+                    end
+                    
+                    if screenClose or worldClose then
+                        DestroyWaypoint(id)
+                        deleted = true
+                        -- Note: Intentionally NOT breaking here, so we can delete multiple clustered waypoints at once
+                    end
+                end
+                
+                -- If not deleted, create a new one via raycast
+                if not deleted then
+                    if raycastHit then
+                        CreateWaypoint(raycastHit.Position)
+                    end
                 end
             end
         end
