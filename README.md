@@ -91,7 +91,12 @@ Execute the script in your testing environment workspace.
 *   **Fullbright**: `Ctrl + F`
 *   **FullDark**: `Ctrl + N`
 *   **Free-cam**: `Ctrl + P`
-*   **Waypoints**: `Ctrl + Middle Mouse Button` to **Create**, `Ctrl + Middle Mouse Button` (On existing waypoint) to **Delete**
+
+### Waypoints
+*   **Create Waypoint**: `Ctrl + Middle Mouse Button`
+*   **Delete Waypoint**: `Ctrl + Middle Mouse Button` (On existing waypoint)
+*   **Teleport to Last-Created Waypoint**: `Ctrl + Y`
+*   **Delete all existing waypoints**: `Ctrl + Shift + Middle Mouse Button`
 
 ### Developer Utilities
 *   **Advanced Player Panel**: `Ctrl + K`
