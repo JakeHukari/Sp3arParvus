@@ -87,7 +87,7 @@ local Flags = {
     ["Aim/ShowAssistDots"] = false,
     ["Aim/TeamCheck"] = false,
     ["Aim/VisibilityCheck"] = true,
-    ["Aim/AttractionStrength"] = 100,
+    ["Aim/AttractionStrength"] = 250,
     ["Aim/FOV/Radius"] = 75,
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head"},
@@ -8043,7 +8043,7 @@ UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
-UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 200, 1, "%")
+UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 
 UI.CreateSection(AimTab, "Target Zone Selector")
