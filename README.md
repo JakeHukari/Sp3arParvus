@@ -109,6 +109,7 @@ Execute the script in your testing environment workspace.
 *   **Humanoid Crash**: `I`
 *   **Reset Humanoid**: `Y`
 *   **Camera Speed**: `↑/↓ (Arrow keys)`
+*   **Teleport Humanoid to Camera Position**: `Ctrl + T`
 
 
 ## Community & Contributing
