@@ -2287,7 +2287,13 @@ function UI.CreateWindow(title)
     UIState.StartPos = nil
 
     -- Centralized Dragging Handler
-    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+    local dragInputConn, dragEndedConn
+    dragInputConn = TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if not ScreenGui or not ScreenGui.Parent then
+            if dragInputConn then dragInputConn:Disconnect() end
+            if dragEndedConn then dragEndedConn:Disconnect() end
+            return
+        end
         local Frame = UIState.ActiveDraggedFrame
         if not Frame or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
         
@@ -2317,7 +2323,11 @@ function UI.CreateWindow(title)
         end)
     end))
 
-    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+    dragEndedConn = TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if not ScreenGui or not ScreenGui.Parent then
+            if dragEndedConn then dragEndedConn:Disconnect() end
+            return
+        end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             UIState.ActiveDraggedFrame = nil
         end
@@ -3198,6 +3208,14 @@ function ValidateESPObjects()
             if AimState.LastAimTarget == player then AimState.LastAimTarget = nil end
             if ClosestResult[1] == player then table.clear(ClosestResult) end
 
+            if AdvancedPlayerPanelState.SelectedPlayer == player then
+                AdvancedPlayerPanelState.SelectedPlayer = nil
+                AdvancedPlayerPanelState.CurrentView = "List"
+            end
+            if AdvancedPlayerPanelState.Spectating == player then
+                AdvancedPlayerPanelState.Spectating = nil
+            end
+
             -- Also cleanup outlines for this player
             pcall(RemovePlayerOutlines, player)
             
@@ -3363,6 +3381,22 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local players = GetPlayersCache()
     local lookVector = Camera.CFrame.LookVector
     local maxCandsLimit = MAX_CANDIDATES * 3
+    
+    -- HOISTED ALLOCATION: Compute checkParts once per frame instead of per-player
+    local checkParts = {}
+    local anySelected = false
+    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+        if enabled then
+            anySelected = true
+            for _, partName in ipairs(TARGET_GROUPS[category]) do
+                table.insert(checkParts, partName)
+            end
+        end
+    end
+
+    if not anySelected then
+        checkParts = ALL_BODY_PARTS
+    end
 
     for _, Player in ipairs(players) do
         if Player == LocalPlayer or DNS(Player) then
@@ -3409,21 +3443,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
 
         -- 3. VIEWPORT PRE-FILTER (Removed - allows targeting players when root is just off-screen)
-
-        local checkParts = {}
-        local anySelected = false
-        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
-            if enabled then
-                anySelected = true
-                for _, partName in ipairs(TARGET_GROUPS[category]) do
-                    table.insert(checkParts, partName)
-                end
-            end
-        end
-
-        if not anySelected then
-            checkParts = ALL_BODY_PARTS
-        end
 
         for _, PartName in ipairs(checkParts) do
             local cache = CharCache[Player]
@@ -5878,6 +5897,7 @@ function UpdateDot(player, character, storage, dotType, partName)
     end
 end
 
+SharedDotParts = {}
 function UpdatePlayerOutlines(player, character)
     if not character then return end
     
@@ -5888,8 +5908,10 @@ function UpdatePlayerOutlines(player, character)
     
     local storage = PlayerOutlineObjects[player]
     
-    -- Determine which dots should be visible
-    local dotParts = {}
+    -- Determine which dots should be visible using shared table to avoid allocation
+    local dotParts = SharedDotParts
+    table.clear(dotParts)
+    
     if Flags["Aim/ShowAssistDots"] then
         local anySelected = false
         for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
@@ -8432,6 +8454,7 @@ function SetupPlayerESP(player)
             local root = nil
             repeat
                 task.wait(0.2)
+                if not player.Parent then break end
                 root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                 attempts = attempts + 1
             until root or attempts > 10
@@ -8476,6 +8499,7 @@ function SetupPlayerESP(player)
                 local root = nil
                 repeat
                     task.wait(0.2)
+                    if not player.Parent then break end
                     root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                     attempts = attempts + 1
                 until root or attempts > 10
@@ -8520,6 +8544,14 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemovePlayerFromCache(player)
     CharCache[player] = nil -- Clear character cache
     RemoveESP(player) 
+
+    if AdvancedPlayerPanelState.SelectedPlayer == player then
+        AdvancedPlayerPanelState.SelectedPlayer = nil
+        AdvancedPlayerPanelState.CurrentView = "List"
+    end
+    if AdvancedPlayerPanelState.Spectating == player then
+        AdvancedPlayerPanelState.Spectating = nil
+    end
 
     if AdvancedPlayerPanelState.Whitelist[player.UserId] then
         UI.Notify("Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has left")
