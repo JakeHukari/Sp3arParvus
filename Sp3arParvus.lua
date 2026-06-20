@@ -518,8 +518,8 @@ local ViewportPool = {}
 TrackConnection(RunService.RenderStepped:Connect(function()
     for pos, entry in pairs(ViewportCache) do
         table.insert(ViewportPool, entry)
-        ViewportCache[pos] = nil
     end
+    table.clear(ViewportCache)
 end))
 
 local function GetViewportPoint(worldPos)
