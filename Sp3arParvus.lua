@@ -3626,6 +3626,14 @@ function AimAt(Hitbox)
     end
 
     local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
+    
+    -- Dampening / Settling Effect to prevent screen shaking on high attraction strength
+    local lockThreshold = 20 -- Distance threshold for "Locked-On" state
+    if mag < lockThreshold then
+        local dampening = math.max(0.05, mag / lockThreshold)
+        attractionMultiplier = attractionMultiplier * dampening
+    end
+
     local BASE_PULL = 0.2
     local deltaX = dx * BASE_PULL * attractionMultiplier
     local deltaY = dy * BASE_PULL * attractionMultiplier
