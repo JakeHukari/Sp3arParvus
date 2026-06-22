@@ -89,6 +89,9 @@ local Flags = {
     ["Aim/VisibilityCheck"] = true,
     ["Aim/AttractionStrength"] = 200,
     ["Aim/FOV/Radius"] = 75,
+    ["Aim/Dampening"] = true,
+    ["Aim/Dampening/Threshold"] = 20,
+    ["Aim/Dampening/Strength"] = 5,
     ["Aim/Priority"] = "Head",
     ["Aim/BodyParts"] = {"Head"},
     ["Aim/TargetGroups"] = {
@@ -3628,10 +3631,12 @@ function AimAt(Hitbox)
     local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
     
     -- Dampening / Settling Effect to prevent screen shaking on high attraction strength
-    local lockThreshold = 20 -- Distance threshold for "Locked-On" state
-    if mag < lockThreshold then
-        local dampening = math.max(0.05, mag / lockThreshold)
-        attractionMultiplier = attractionMultiplier * dampening
+    if Flags["Aim/Dampening"] then
+        local lockThreshold = Flags["Aim/Dampening/Threshold"] -- Distance threshold for "Locked-On" state
+        if mag < lockThreshold then
+            local dampening = math.max(Flags["Aim/Dampening/Strength"] / 100, mag / lockThreshold)
+            attractionMultiplier = attractionMultiplier * dampening
+        end
     end
 
     local BASE_PULL = 0.2
@@ -8053,6 +8058,9 @@ UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Fla
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
+UI.CreateToggle(AimTab, "Enable Dampening", "Aim/Dampening", Flags["Aim/Dampening"])
+UI.CreateNumericInput(AimTab, "Dampening Threshold", "Aim/Dampening/Threshold", Flags["Aim/Dampening/Threshold"], 0, 500, 5, "px")
+UI.CreateNumericInput(AimTab, "Dampening Min Strength", "Aim/Dampening/Strength", Flags["Aim/Dampening/Strength"], 0, 100, 1, "%")
 
 UI.CreateSection(AimTab, "Target Zone Selector")
 
