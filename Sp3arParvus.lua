@@ -4409,6 +4409,7 @@ function InitializePlayerPage(page)
                 AdvancedPlayerPanelUI.ExplorerContent.Visible = (name == "Workspace")
                 AdvancedPlayerPanelUI.DetailsContent.Visible = (name ~= "Workspace")
             end
+            AdvancedPlayerPanelState.RowCache = {}
             if AdvancedPlayerPanelState.SelectedPlayer then
                 ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
             end
@@ -4575,8 +4576,10 @@ function InitializePlayerPage(page)
                 elseif AdvancedPlayerPanelState.CurrentView == "Details" and AdvancedPlayerPanelState.SelectedPlayer then
                     if AdvancedPlayerPanelState.DetailsTab == "Workspace" then
                         local targetPlayer = AdvancedPlayerPanelState.SelectedPlayer
-                        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("PrimaryPart") then
-                            local char = targetPlayer.Character
+                        local targetChar = targetPlayer and targetPlayer.Character
+                        local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart or targetChar:FindFirstChild("PrimaryPart"))
+                        if targetRoot then
+                            local char = targetChar
                             AdvancedPlayerPanelState.CurrentPaths = {}
                             ExplorerCounter = 0
                             VisualizeInstance(char, AdvancedPlayerPanelUI.ExplorerContent, 0)
@@ -4825,10 +4828,12 @@ function UpdateAdvancedPlayerList()
         local dist = 999999
         local distStr = "Loading..."
         local targetChar = player.Character
+        local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart or targetChar:FindFirstChild("PrimaryPart"))
+        local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart or myChar:FindFirstChild("PrimaryPart"))
         
-        if targetChar and targetChar:FindFirstChild("PrimaryPart") then
-            if myChar and myChar:FindFirstChild("PrimaryPart") then
-                dist = (myChar.PrimaryPart.Position - targetChar.PrimaryPart.Position).Magnitude
+        if targetRoot then
+            if myRoot then
+                dist = (myRoot.Position - targetRoot.Position).Magnitude
                 distStr = math.floor(dist) .. "m"
             else
                 distStr = "N/A"
@@ -5458,6 +5463,18 @@ local function VisualizeInstance(instance, content, depth)
 
                 TrackConnection(toggleBtn.MouseButton1Click:Connect(function()
                     AdvancedPlayerPanelState.ExplorerExpanded[path] = not AdvancedPlayerPanelState.ExplorerExpanded[path]
+                    local targetPlayer = AdvancedPlayerPanelState.SelectedPlayer
+                    if targetPlayer then
+                        if AdvancedPlayerPanelState.DetailsTab == "Player" then
+                            ShowAdvancedPlayerDetails(targetPlayer)
+                        elseif AdvancedPlayerPanelState.DetailsTab == "Workspace" then
+                            if targetPlayer.Character then
+                                AdvancedPlayerPanelState.CurrentPaths = {}
+                                ExplorerCounter = 0
+                                VisualizeInstance(targetPlayer.Character, AdvancedPlayerPanelUI.ExplorerContent, 0)
+                            end
+                        end
+                    end
                 end))
 
                 selectBtn = Instance.new("TextButton")
@@ -5490,9 +5507,25 @@ local function VisualizeInstance(instance, content, depth)
                             end
                             UpdatePropertyPane(inst)
                         end
+                    else
+                        ClearFrame(AdvancedPlayerPanelUI.PropertyContent)
+                    end
+
+                    local targetPlayer = AdvancedPlayerPanelState.SelectedPlayer
+                    if targetPlayer then
+                        if AdvancedPlayerPanelState.DetailsTab == "Player" then
+                            ShowAdvancedPlayerDetails(targetPlayer)
+                        elseif AdvancedPlayerPanelState.DetailsTab == "Workspace" then
+                            if targetPlayer.Character then
+                                AdvancedPlayerPanelState.CurrentPaths = {}
+                                ExplorerCounter = 0
+                                VisualizeInstance(targetPlayer.Character, AdvancedPlayerPanelUI.ExplorerContent, 0)
+                            end
+                        end
                     end
                 end))
             else
+                row.Parent = content
                 toggleBtn = row:FindFirstChild("ToggleBtn")
                 selectBtn = row:FindFirstChild("SelectBtn")
             end
@@ -5719,7 +5752,7 @@ function ShowAdvancedPlayerDetails(player)
             end
         end
         if player.Character then
-            VisualizeInstance(player.Character, content, 0)
+            VisualizeInstance(player.Character, AdvancedPlayerPanelUI.ExplorerContent, 0)
         else
             local lbl = Instance.new("TextLabel")
             lbl.Size = UDim2.new(1, 0, 0, 30)
@@ -5728,7 +5761,7 @@ function ShowAdvancedPlayerDetails(player)
             lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
             lbl.TextSize = 13
             lbl.TextColor3 = UI_THEME.TextDark
-            lbl.Parent = content
+            lbl.Parent = AdvancedPlayerPanelUI.ExplorerContent
         end
     end
 
@@ -5751,16 +5784,17 @@ function UpdateAdvancedPlayerDetails()
     local distStr = "Loading..."
     local coordsStr = "---"
     
-    if targetChar and targetChar:FindFirstChild("PrimaryPart") then
-        local targetPart = targetChar.PrimaryPart
-        if myChar and myChar:FindFirstChild("PrimaryPart") then
-            local myPart = myChar.PrimaryPart
-            local dist = (targetPart.Position - myPart.Position).Magnitude
+    local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart or targetChar:FindFirstChild("PrimaryPart"))
+    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart or myChar:FindFirstChild("PrimaryPart"))
+    
+    if targetRoot then
+        if myRoot then
+            local dist = (targetRoot.Position - myRoot.Position).Magnitude
             distStr = math.floor(dist) .. "m"
         else
             distStr = "N/A"
         end
-        local p = targetPart.Position
+        local p = targetRoot.Position
         coordsStr = string.format("%d, %d, %d", math.floor(p.X), math.floor(p.Y), math.floor(p.Z))
     else
         distStr = "N/A"
@@ -5780,15 +5814,15 @@ function UpdateAdvancedPlayerDetails()
     if labels["Held Item"] then labels["Held Item"].Text = heldItem end
 
     -- Nearest Players to selected player
-    if targetChar and targetChar:FindFirstChild("PrimaryPart") then
-        local targetPos = targetChar.PrimaryPart.Position
+    if targetRoot then
+        local targetPos = targetRoot.Position
         local others = {}
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player then
                 local pChar = p.Character
-                if pChar and pChar:FindFirstChild("PrimaryPart") then
-                    local r = pChar.PrimaryPart
-                    table.insert(others, {p = p, d = (r.Position - targetPos).Magnitude})
+                local pRoot = pChar and (pChar:FindFirstChild("HumanoidRootPart") or pChar.PrimaryPart or pChar:FindFirstChild("PrimaryPart"))
+                if pRoot then
+                    table.insert(others, {p = p, d = (pRoot.Position - targetPos).Magnitude})
                 end
             end
         end
