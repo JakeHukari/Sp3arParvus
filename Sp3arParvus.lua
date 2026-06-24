@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.1                                                  ║
+-- ║  Version: 4.2.2                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.1" -- Fixed Q-Teleport, added ctrl+shift+x to undo ALL highlights, & decoupled shortcut logic so that keybinds work with certain executors
+local VERSION = "4.2.2" -- Fixed Q-Teleport, added ctrl+shift+x to undo ALL highlights, & decoupled shortcut logic so that keybinds work with certain executors
 local SAFE_MODE = false  -- ← SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
