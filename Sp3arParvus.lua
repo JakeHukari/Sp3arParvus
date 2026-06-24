@@ -8071,7 +8071,7 @@ function ShowWorldHumList(page)
         local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 6); cC.Parent = card
         
         local nameLabel = Instance.new("TextLabel")
-        nameLabel.Size = UDim2.new(1, -100, 0, 22)
+        nameLabel.Size = UDim2.new(1, -140, 0, 22)
         nameLabel.Position = UDim2.new(0, 12, 0, 4)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = model.Name
@@ -8082,7 +8082,7 @@ function ShowWorldHumList(page)
         nameLabel.Parent = card
 
         local distanceLabel = Instance.new("TextLabel")
-        distanceLabel.Size = UDim2.new(1, -100, 0, 16)
+        distanceLabel.Size = UDim2.new(1, -140, 0, 16)
         distanceLabel.Position = UDim2.new(0, 12, 0, 22)
         distanceLabel.BackgroundTransparency = 1
         distanceLabel.Text = math.floor(data.dist) .. " studs away"
@@ -8115,6 +8115,21 @@ function ShowWorldHumList(page)
         editBtn.ZIndex = 2
         editBtn.Parent = card
         local eC = Instance.new("UICorner"); eC.CornerRadius = UDim.new(0, 4); eC.Parent = editBtn
+
+        local tpBtn = Instance.new("TextButton")
+        tpBtn.Name = "TP"
+        tpBtn.Size = UDim2.new(0, 50, 0, 26)
+        tpBtn.Position = UDim2.new(1, -75, 0.5, 0)
+        tpBtn.AnchorPoint = Vector2.new(1, 0.5)
+        tpBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+        tpBtn.Text = "TP"
+        tpBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        tpBtn.TextSize = 12
+        tpBtn.TextColor3 = Color3.new(1, 1, 1)
+        tpBtn.Visible = false
+        tpBtn.ZIndex = 2
+        tpBtn.Parent = card
+        local tpC = Instance.new("UICorner"); tpC.CornerRadius = UDim.new(0, 4); tpC.Parent = tpBtn
         
         TrackWorldHumConnection(selectionBtn.MouseButton1Click:Connect(function()
             -- Clear previous selection
@@ -8123,17 +8138,18 @@ function ShowWorldHumList(page)
                 WorldHumState.selectionHighlight = nil
             end
             
-            -- Hide all other edit buttons
+            -- Hide all other edit and TP buttons
             for _, child in ipairs(page:GetChildren()) do
-                local eb = child:FindFirstChild("Edit") or child:FindFirstChild("TextButton")
-                if eb and eb:IsA("TextButton") and eb.Text == "Edit" then 
-                    eb.Visible = false 
-                end
+                local eb = child:FindFirstChild("Edit")
+                local tb = child:FindFirstChild("TP")
+                if eb then eb.Visible = false end
+                if tb then tb.Visible = false end
             end
             
             -- Set selection
             WorldHumState.selectedHum = hum
             editBtn.Visible = true
+            tpBtn.Visible = true
             
             local hl = Instance.new("Highlight")
             hl.Enabled = not Flags["Settings/GhostMode"]
@@ -8153,6 +8169,22 @@ function ShowWorldHumList(page)
                 WorldHumState.selectionHighlight = nil
             end
             ShowWorldHumEditor(page, hum)
+        end))
+
+        TrackWorldHumConnection(tpBtn.MouseButton1Click:Connect(function()
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
+                return
+            end
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+            local targetPart = hum.RootPart or (model and model.PrimaryPart) or (model and model:FindFirstChildOfClass("BasePart"))
+            if myRoot and targetPart then
+                myRoot.CFrame = targetPart.CFrame * CFrame.new(0, 3, 0)
+                UI.Notify("Teleport", "Teleported to " .. model.Name)
+            else
+                UI.Notify("Teleport Error", "Target humanoid location could not be determined.")
+            end
         end))
     end
 end
@@ -8366,6 +8398,11 @@ function ShowWorldHumEditor(page, hum)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = page
 
+    local headerFrame = Instance.new("Frame")
+    headerFrame.Size = UDim2.new(1, 0, 0, 24)
+    headerFrame.BackgroundTransparency = 1
+    headerFrame.Parent = page
+
     local backBtn = Instance.new("TextButton")
     backBtn.Size = UDim2.new(0, 80, 0, 24)
     backBtn.BackgroundColor3 = UI_THEME.Element
@@ -8373,10 +8410,36 @@ function ShowWorldHumEditor(page, hum)
     backBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     backBtn.TextSize = 12
     backBtn.TextColor3 = UI_THEME.Text
-    backBtn.Parent = page
+    backBtn.Parent = headerFrame
     local bC = Instance.new("UICorner"); bC.CornerRadius = UDim.new(0, 4); bC.Parent = backBtn
     TrackWorldHumConnection(backBtn.MouseButton1Click:Connect(function()
         ShowWorldHumList(page)
+    end))
+
+    local tpBtn = Instance.new("TextButton")
+    tpBtn.Size = UDim2.new(0, 80, 0, 24)
+    tpBtn.Position = UDim2.new(0, 85, 0, 0)
+    tpBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+    tpBtn.Text = "Teleport"
+    tpBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    tpBtn.TextSize = 12
+    tpBtn.TextColor3 = Color3.new(1, 1, 1)
+    tpBtn.Parent = headerFrame
+    local tpC = Instance.new("UICorner"); tpC.CornerRadius = UDim.new(0, 4); tpC.Parent = tpBtn
+    TrackWorldHumConnection(tpBtn.MouseButton1Click:Connect(function()
+        if SAFE_MODE then
+            UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
+            return
+        end
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+        local targetPart = hum.RootPart or (hum.Parent and hum.Parent.PrimaryPart) or (hum.Parent and hum.Parent:FindFirstChildOfClass("BasePart"))
+        if myRoot and targetPart then
+            myRoot.CFrame = targetPart.CFrame * CFrame.new(0, 3, 0)
+            UI.Notify("Teleport", "Teleported to " .. hum.Parent.Name)
+        else
+            UI.Notify("Teleport Error", "Target humanoid location could not be determined.")
+        end
     end))
 
     UI.CreateSection(page, "Editor: " .. hum.Parent.Name)
