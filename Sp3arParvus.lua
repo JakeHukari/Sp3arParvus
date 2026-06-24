@@ -8708,6 +8708,19 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
 end))
 
 -- CONSOLIDATED ContextActionService Shortcuts Handler (High Priority)
+-- Localize exploit and script globals so they persist in the callback environment
+local unhighlightLast = unhighlightLast
+local unbreakLast = unbreakLast
+local unbreakAll = unbreakAll
+local Rejoin = Rejoin
+local Cleanup = Cleanup
+local CreateAdvancedPlayerPanel = CreateAdvancedPlayerPanel
+local CreateItemPanel = CreateItemPanel
+local UpdateItemPanelUI = UpdateItemPanelUI
+local loadstring = loadstring
+local game = game
+local ActiveWaypoints = ActiveWaypoints
+
 local function handleShortcuts(actionName, inputState, inputObject)
     if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
     if Services.UserInputService:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
@@ -8897,7 +8910,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if SAFE_MODE then
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
-                local character, rootPart = GetCharacter(LocalPlayer)
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 3.75, 0) end
             end
             return Enum.ContextActionResult.Sink
@@ -8905,7 +8919,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if SAFE_MODE then
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
-                local character, rootPart = GetCharacter(LocalPlayer)
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -3.75, 0) end
             end
             return Enum.ContextActionResult.Sink
@@ -8913,7 +8928,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if SAFE_MODE then
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
-                local character, rootPart = GetCharacter(LocalPlayer)
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(-3, 0, 0) end
             end
             return Enum.ContextActionResult.Sink
@@ -8921,7 +8937,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if SAFE_MODE then
                 UI.Notify("Safe Mode", "Position Force is disabled while Safe Mode is ON.")
             else
-                local character, rootPart = GetCharacter(LocalPlayer)
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(3, 0, 0) end
             end
             return Enum.ContextActionResult.Sink
@@ -8930,9 +8947,10 @@ local function handleShortcuts(actionName, inputState, inputObject)
         -- Ctrl is NOT held
         if inputObject.KeyCode == Enum.KeyCode.Q then
             if not SAFE_MODE and Flags["Misc/QTeleport"] then
-                local character, rootPart = GetCharacter(LocalPlayer)
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart and Mouse.Target then
-                    rootPart.CFrame = CFramenew(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+                    rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
                 end
                 return Enum.ContextActionResult.Sink
             end
