@@ -1479,6 +1479,28 @@ function unhighlightLast()
     end
 end
 
+function unhighlightAll()
+    local count = 0
+    for _ in pairs(H1ghl1ght3rState.highlightedSet) do count = count + 1 end
+
+    for i = 1, #H1ghl1ght3rState.undoStack do
+        local entry = H1ghl1ght3rState.undoStack[i]
+        if entry.part and entry.part.Parent then
+            pcall(function()
+                entry.part.LocalTransparencyModifier = entry.ltm
+                entry.part.Transparency = entry.t
+            end)
+        end
+        if entry.hl then pcall(function() entry.hl:Destroy() end) end
+        if entry.bg then pcall(function() entry.bg:Destroy() end) end
+    end
+    
+    table.clear(H1ghl1ght3rState.highlightedSet)
+    table.clear(H1ghl1ght3rState.undoStack)
+
+    UI.Notify("H1ghl1ght3r", "Removed " .. count .. " highlights")
+end
+
 function sweepHighlightedUndo(dt)
     -- Throttling already handled by caller or dt
     local n = #H1ghl1ght3rState.undoStack
@@ -6650,7 +6672,7 @@ end
 
 ------------------------------------------------------------------------
 -- FREECAM INTEGRATION
-------------------------------------------------------------------------
+local FreecamProxy = {}
 local function ___InitializeFreecam()
 -----------------------------------------------------------------------
 -- Freecam
@@ -6678,7 +6700,6 @@ Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 LocalPlayer = Players.LocalPlayer
 end
 
-local FreecamProxy = {}
 local Camera = workspace.CurrentCamera
 TrackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 local newCamera = workspace.CurrentCamera
@@ -8721,6 +8742,7 @@ end))
 -- CONSOLIDATED ContextActionService Shortcuts Handler (High Priority)
 -- Localize exploit and script globals so they persist in the callback environment
 local unhighlightLast = unhighlightLast
+local unhighlightAll = unhighlightAll
 local unbreakLast = unbreakLast
 local unbreakAll = unbreakAll
 local Rejoin = Rejoin
@@ -8748,7 +8770,11 @@ local function handleShortcuts(actionName, inputState, inputObject)
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.X then
-            unbreakAll()
+            if shiftHeld then
+                unhighlightAll()
+            else
+                unbreakAll()
+            end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.B then
             Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
@@ -8957,13 +8983,15 @@ local function handleShortcuts(actionName, inputState, inputObject)
     else
         -- Ctrl is NOT held
         if inputObject.KeyCode == Enum.KeyCode.Q then
-            if not SAFE_MODE and Flags["Misc/QTeleport"] then
-                local character = LocalPlayer and LocalPlayer.Character
-                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart and Mouse.Target then
-                    rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+            if shiftHeld then
+                if not SAFE_MODE and Flags["Misc/QTeleport"] then
+                    local character = LocalPlayer and LocalPlayer.Character
+                    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                    if rootPart and Mouse.Target then
+                        rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+                    end
+                    return Enum.ContextActionResult.Sink
                 end
-                return Enum.ContextActionResult.Sink
             end
         end
     end
