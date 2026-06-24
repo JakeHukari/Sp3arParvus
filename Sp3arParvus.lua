@@ -5888,7 +5888,9 @@ function ShowAdvancedPlayerDetails(player)
     end
 
     task.defer(function()
-        content.CanvasPosition = oldPos
+        if content and content.Parent then
+            content.CanvasPosition = oldPos
+        end
     end)
 end
 
