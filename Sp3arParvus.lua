@@ -4192,6 +4192,10 @@ function InitializePlayerPage(page)
     Wrapper.BackgroundTransparency = 1
     Wrapper.Parent = page
 
+    local wrapperPadding = Instance.new("UIPadding")
+    wrapperPadding.PaddingTop = UDim.new(0, 35)
+    wrapperPadding.Parent = Wrapper
+
     local headerFrame = Instance.new("Frame")
     headerFrame.Size = UDim2.new(1, 0, 0, 30)
     headerFrame.BackgroundTransparency = 1
@@ -4268,6 +4272,12 @@ function InitializePlayerPage(page)
     searchBox.PlaceholderColor3 = UI_THEME.TextDark
     searchBox.Parent = ListFrame
     local sbCorner = Instance.new("UICorner"); sbCorner.CornerRadius = UDim.new(0, 6); sbCorner.Parent = searchBox
+
+    TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        if AdvancedPlayerPanelState.CurrentView == "List" and type(UpdateAdvancedPlayerList) == "function" then
+            UpdateAdvancedPlayerList()
+        end
+    end))
 
     local tabFrame = Instance.new("Frame")
     tabFrame.Name = "TabFrame"
@@ -4762,10 +4772,7 @@ function UpdateAdvancedPlayerList()
     end
 
     for _, player in ipairs(players) do
-        local nickname = player.DisplayName or player.Name
-        local username = player.Name
-        
-        if searchText ~= "" and not nickname:lower():find(searchText) and not username:lower():find(searchText) then
+        if searchText ~= "" and not string.find(string.lower(player.Name), searchText) and not string.find(string.lower(player.DisplayName or ""), searchText) then
             if AdvancedPlayerPanelUI.Entries[player] then
                 AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
             end
@@ -4938,10 +4945,12 @@ function UpdateAdvancedPlayerList()
         end
 
         entry.Frame.Visible = true
-        local char, root = GetCharacter(player)
+        local myChar = LocalPlayer.Character
+        local targetChar = player.Character
         local dist = 999999
-        if root then
-            dist = (root.Position - myPos).Magnitude
+        
+        if myChar and myChar.PrimaryPart and targetChar and targetChar.PrimaryPart then
+            dist = (myChar.PrimaryPart.Position - targetChar.PrimaryPart.Position).Magnitude
             entry.DistanceLabel.Text = math.floor(dist) .. "m"
         else
             entry.DistanceLabel.Text = "---"
@@ -5379,7 +5388,6 @@ local function VisualizeInstance(instance, content, depth)
 
                 TrackConnection(toggleBtn.MouseButton1Click:Connect(function()
                     AdvancedPlayerPanelState.ExplorerExpanded[path] = not AdvancedPlayerPanelState.ExplorerExpanded[path]
-                    ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
                 end))
 
                 selectBtn = Instance.new("TextButton")
@@ -5392,7 +5400,6 @@ local function VisualizeInstance(instance, content, depth)
 
                 TrackConnection(selectBtn.MouseButton1Click:Connect(function()
                     AdvancedPlayerPanelState.ExplorerSelected = (AdvancedPlayerPanelState.ExplorerSelected == path) and nil or path
-                    ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
                     
                     if AdvancedPlayerPanelState.selectionHighlight then
                         AdvancedPlayerPanelState.selectionHighlight:Destroy()
@@ -5581,7 +5588,8 @@ function ShowAdvancedPlayerDetails(player)
         end
     end)
 
-    createButton("Spectate Player", function()
+    local spectateBtn
+    spectateBtn = createButton(AdvancedPlayerPanelState.Spectating == player and "Stop Spectating" or "Spectate Player", function()
         local targetChar = player.Character
         local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
         local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
@@ -5593,6 +5601,10 @@ function ShowAdvancedPlayerDetails(player)
                 Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                 LocalPlayer.ReplicationFocus = nil
                 pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
+                if spectateBtn then
+                    spectateBtn.BackgroundColor3 = UI_THEME.Element
+                    spectateBtn.Text = "Spectate Player"
+                end
             else
                 AdvancedPlayerPanelState.Spectating = player
                 Camera.CameraSubject = targetHum
@@ -5603,9 +5615,16 @@ function ShowAdvancedPlayerDetails(player)
                 end
                 -- Disable the annoying "Gameplay Paused" screen
                 pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
+                if spectateBtn then
+                    spectateBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                    spectateBtn.Text = "Stop Spectating"
+                end
             end
         end
     end)
+    if AdvancedPlayerPanelState.Spectating == player then
+        spectateBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    end
     elseif AdvancedPlayerPanelState.DetailsTab == "Player" then
         content.Size = UDim2.new(1, -10, 1, -195)
         if AdvancedPlayerPanelUI.PropertyFrame then 
