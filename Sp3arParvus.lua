@@ -2495,16 +2495,24 @@ function UI.CreateWindow(title)
     TrackConnection(MinButton.MouseButton1Click:Connect(ToggleMinimize))
 
     -- Toggle Logic (Right Shift)
+    local function ToggleVisible(forceState)
+        if forceState ~= nil then
+            UIState.Visible = forceState
+        else
+            UIState.Visible = not UIState.Visible
+        end
+        MainFrame.Visible = UIState.Visible
+        if UIState.Visible then
+            MainFrame.Size = UDim2.fromOffset(0,0)
+            TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(minimizedWidth, 30) or UDim2.fromOffset(600, 400)}):Play()
+        end
+    end
+    UIState.ToggleVisible = ToggleVisible
+
     -- MEMORY LEAK FIX: Track this connection
     TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.CapsLock then
-            UIState.Visible = not UIState.Visible
-            MainFrame.Visible = UIState.Visible
-            if UIState.Visible then
-                MainFrame.Size = UDim2.fromOffset(0,0)
-                MainFrame.Visible = true 
-                TweenService:Create(MainFrame, TWEENS.BACK, {Size = Minimized and UDim2.fromOffset(minimizedWidth, 30) or UDim2.fromOffset(600, 400)}):Play()
-            end
+            ToggleVisible()
         end
     end))
 
@@ -2583,7 +2591,7 @@ function UI.CreateTab(name, icon)
     TrackConnection(TabButton.MouseButton1Click:Connect(SelectTab))
     
     -- Register
-    table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page})
+    table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page, Select = SelectTab})
     
     -- Auto-select first tab
     if #UIState.Tabs == 1 then
@@ -4172,102 +4180,70 @@ function CreateItemPanel()
     ItemPanelUI.PropertySearch = pfSearch
 end
 
-function CreateAdvancedPlayerPanel()
-    if AdvancedPlayerPanelUI.MainFrame then return end
+function InitializePlayerPage(page)
+    if AdvancedPlayerPanelUI.Initialized then return end
+    AdvancedPlayerPanelUI.Initialized = true
+    AdvancedPlayerPanelState.RowCache = {}
+    AdvancedPlayerPanelState.PropertyRowCache = {}
+    
+    local Wrapper = Instance.new("Frame")
+    Wrapper.Name = "PlayerPageWrapper"
+    Wrapper.Size = UDim2.new(1, 0, 0, 450)
+    Wrapper.BackgroundTransparency = 1
+    Wrapper.Parent = page
 
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "AdvancedPlayerPanel"
-    MainFrame.Size = UDim2.fromOffset(450, 350)
-    MainFrame.Position = UDim2.fromScale(0.5, 0.5)
-    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    MainFrame.BackgroundColor3 = UI_THEME.Background
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Visible = false
-    MainFrame.ClipsDescendants = true
-    EnsureScreenGui()
-    MainFrame.Parent = ScreenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = MainFrame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(60, 60, 60)
-    stroke.Thickness = 1
-    stroke.Parent = MainFrame
-
-    -- Header
-    local header = Instance.new("Frame")
-    header.Name = "Header"
-    header.Size = UDim2.new(1, 0, 0, 35)
-    header.BackgroundColor3 = UI_THEME.Sidebar
-    header.BorderSizePixel = 0
-    header.Parent = MainFrame
-
-    local headerCorner = Instance.new("UICorner")
-    headerCorner.CornerRadius = UDim.new(0, 8)
-    headerCorner.Parent = header
-
-    local headerFix = Instance.new("Frame")
-    headerFix.Size = UDim2.new(1, 0, 0, 10)
-    headerFix.Position = UDim2.new(0, 0, 1, -10)
-    headerFix.BackgroundColor3 = UI_THEME.Sidebar
-    headerFix.BorderSizePixel = 0
-    headerFix.Parent = header
+    local headerFrame = Instance.new("Frame")
+    headerFrame.Size = UDim2.new(1, 0, 0, 30)
+    headerFrame.BackgroundTransparency = 1
+    headerFrame.Parent = Wrapper
 
     local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, -70, 1, 0)
-    title.Position = UDim2.fromOffset(12, 0)
+    title.Size = UDim2.new(0.5, 0, 1, 0)
     title.BackgroundTransparency = 1
-    title.Text = "👥 Player Panel"
+    title.Text = "Player Explorer"
     title.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    title.TextSize = 16
+    title.TextSize = 14
     title.TextColor3 = UI_THEME.Accent
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = header
+    title.Parent = headerFrame
 
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Name = "CloseBtn"
-    closeBtn.Size = UDim2.fromOffset(26, 26)
-    closeBtn.Position = UDim2.new(1, -31, 0.5, -13)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    closeBtn.BackgroundTransparency = 0.5
-    closeBtn.Text = "X"
-    closeBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    closeBtn.TextSize = 14
-    closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    closeBtn.BorderSizePixel = 0
-    closeBtn.Parent = header
-
-    local closeBtnCorner = Instance.new("UICorner")
-    closeBtnCorner.CornerRadius = UDim.new(0, 4)
-    closeBtnCorner.Parent = closeBtn
-
-    TrackConnection(closeBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.Visible = false
-        MainFrame.Visible = false
-        Flags["ESP/AdvancedPlayerPanel"] = false
-        local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
-        if updater then updater(false) end
-    end))
+    local listBtn = Instance.new("TextButton")
+    listBtn.Size = UDim2.fromOffset(80, 24)
+    listBtn.Position = UDim2.new(1, -170, 0.5, -12)
+    listBtn.BackgroundColor3 = UI_THEME.Element
+    listBtn.Text = "Players"
+    listBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    listBtn.TextSize = 12
+    listBtn.TextColor3 = UI_THEME.Text
+    listBtn.Parent = headerFrame
+    local lbCorner = Instance.new("UICorner"); lbCorner.CornerRadius = UDim.new(0, 4); lbCorner.Parent = listBtn
 
     local teamsBtn = Instance.new("TextButton")
-    teamsBtn.Name = "TeamsBtn"
-    teamsBtn.Size = UDim2.fromOffset(26, 26)
-    teamsBtn.Position = UDim2.new(1, -62, 0.5, -13)
-    teamsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    teamsBtn.BackgroundTransparency = 0.5
-    teamsBtn.Text = "🛡️"
+    teamsBtn.Size = UDim2.fromOffset(80, 24)
+    teamsBtn.Position = UDim2.new(1, -85, 0.5, -12)
+    teamsBtn.BackgroundColor3 = UI_THEME.Element
+    teamsBtn.Text = "Teams"
     teamsBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    teamsBtn.TextSize = 14
-    teamsBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    teamsBtn.BorderSizePixel = 0
-    teamsBtn.Parent = header
+    teamsBtn.TextSize = 12
+    teamsBtn.TextColor3 = UI_THEME.Text
+    teamsBtn.Parent = headerFrame
+    local tbCorner = Instance.new("UICorner"); tbCorner.CornerRadius = UDim.new(0, 4); tbCorner.Parent = teamsBtn
 
-    local teamsBtnCorner = Instance.new("UICorner")
-    teamsBtnCorner.CornerRadius = UDim.new(0, 4)
-    teamsBtnCorner.Parent = teamsBtn
+    -- List View
+    local ListFrame = Instance.new("Frame")
+    ListFrame.Name = "ListFrame"
+    ListFrame.Size = UDim2.new(1, 0, 1, -35)
+    ListFrame.Position = UDim2.fromOffset(0, 35)
+    ListFrame.BackgroundTransparency = 1
+    ListFrame.Visible = true
+    ListFrame.Parent = Wrapper
+
+    TrackConnection(listBtn.MouseButton1Click:Connect(function()
+        AdvancedPlayerPanelState.CurrentView = "List"
+        if AdvancedPlayerPanelUI.TeamFrame then AdvancedPlayerPanelUI.TeamFrame.Visible = false end
+        if AdvancedPlayerPanelUI.DetailsFrame then AdvancedPlayerPanelUI.DetailsFrame.Visible = false end
+        if AdvancedPlayerPanelUI.ListFrame then AdvancedPlayerPanelUI.ListFrame.Visible = true end
+    end))
 
     TrackConnection(teamsBtn.MouseButton1Click:Connect(function()
         AdvancedPlayerPanelState.CurrentView = "Teams"
@@ -4278,15 +4254,6 @@ function CreateAdvancedPlayerPanel()
             UpdateTeamPanelList()
         end
     end))
-
-    -- List View
-    local ListFrame = Instance.new("Frame")
-    ListFrame.Name = "ListFrame"
-    ListFrame.Size = UDim2.new(1, 0, 1, -35)
-    ListFrame.Position = UDim2.fromOffset(0, 35)
-    ListFrame.BackgroundTransparency = 1
-    ListFrame.Visible = true
-    ListFrame.Parent = MainFrame
 
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchBox"
@@ -4367,7 +4334,7 @@ function CreateAdvancedPlayerPanel()
     DetailsFrame.Position = UDim2.fromOffset(0, 35)
     DetailsFrame.BackgroundTransparency = 1
     DetailsFrame.Visible = false
-    DetailsFrame.Parent = MainFrame
+    DetailsFrame.Parent = Wrapper
 
     local backBtn = Instance.new("TextButton")
     backBtn.Name = "BackBtn"
@@ -4417,6 +4384,10 @@ function CreateAdvancedPlayerPanel()
             for tabName, tabBtn in pairs(AdvancedPlayerPanelUI.DetailsTabButtons) do
                 tabBtn.BackgroundColor3 = (tabName == name) and UI_THEME.Accent or UI_THEME.Element
             end
+            if AdvancedPlayerPanelUI.ExplorerContent then
+                AdvancedPlayerPanelUI.ExplorerContent.Visible = (name == "Workspace")
+                AdvancedPlayerPanelUI.DetailsContent.Visible = (name ~= "Workspace")
+            end
             if AdvancedPlayerPanelState.SelectedPlayer then
                 ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
             end
@@ -4430,7 +4401,7 @@ function CreateAdvancedPlayerPanel()
 
     local detailsContent = Instance.new("ScrollingFrame")
     detailsContent.Name = "DetailsContent"
-    detailsContent.Size = UDim2.new(1, -10, 1, -46)
+    detailsContent.Size = UDim2.new(1, -10, 1, -186)
     detailsContent.Position = UDim2.fromOffset(5, 46)
     detailsContent.BackgroundTransparency = 1
     detailsContent.BorderSizePixel = 0
@@ -4451,6 +4422,25 @@ function CreateAdvancedPlayerPanel()
     detailsPadding.PaddingLeft = UDim.new(0, 10)
     detailsPadding.PaddingRight = UDim.new(0, 10)
     detailsPadding.Parent = detailsContent
+    
+    local explorerContent = Instance.new("ScrollingFrame")
+    explorerContent.Name = "ExplorerContent"
+    explorerContent.Size = UDim2.new(1, -10, 1, -186)
+    explorerContent.Position = UDim2.fromOffset(5, 46)
+    explorerContent.BackgroundTransparency = 1
+    explorerContent.BorderSizePixel = 0
+    explorerContent.ScrollBarThickness = 4
+    explorerContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    explorerContent.Visible = false
+    explorerContent.Parent = DetailsFrame
+
+    local expLayout = Instance.new("UIListLayout")
+    expLayout.Padding = UDim.new(0, 0)
+    expLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    expLayout.Parent = explorerContent
+    TrackConnection(expLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        explorerContent.CanvasSize = UDim2.new(0, 0, 0, expLayout.AbsoluteContentSize.Y)
+    end))
 
     local propertyFrame = Instance.new("Frame")
     propertyFrame.Name = "PropertyFrame"
@@ -4460,7 +4450,6 @@ function CreateAdvancedPlayerPanel()
     propertyFrame.Visible = false
     propertyFrame.Parent = DetailsFrame
     local pfCorner = Instance.new("UICorner"); pfCorner.CornerRadius = UDim.new(0, 6); pfCorner.Parent = propertyFrame
-    local pfStroke = Instance.new("UIStroke"); pfStroke.Color = Color3.fromRGB(45, 45, 45); pfStroke.Parent = propertyFrame
 
     local pfHeader = Instance.new("Frame")
     pfHeader.Size = UDim2.new(1, 0, 0, 24)
@@ -4517,6 +4506,7 @@ function CreateAdvancedPlayerPanel()
     AdvancedPlayerPanelUI.PropertyFrame = propertyFrame
     AdvancedPlayerPanelUI.PropertyContent = propertyContent
     AdvancedPlayerPanelUI.PropertySearch = pfSearch
+    AdvancedPlayerPanelUI.ExplorerContent = explorerContent
 
     -- Team View
     local TeamFrame = Instance.new("Frame")
@@ -4525,25 +4515,7 @@ function CreateAdvancedPlayerPanel()
     TeamFrame.Position = UDim2.fromOffset(0, 35)
     TeamFrame.BackgroundTransparency = 1
     TeamFrame.Visible = false
-    TeamFrame.Parent = MainFrame
-
-    local teamBackBtn = Instance.new("TextButton")
-    teamBackBtn.Name = "BackBtn"
-    teamBackBtn.Size = UDim2.fromOffset(70, 26)
-    teamBackBtn.Position = UDim2.fromOffset(10, 10)
-    teamBackBtn.BackgroundColor3 = UI_THEME.Element
-    teamBackBtn.Text = "← Back"
-    teamBackBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    teamBackBtn.TextSize = 12
-    teamBackBtn.TextColor3 = UI_THEME.Text
-    teamBackBtn.Parent = TeamFrame
-    local tbbCorner = Instance.new("UICorner"); tbbCorner.CornerRadius = UDim.new(0, 4); tbbCorner.Parent = teamBackBtn
-
-    TrackConnection(teamBackBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.CurrentView = "List"
-        TeamFrame.Visible = false
-        ListFrame.Visible = true
-    end))
+    TeamFrame.Parent = Wrapper
 
     local teamContent = Instance.new("ScrollingFrame")
     teamContent.Name = "TeamContent"
@@ -4564,7 +4536,6 @@ function CreateAdvancedPlayerPanel()
         teamContent.CanvasSize = UDim2.new(0, 0, 0, teamLayout.AbsoluteContentSize.Y)
     end))
 
-    AdvancedPlayerPanelUI.MainFrame = MainFrame
     AdvancedPlayerPanelUI.ListFrame = ListFrame
     AdvancedPlayerPanelUI.DetailsFrame = DetailsFrame
     AdvancedPlayerPanelUI.TeamFrame = TeamFrame
@@ -4572,10 +4543,53 @@ function CreateAdvancedPlayerPanel()
     AdvancedPlayerPanelUI.DetailsContent = detailsContent
     AdvancedPlayerPanelUI.TeamContent = teamContent
     AdvancedPlayerPanelUI.SearchBox = searchBox
-
-    if UI.MakeDraggable then
-        UI.MakeDraggable(MainFrame)
-    end
+    
+    task.spawn(function()
+        while task.wait(0.5) do
+            if UIState.CurrentTab == "PlayerPage" and UIState.Visible then
+                if AdvancedPlayerPanelState.CurrentView == "List" then
+                    UpdateAdvancedPlayerList()
+                elseif AdvancedPlayerPanelState.CurrentView == "Teams" then
+                    UpdateTeamPanelList()
+                elseif AdvancedPlayerPanelState.CurrentView == "Details" and AdvancedPlayerPanelState.SelectedPlayer then
+                    if AdvancedPlayerPanelState.DetailsTab == "Workspace" then
+                        local char = AdvancedPlayerPanelState.SelectedPlayer.Character
+                        if char then
+                            AdvancedPlayerPanelState.CurrentPaths = {}
+                            ExplorerCounter = 0
+                            VisualizeInstance(char, AdvancedPlayerPanelUI.ExplorerContent, 0)
+                            
+                            for path, row in pairs(AdvancedPlayerPanelState.RowCache) do
+                                if not AdvancedPlayerPanelState.CurrentPaths[path] then
+                                    row:Destroy()
+                                    AdvancedPlayerPanelState.RowCache[path] = nil
+                                end
+                            end
+                            
+                            if AdvancedPlayerPanelState.ExplorerSelected then
+                                local inst = GetInstanceFromPath(AdvancedPlayerPanelState.ExplorerSelected)
+                                if inst then UpdatePropertyPane(inst) end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    TrackConnection(UIState.Tabs[#UIState.Tabs].Button:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+        if UIState.CurrentTab ~= "PlayerPage" and AdvancedPlayerPanelState.selectionHighlight then
+            AdvancedPlayerPanelState.selectionHighlight:Destroy()
+            AdvancedPlayerPanelState.selectionHighlight = nil
+        end
+    end))
+    
+    TrackConnection(page:GetPropertyChangedSignal("Visible"):Connect(function()
+        if not page.Visible and AdvancedPlayerPanelState.selectionHighlight then
+            AdvancedPlayerPanelState.selectionHighlight:Destroy()
+            AdvancedPlayerPanelState.selectionHighlight = nil
+        end
+    end))
 end
 
 function UpdateTeamPanelList()
@@ -5098,18 +5112,16 @@ local function UpdatePropertyPane(instance)
     local content = AdvancedPlayerPanelUI.PropertyContent
     if not content then return end
 
-    for _, child in ipairs(content:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-
+    local currentPropRows = {}
     local searchText = AdvancedPlayerPanelState.PropertySearchText
     local categories = {"Data", "Appearance", "Behavior", "Stats", "Transform"}
+    local orderCounter = 0
 
     for _, catName in ipairs(categories) do
         local catProps = PROPERTY_CATEGORIES[catName]
         local catHasAny = false
         
-        -- Check if any property in this category matches search and exists
+        -- Check if any property exists
         for _, prop in ipairs(catProps) do
             if searchText == "" or prop:lower():find(searchText) then
                 local success, val = pcall(function() return instance[prop] end)
@@ -5121,59 +5133,90 @@ local function UpdatePropertyPane(instance)
         end
 
         if catHasAny then
-            -- Create Category Header
-            local catHeader = Instance.new("Frame")
-            catHeader.Size = UDim2.new(1, 0, 0, 20)
-            catHeader.BackgroundTransparency = 1
-            catHeader.Parent = content
+            orderCounter = orderCounter + 1
+            local catHeaderId = "Cat_" .. catName
+            currentPropRows[catHeaderId] = true
+            local catHeader = AdvancedPlayerPanelState.PropertyRowCache[catHeaderId]
             
-            local catLabel = Instance.new("TextLabel")
-            catLabel.Size = UDim2.new(1, -10, 1, 0)
-            catLabel.Position = UDim2.fromOffset(5, 0)
-            catLabel.BackgroundTransparency = 1
-            catLabel.Text = "v " .. catName
-            catLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-            catLabel.TextSize = 11
-            catLabel.TextColor3 = UI_THEME.TextDark
-            catLabel.TextXAlignment = Enum.TextXAlignment.Left
-            catLabel.Parent = catHeader
+            if not catHeader then
+                catHeader = Instance.new("Frame")
+                catHeader.Size = UDim2.new(1, 0, 0, 20)
+                catHeader.BackgroundTransparency = 1
+                catHeader.Parent = content
+                AdvancedPlayerPanelState.PropertyRowCache[catHeaderId] = catHeader
+                
+                local catLabel = Instance.new("TextLabel")
+                catLabel.Name = "CatLabel"
+                catLabel.Size = UDim2.new(1, -10, 1, 0)
+                catLabel.Position = UDim2.fromOffset(5, 0)
+                catLabel.BackgroundTransparency = 1
+                catLabel.Text = "v " .. catName
+                catLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+                catLabel.TextSize = 11
+                catLabel.TextColor3 = UI_THEME.TextDark
+                catLabel.TextXAlignment = Enum.TextXAlignment.Left
+                catLabel.Parent = catHeader
+            end
+            catHeader.LayoutOrder = orderCounter
 
-            -- Create Property Rows
             for _, prop in ipairs(catProps) do
                 if searchText == "" or prop:lower():find(searchText) then
                     local success, val = pcall(function() return instance[prop] end)
                     if success and val ~= nil then
-                        local row = Instance.new("Frame")
-                        row.Size = UDim2.new(1, 0, 0, 20)
-                        row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-                        row.BackgroundTransparency = 0.5
-                        row.BorderSizePixel = 0
-                        row.Parent = content
+                        orderCounter = orderCounter + 1
+                        local propId = "Prop_" .. prop
+                        currentPropRows[propId] = true
                         
-                        local nameLabel = Instance.new("TextLabel")
-                        nameLabel.Size = UDim2.new(0.4, -10, 1, 0)
-                        nameLabel.Position = UDim2.fromOffset(10, 0)
-                        nameLabel.BackgroundTransparency = 1
-                        nameLabel.Text = prop
-                        nameLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-                        nameLabel.TextSize = 11
-                        nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-                        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                        nameLabel.Parent = row
+                        local row = AdvancedPlayerPanelState.PropertyRowCache[propId]
+                        local valueLabel
+                        
+                        if not row then
+                            row = Instance.new("Frame")
+                            row.Size = UDim2.new(1, 0, 0, 20)
+                            row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+                            row.BackgroundTransparency = 0.5
+                            row.BorderSizePixel = 0
+                            row.Parent = content
+                            AdvancedPlayerPanelState.PropertyRowCache[propId] = row
+                            
+                            local nameLabel = Instance.new("TextLabel")
+                            nameLabel.Size = UDim2.new(0.4, -10, 1, 0)
+                            nameLabel.Position = UDim2.fromOffset(10, 0)
+                            nameLabel.BackgroundTransparency = 1
+                            nameLabel.Text = prop
+                            nameLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                            nameLabel.TextSize = 11
+                            nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+                            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                            nameLabel.Parent = row
 
-                        local valueLabel = Instance.new("TextLabel")
-                        valueLabel.Size = UDim2.new(0.6, -10, 1, 0)
-                        valueLabel.Position = UDim2.new(0.4, 5, 0, 0)
-                        valueLabel.BackgroundTransparency = 1
+                            valueLabel = Instance.new("TextLabel")
+                            valueLabel.Name = "ValueLabel"
+                            valueLabel.Size = UDim2.new(0.6, -10, 1, 0)
+                            valueLabel.Position = UDim2.new(0.4, 5, 0, 0)
+                            valueLabel.BackgroundTransparency = 1
+                            valueLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                            valueLabel.TextSize = 11
+                            valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+                            valueLabel.Parent = row
+                        else
+                            valueLabel = row:FindFirstChild("ValueLabel")
+                        end
+                        
+                        row.LayoutOrder = orderCounter
                         valueLabel.Text = tostring(val)
-                        valueLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-                        valueLabel.TextSize = 11
-                        valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        valueLabel.TextXAlignment = Enum.TextXAlignment.Left
-                        valueLabel.Parent = row
                     end
                 end
             end
+        end
+    end
+    
+    -- Cleanup stale properties
+    for id, row in pairs(AdvancedPlayerPanelState.PropertyRowCache) do
+        if not currentPropRows[id] then
+            row:Destroy()
+            AdvancedPlayerPanelState.PropertyRowCache[id] = nil
         end
     end
 end
@@ -5304,27 +5347,31 @@ local function VisualizeInstance(instance, content, depth)
         pcall(function()
             if ignoreList[child.Name] then return end
             local path = GetUniquePath(child)
+            if AdvancedPlayerPanelState.CurrentPaths then
+                AdvancedPlayerPanelState.CurrentPaths[path] = true
+            end
+            
             local isExpanded = AdvancedPlayerPanelState.ExplorerExpanded[path]
             local isSelected = AdvancedPlayerPanelState.ExplorerSelected == path
             local hasChildren = #child:GetChildren() > 0
 
             ExplorerCounter = ExplorerCounter + 1
-            local row = Instance.new("Frame")
-            row.Size = UDim2.new(1, 0, 0, 24)
-            row.BackgroundColor3 = isSelected and UI_THEME.Accent or UI_THEME.Element
-            row.BackgroundTransparency = isSelected and 0.5 or 1
-            row.BorderSizePixel = 0
-            row.LayoutOrder = ExplorerCounter
-            row.Parent = content
-
+            
+            local row = AdvancedPlayerPanelState.RowCache[path]
+            local selectBtn, toggleBtn
             local indent = depth * 16
 
-            if hasChildren then
-                local toggleBtn = Instance.new("TextButton")
+            if not row then
+                row = Instance.new("Frame")
+                row.Size = UDim2.new(1, 0, 0, 24)
+                row.BorderSizePixel = 0
+                row.Parent = content
+                AdvancedPlayerPanelState.RowCache[path] = row
+
+                toggleBtn = Instance.new("TextButton")
+                toggleBtn.Name = "ToggleBtn"
                 toggleBtn.Size = UDim2.new(0, 24, 1, 0)
-                toggleBtn.Position = UDim2.fromOffset(indent, 0)
                 toggleBtn.BackgroundTransparency = 1
-                toggleBtn.Text = isExpanded and "⬇️" or "➡️"
                 toggleBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
                 toggleBtn.TextSize = 10
                 toggleBtn.TextColor3 = UI_THEME.Accent
@@ -5334,26 +5381,61 @@ local function VisualizeInstance(instance, content, depth)
                     AdvancedPlayerPanelState.ExplorerExpanded[path] = not AdvancedPlayerPanelState.ExplorerExpanded[path]
                     ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
                 end))
+
+                selectBtn = Instance.new("TextButton")
+                selectBtn.Name = "SelectBtn"
+                selectBtn.BackgroundTransparency = 1
+                selectBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                selectBtn.TextSize = 12
+                selectBtn.TextXAlignment = Enum.TextXAlignment.Left
+                selectBtn.Parent = row
+
+                TrackConnection(selectBtn.MouseButton1Click:Connect(function()
+                    AdvancedPlayerPanelState.ExplorerSelected = (AdvancedPlayerPanelState.ExplorerSelected == path) and nil or path
+                    ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
+                    
+                    if AdvancedPlayerPanelState.selectionHighlight then
+                        AdvancedPlayerPanelState.selectionHighlight:Destroy()
+                        AdvancedPlayerPanelState.selectionHighlight = nil
+                    end
+
+                    if AdvancedPlayerPanelState.ExplorerSelected then
+                        local inst = GetInstanceFromPath(path)
+                        if inst then
+                            if inst:IsA("BasePart") or inst:IsA("Model") then
+                                local hl = Instance.new("Highlight")
+                                hl.OutlineColor = Color3.new(1, 1, 1)
+                                hl.FillTransparency = 1
+                                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                hl.Adornee = inst
+                                hl.Parent = game.CoreGui
+                                AdvancedPlayerPanelState.selectionHighlight = hl
+                            end
+                            UpdatePropertyPane(inst)
+                        end
+                    end
+                end))
+            else
+                toggleBtn = row:FindFirstChild("ToggleBtn")
+                selectBtn = row:FindFirstChild("SelectBtn")
             end
+            
+            row.LayoutOrder = ExplorerCounter
+            row.BackgroundColor3 = isSelected and UI_THEME.Accent or UI_THEME.Element
+            row.BackgroundTransparency = isSelected and 0.5 or 1
 
-            local selectBtn = Instance.new("TextButton")
-            selectBtn.Size = UDim2.new(1, -(indent + 25), 1, 0)
+            if hasChildren then
+                toggleBtn.Visible = true
+                toggleBtn.Position = UDim2.fromOffset(indent, 0)
+                toggleBtn.Text = isExpanded and "⬇️" or "➡️"
+            else
+                toggleBtn.Visible = false
+            end
+            
             selectBtn.Position = UDim2.fromOffset(indent + 24, 0)
-            selectBtn.BackgroundTransparency = 1
+            selectBtn.Size = UDim2.new(1, -(indent + 25), 1, 0)
             selectBtn.Text = child.Name .. " (" .. child.ClassName .. ")"
-            selectBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-            selectBtn.TextSize = 12
             selectBtn.TextColor3 = isSelected and Color3.new(1, 1, 1) or UI_THEME.Text
-            selectBtn.TextXAlignment = Enum.TextXAlignment.Left
-            selectBtn.Parent = row
-
-            TrackConnection(selectBtn.MouseButton1Click:Connect(function()
-                AdvancedPlayerPanelState.ExplorerSelected = (AdvancedPlayerPanelState.ExplorerSelected == path) and nil or path
-                ShowAdvancedPlayerDetails(AdvancedPlayerPanelState.SelectedPlayer)
-                if AdvancedPlayerPanelState.ExplorerSelected then
-                    UpdatePropertyPane(child)
-                end
-            end))
 
             if isExpanded then
                 VisualizeInstance(child, content, depth + 1)
@@ -7631,6 +7713,8 @@ local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
+local PlayerPage = UI.CreateTab("PlayerPage")
+InitializePlayerPage(PlayerPage)
 local MiscTab = UI.CreateTab("Misc")
 
 function ShowWorldHumList(page)
@@ -8270,15 +8354,7 @@ UI.CreateToggle(VisualsTab, "Draw Username", "ESP/ShowUsername", Flags["ESP/Show
 UI.CreateToggle(VisualsTab, "Draw Distance", "ESP/ShowDistance", Flags["ESP/ShowDistance"])
 UI.CreateToggle(VisualsTab, "Draw Health Indicator", "ESP/HealthIndicator", Flags["ESP/HealthIndicator"])
 UI.CreateToggle(VisualsTab, "Draw Equipped Item", "ESP/ShowEquipped", Flags["ESP/ShowEquipped"])
-UI.CreateToggle(VisualsTab, "Advanced Player Panel (Ctrl+K)", "ESP/AdvancedPlayerPanel", Flags["ESP/AdvancedPlayerPanel"], function(state)
-    if state and not AdvancedPlayerPanelUI.MainFrame then
-        CreateAdvancedPlayerPanel()
-    end
-    if AdvancedPlayerPanelUI.MainFrame then
-        AdvancedPlayerPanelUI.MainFrame.Visible = state
-        AdvancedPlayerPanelState.Visible = state
-    end
-end)
+
 UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
     -- When disabled, remove all existing outlines immediately
     if not state then
@@ -8952,18 +9028,20 @@ local function handleShortcuts(actionName, inputState, inputObject)
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.K then
-            Flags["ESP/AdvancedPlayerPanel"] = not Flags["ESP/AdvancedPlayerPanel"]
-            local state = Flags["ESP/AdvancedPlayerPanel"]
-            UI.Notify("Player Panel", string.format("Advanced Player Panel has been %s with 'Ctrl+K'", state and "activated" or "deactivated"))
-            if state and not AdvancedPlayerPanelUI.MainFrame then
-                CreateAdvancedPlayerPanel()
+            if not UIState.Visible then
+                if UIState.ToggleVisible then UIState.ToggleVisible(true) end
+                for _, t in ipairs(UIState.Tabs) do
+                    if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                end
+            else
+                if UIState.CurrentTab ~= "PlayerPage" then
+                    for _, t in ipairs(UIState.Tabs) do
+                        if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                    end
+                else
+                    if UIState.ToggleVisible then UIState.ToggleVisible(false) end
+                end
             end
-            if AdvancedPlayerPanelUI.MainFrame then
-                AdvancedPlayerPanelUI.MainFrame.Visible = state
-                AdvancedPlayerPanelState.Visible = state
-            end
-            local updater = UIState.Updaters["ESP/AdvancedPlayerPanel"]
-            if updater then updater(state) end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.J then
             ItemPanelState.Visible = not ItemPanelState.Visible
