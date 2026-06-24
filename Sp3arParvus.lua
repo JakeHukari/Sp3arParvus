@@ -264,7 +264,8 @@ local ItemPanelUI = {
 }
 local HumanoidState = {
     originalSettings = {},
-    captured = false
+    captured = false,
+    presetsApplied = false
 }
 local WorldHumState = {
     selectedHum = nil,
@@ -273,7 +274,8 @@ local WorldHumState = {
     connections = {},
     updaters = {},
     listEntries = {},
-    selectionHighlight = nil
+    selectionHighlight = nil,
+    presetsApplied = {}
 }
 local Br3ak3rState = {
     FilterDirty = true,
@@ -694,10 +696,12 @@ function ClearWorldHumConnections()
     end
     table.clear(WorldHumState.connections)
     table.clear(WorldHumState.updaters)
+    table.clear(WorldHumState.presetsApplied)
 end
 
 function CaptureHumanoidSettings(humanoid)
     if not humanoid or HumanoidState.captured then return end
+    HumanoidState.presetsApplied = false
     
     local properties = {
         "Archivable", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck",
@@ -758,7 +762,7 @@ function ApplyHumanoidSettings()
     end
 
     -- Game-specific presets
-    if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
+    if not HumanoidState.presetsApplied and game.PlaceId == 2474168535 and DNS(LocalPlayer) then
         local presets = {
             ["Humanoid/JumpHeight"] = 8,
             ["Humanoid/UseJumpPower"] = false,
@@ -776,6 +780,7 @@ function ApplyHumanoidSettings()
                 if lockUpdater then lockUpdater(true) end
             end
         end
+        HumanoidState.presetsApplied = true
     end
     
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
@@ -853,11 +858,17 @@ function ApplyWorldHumanoidSettings()
                 local hum = nearby[i]
                 if hum.Name == "Horse" or (hum.Parent and hum.Parent.Name == "Horse") then
                     local path = GetUniquePath(hum)
-                    if not WorldHumState.lockedProperties[path] then
-                        WorldHumState.lockedProperties[path] = {
-                            ["JumpPower"] = 65,
-                            ["MaxSlopeAngle"] = 89.9
-                        }
+                    if not WorldHumState.presetsApplied[path] then
+                        if not WorldHumState.lockedProperties[path] then
+                            WorldHumState.lockedProperties[path] = {
+                                ["JumpPower"] = 65,
+                                ["MaxSlopeAngle"] = 89.9
+                            }
+                        else
+                            WorldHumState.lockedProperties[path]["JumpPower"] = 65
+                            WorldHumState.lockedProperties[path]["MaxSlopeAngle"] = 89.9
+                        end
+                        WorldHumState.presetsApplied[path] = true
                     end
                 end
             end
@@ -873,6 +884,7 @@ function ApplyWorldHumanoidSettings()
         else
             -- Humanoid destroyed or gone, stop enforcing
             WorldHumState.lockedProperties[path] = nil
+            WorldHumState.presetsApplied[path] = nil
         end
     end
 end
@@ -7460,6 +7472,7 @@ function Cleanup()
         pcall(function() WorldHumState.selectionHighlight:Destroy() end)
     end
     table.clear(WorldHumState.lockedProperties)
+    table.clear(WorldHumState.presetsApplied)
     WorldHumState.selectedHum = nil
     WorldHumState.selectionHighlight = nil
     
@@ -7497,6 +7510,7 @@ function Cleanup()
         end
         table.clear(HumanoidState.originalSettings)
         HumanoidState.captured = false
+        HumanoidState.presetsApplied = false
     end
 
     -- Reset module-level state
