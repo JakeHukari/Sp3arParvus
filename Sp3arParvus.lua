@@ -196,7 +196,8 @@ local AdvancedPlayerPanelState = {
     Blacklist = {},
     TeamWhitelist = {},
     TeamBlacklist = {},
-    TeamExpanded = {}
+    TeamExpanded = {},
+    PlayerRowCache = {}
 }
 
 local ItemPanelState = {
@@ -4180,11 +4181,21 @@ function CreateItemPanel()
     ItemPanelUI.PropertySearch = pfSearch
 end
 
+local function ClearFrame(container)
+    if not container then return end
+    for _, child in ipairs(container:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+end
+
 function InitializePlayerPage(page)
     if AdvancedPlayerPanelUI.Initialized then return end
     AdvancedPlayerPanelUI.Initialized = true
     AdvancedPlayerPanelState.RowCache = {}
     AdvancedPlayerPanelState.PropertyRowCache = {}
+    AdvancedPlayerPanelState.PlayerRowCache = {}
     
     local Wrapper = Instance.new("Frame")
     Wrapper.Name = "PlayerPageWrapper"
@@ -4202,7 +4213,7 @@ function InitializePlayerPage(page)
     headerFrame.Parent = Wrapper
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(0.5, 0, 1, 0)
+    title.Size = UDim2.new(0, 140, 1, 0)
     title.BackgroundTransparency = 1
     title.Text = "Player Explorer"
     title.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -4213,7 +4224,7 @@ function InitializePlayerPage(page)
 
     local listBtn = Instance.new("TextButton")
     listBtn.Size = UDim2.fromOffset(80, 24)
-    listBtn.Position = UDim2.new(1, -170, 0.5, -12)
+    listBtn.Position = UDim2.new(0, 150, 0.5, -12)
     listBtn.BackgroundColor3 = UI_THEME.Element
     listBtn.Text = "Players"
     listBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -4224,7 +4235,7 @@ function InitializePlayerPage(page)
 
     local teamsBtn = Instance.new("TextButton")
     teamsBtn.Size = UDim2.fromOffset(80, 24)
-    teamsBtn.Position = UDim2.new(1, -85, 0.5, -12)
+    teamsBtn.Position = UDim2.new(0, 240, 0.5, -12)
     teamsBtn.BackgroundColor3 = UI_THEME.Element
     teamsBtn.Text = "Teams"
     teamsBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -4563,8 +4574,9 @@ function InitializePlayerPage(page)
                     UpdateTeamPanelList()
                 elseif AdvancedPlayerPanelState.CurrentView == "Details" and AdvancedPlayerPanelState.SelectedPlayer then
                     if AdvancedPlayerPanelState.DetailsTab == "Workspace" then
-                        local char = AdvancedPlayerPanelState.SelectedPlayer.Character
-                        if char then
+                        local targetPlayer = AdvancedPlayerPanelState.SelectedPlayer
+                        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("PrimaryPart") then
+                            local char = targetPlayer.Character
                             AdvancedPlayerPanelState.CurrentPaths = {}
                             ExplorerCounter = 0
                             VisualizeInstance(char, AdvancedPlayerPanelUI.ExplorerContent, 0)
@@ -4580,6 +4592,8 @@ function InitializePlayerPage(page)
                                 local inst = GetInstanceFromPath(AdvancedPlayerPanelState.ExplorerSelected)
                                 if inst then UpdatePropertyPane(inst) end
                             end
+                        else
+                            ClearFrame(AdvancedPlayerPanelUI.ExplorerContent)
                         end
                     end
                 end
@@ -4609,9 +4623,7 @@ function UpdateTeamPanelList()
     local content = AdvancedPlayerPanelUI.TeamContent
     if not content then return end
 
-    for _, child in ipairs(content:GetChildren()) do
-        if not child:IsA("UIListLayout") then child:Destroy() end
-    end
+    ClearFrame(content)
 
     local Teams = game:GetService("Teams")
     local teamList = Teams:GetTeams()
@@ -4760,31 +4772,34 @@ function UpdateAdvancedPlayerList()
     local searchText = AdvancedPlayerPanelUI.SearchBox.Text:lower()
     
     local myChar = LocalPlayer.Character
-    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+    local myRoot = myChar and (myChar:FindFirstChild("PrimaryPart") or myChar:FindFirstChild("HumanoidRootPart"))
     local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
 
-    -- Optimization: reuse entries
-    for player, entry in pairs(AdvancedPlayerPanelUI.Entries) do
-        if not player or not player.Parent then
-            entry.Frame:Destroy()
-            AdvancedPlayerPanelUI.Entries[player] = nil
-        end
+    -- Build set of current players' UserIds
+    local currentPlayersSet = {}
+    for _, player in ipairs(players) do
+        currentPlayersSet[player.UserId] = true
     end
 
+    -- Process players loop
     for _, player in ipairs(players) do
-        if searchText ~= "" and not string.find(string.lower(player.Name), searchText) and not string.find(string.lower(player.DisplayName or ""), searchText) then
-            if AdvancedPlayerPanelUI.Entries[player] then
-                AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
-            end
-            continue
+        local userId = player.UserId
+
+        -- Determine if filtered by search
+        local nameMatch = string.find(string.lower(player.Name), searchText, 1, true)
+        local displayNameMatch = string.find(string.lower(player.DisplayName or ""), searchText, 1, true)
+        local isFiltered = false
+        
+        if searchText ~= "" and not nameMatch and not displayNameMatch then
+            isFiltered = true
         end
 
-        local pId = player.UserId
+        -- Determine if filtered by Tab
         local pTeam = player.Team
         local teamName = pTeam and pTeam.Name
 
-        local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
-        local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+        local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[userId]
+        local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[userId]
         local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
         local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
 
@@ -4792,37 +4807,73 @@ function UpdateAdvancedPlayerList()
         local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
         
         local currentTab = AdvancedPlayerPanelState.ListTab
-
         if (currentTab == "Whitelisted" and not isWhitelisted) or (currentTab == "Blacklisted" and not isBlacklisted) then
-            if AdvancedPlayerPanelUI.Entries[player] then
-                AdvancedPlayerPanelUI.Entries[player].Frame.Visible = false
+            isFiltered = true
+        end
+
+        -- Get cache entry
+        local entry = AdvancedPlayerPanelState.PlayerRowCache[userId]
+
+        if isFiltered then
+            if entry then
+                entry.Frame.Visible = false
             end
             continue
         end
 
-        local entry = AdvancedPlayerPanelUI.Entries[player]
+        -- Calculate distance safely (Requirement 2)
+        local dist = 999999
+        local distStr = "Loading..."
+        local targetChar = player.Character
+        
+        if targetChar and targetChar:FindFirstChild("PrimaryPart") then
+            if myChar and myChar:FindFirstChild("PrimaryPart") then
+                dist = (myChar.PrimaryPart.Position - targetChar.PrimaryPart.Position).Magnitude
+                distStr = math.floor(dist) .. "m"
+            else
+                distStr = "N/A"
+            end
+        else
+            distStr = "N/A"
+        end
+
+        -- If it does not exist, create the UI frame, connect click events, and cache it
         if not entry then
             entry = {}
+            entry.PlayerObj = player
+
             local frame = Instance.new("Frame")
             frame.Name = player.Name .. "_Entry"
             frame.Size = UDim2.new(1, 0, 0, 75)
             frame.BackgroundColor3 = UI_THEME.Element
             frame.BorderSizePixel = 0
             frame.Parent = AdvancedPlayerPanelUI.ListContent
-            local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = frame
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 6)
+            corner.Parent = frame
             
             local avatar = Instance.new("ImageLabel")
             avatar.Name = "Avatar"
             avatar.Size = UDim2.fromOffset(40, 40)
             avatar.Position = UDim2.fromOffset(5, 17)
             avatar.BackgroundColor3 = UI_THEME.Background
+            avatar.BorderSizePixel = 0
             avatar.Parent = frame
-            local aCorner = Instance.new("UICorner"); aCorner.CornerRadius = UDim.new(1, 0); aCorner.Parent = avatar
+            local aCorner = Instance.new("UICorner")
+            aCorner.CornerRadius = UDim.new(1, 0)
+            aCorner.Parent = avatar
             
             task.spawn(function()
-                local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                if isReady then avatar.Image = content end
+                if player and player.Parent then
+                    local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                    if isReady and avatar and avatar.Parent then 
+                        avatar.Image = content 
+                    end
+                end
             end)
+
+            local nickname = player.DisplayName or player.Name
+            local username = player.Name
 
             local function createCopyableLabel(parent, text, position, font, size, color)
                 local container = Instance.new("Frame")
@@ -4867,22 +4918,22 @@ function UpdateAdvancedPlayerList()
 
                 TrackConnection(copyBtn.MouseButton1Click:Connect(function()
                     local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
-                    if copy then copy(text) end
+                    if copy then copy(lbl.Text) end
                 end))
 
-                return container
+                return lbl, copyBtn
             end
 
-            createCopyableLabel(frame, nickname, UDim2.fromOffset(55, 5), Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal), 14, UI_THEME.Text)
-            createCopyableLabel(frame, "@" .. username, UDim2.fromOffset(55, 25), Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal), 12, UI_THEME.TextDark)
-            createCopyableLabel(frame, tostring(player.UserId), UDim2.fromOffset(55, 45), Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal), 12, UI_THEME.TextDark)
+            local nicknameLbl, nicknameCopy = createCopyableLabel(frame, nickname, UDim2.fromOffset(55, 5), Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal), 14, UI_THEME.Text)
+            local usernameLbl, usernameCopy = createCopyableLabel(frame, "@" .. username, UDim2.fromOffset(55, 25), Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal), 12, UI_THEME.TextDark)
+            local userIdLbl, userIdCopy = createCopyableLabel(frame, tostring(player.UserId), UDim2.fromOffset(55, 45), Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal), 12, UI_THEME.TextDark)
 
             local distLbl = Instance.new("TextLabel")
             distLbl.Name = "Distance"
             distLbl.Size = UDim2.new(0, 60, 1, 0)
             distLbl.Position = UDim2.new(1, -65, 0, 0)
             distLbl.BackgroundTransparency = 1
-            distLbl.Text = "---"
+            distLbl.Text = distStr
             distLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
             distLbl.TextSize = 12
             distLbl.TextColor3 = UI_THEME.Accent
@@ -4916,7 +4967,9 @@ function UpdateAdvancedPlayerList()
             wBtn.TextColor3 = Color3.new(1, 1, 1)
             wBtn.ZIndex = 2
             wBtn.Parent = frame
-            local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(0, 4); wCorner.Parent = wBtn
+            local wCorner = Instance.new("UICorner")
+            wCorner.CornerRadius = UDim.new(0, 4)
+            wCorner.Parent = wBtn
             
             TrackConnection(wBtn.MouseButton1Click:Connect(function()
                 ToggleWhitelist(player)
@@ -4933,37 +4986,54 @@ function UpdateAdvancedPlayerList()
             bBtn.TextColor3 = Color3.new(1, 1, 1)
             bBtn.ZIndex = 2
             bBtn.Parent = frame
-            local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0, 4); bCorner.Parent = bBtn
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(0, 4)
+            bCorner.Parent = bBtn
             
             TrackConnection(bBtn.MouseButton1Click:Connect(function()
                 ToggleBlacklist(player)
             end))
 
             entry.Frame = frame
+            entry.NicknameLabel = nicknameLbl
+            entry.UsernameLabel = usernameLbl
+            entry.UserIdLabel = userIdLbl
             entry.DistanceLabel = distLbl
-            AdvancedPlayerPanelUI.Entries[player] = entry
-        end
+            entry.WBtn = wBtn
+            entry.BBtn = bBtn
 
-        entry.Frame.Visible = true
-        local myChar = LocalPlayer.Character
-        local targetChar = player.Character
-        local dist = 999999
-        
-        if myChar and myChar.PrimaryPart and targetChar and targetChar.PrimaryPart then
-            dist = (myChar.PrimaryPart.Position - targetChar.PrimaryPart.Position).Magnitude
-            entry.DistanceLabel.Text = math.floor(dist) .. "m"
+            AdvancedPlayerPanelState.PlayerRowCache[userId] = entry
         else
-            entry.DistanceLabel.Text = "---"
+            -- If row already exists in the cache, update its text properties
+            entry.Frame.Visible = true
+            
+            local nickname = player.DisplayName or player.Name
+            local username = player.Name
+            
+            entry.NicknameLabel.Text = nickname
+            entry.UsernameLabel.Text = "@" .. username
+            entry.UserIdLabel.Text = tostring(userId)
+            entry.DistanceLabel.Text = distStr
         end
-        entry.Frame.LayoutOrder = math.floor(dist)
 
-        -- Update Status Colors (Reuse previously calculated isWhitelisted/isBlacklisted)
+        -- Update layout order and background colors
+        entry.Frame.LayoutOrder = math.floor(dist)
         if isWhitelisted then
             entry.Frame.BackgroundColor3 = UI_THEME.Success
         elseif isBlacklisted then
             entry.Frame.BackgroundColor3 = UI_THEME.Fail
         else
             entry.Frame.BackgroundColor3 = UI_THEME.Element
+        end
+    end
+
+    -- Cleanup stale cache entries (no longer present in game.Players)
+    for userId, entry in pairs(AdvancedPlayerPanelState.PlayerRowCache) do
+        if not currentPlayersSet[userId] then
+            if entry.Frame then
+                entry.Frame:Destroy()
+            end
+            AdvancedPlayerPanelState.PlayerRowCache[userId] = nil
         end
     end
 end
@@ -5456,9 +5526,7 @@ function ShowAdvancedPlayerDetails(player)
     local content = AdvancedPlayerPanelUI.DetailsContent
     local oldPos = content.CanvasPosition
     
-    for _, child in ipairs(content:GetChildren()) do
-        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
-    end
+    ClearFrame(content)
     table.clear(AdvancedPlayerPanelUI.DetailLabels)
 
     local function createSection(name)
@@ -5594,18 +5662,22 @@ function ShowAdvancedPlayerDetails(player)
         local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
         local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
         
-        if targetHum then
-            if AdvancedPlayerPanelState.Spectating == player then
-                -- Stop Spectating
-                AdvancedPlayerPanelState.Spectating = nil
-                Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                LocalPlayer.ReplicationFocus = nil
-                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
-                if spectateBtn then
-                    spectateBtn.BackgroundColor3 = UI_THEME.Element
-                    spectateBtn.Text = "Spectate Player"
-                end
-            else
+        if AdvancedPlayerPanelState.Spectating == player then
+            -- Stop Spectating
+            AdvancedPlayerPanelState.Spectating = nil
+            local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if myHum then
+                Camera.CameraSubject = myHum
+            end
+            LocalPlayer.ReplicationFocus = nil
+            pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
+            if spectateBtn then
+                spectateBtn.BackgroundColor3 = UI_THEME.Element
+                spectateBtn.Text = "Spectate Player"
+            end
+        else
+            -- Start Spectating
+            if targetHum then
                 AdvancedPlayerPanelState.Spectating = player
                 Camera.CameraSubject = targetHum
                 
@@ -5616,14 +5688,14 @@ function ShowAdvancedPlayerDetails(player)
                 -- Disable the annoying "Gameplay Paused" screen
                 pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
                 if spectateBtn then
-                    spectateBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                    spectateBtn.BackgroundColor3 = UI_THEME.Fail
                     spectateBtn.Text = "Stop Spectating"
                 end
             end
         end
     end)
     if AdvancedPlayerPanelState.Spectating == player then
-        spectateBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        spectateBtn.BackgroundColor3 = UI_THEME.Fail
     end
     elseif AdvancedPlayerPanelState.DetailsTab == "Player" then
         content.Size = UDim2.new(1, -10, 1, -195)
@@ -5632,9 +5704,7 @@ function ShowAdvancedPlayerDetails(player)
             local sel = AdvancedPlayerPanelState.ExplorerSelected
             local inst = sel and GetInstanceFromPath(sel)
             if inst then UpdatePropertyPane(inst) else
-                for _, child in ipairs(AdvancedPlayerPanelUI.PropertyContent:GetChildren()) do
-                    if child:IsA("Frame") then child:Destroy() end
-                end
+                ClearFrame(AdvancedPlayerPanelUI.PropertyContent)
             end
         end
         VisualizeInstance(player, content, 0)
@@ -5645,9 +5715,7 @@ function ShowAdvancedPlayerDetails(player)
             local sel = AdvancedPlayerPanelState.ExplorerSelected
             local inst = sel and GetInstanceFromPath(sel)
             if inst then UpdatePropertyPane(inst) else
-                for _, child in ipairs(AdvancedPlayerPanelUI.PropertyContent:GetChildren()) do
-                    if child:IsA("Frame") then child:Destroy() end
-                end
+                ClearFrame(AdvancedPlayerPanelUI.PropertyContent)
             end
         end
         if player.Character then
@@ -5676,39 +5744,50 @@ function UpdateAdvancedPlayerDetails()
     if AdvancedPlayerPanelState.DetailsTab ~= "General" then return end
     
     local labels = AdvancedPlayerPanelUI.DetailLabels
-    local char, root = GetCharacter(player)
     
     local myChar = LocalPlayer.Character
-    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
-    local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
-
-    if root then
-        local dist = (root.Position - myPos).Magnitude
-        if labels["Distance"] then labels["Distance"].Text = math.floor(dist) .. "m" end
-        if labels["Coordinates"] then 
-            local p = root.Position
-            labels["Coordinates"].Text = string.format("%d, %d, %d", math.floor(p.X), math.floor(p.Y), math.floor(p.Z)) 
+    local targetChar = player.Character
+    
+    local distStr = "Loading..."
+    local coordsStr = "---"
+    
+    if targetChar and targetChar:FindFirstChild("PrimaryPart") then
+        local targetPart = targetChar.PrimaryPart
+        if myChar and myChar:FindFirstChild("PrimaryPart") then
+            local myPart = myChar.PrimaryPart
+            local dist = (targetPart.Position - myPart.Position).Magnitude
+            distStr = math.floor(dist) .. "m"
+        else
+            distStr = "N/A"
         end
+        local p = targetPart.Position
+        coordsStr = string.format("%d, %d, %d", math.floor(p.X), math.floor(p.Y), math.floor(p.Z))
+    else
+        distStr = "N/A"
     end
+
+    if labels["Distance"] then labels["Distance"].Text = distStr end
+    if labels["Coordinates"] then labels["Coordinates"].Text = coordsStr end
 
     local h, mh = GetHealth(player)
     if labels["Current Health"] then labels["Current Health"].Text = string.format("%d/%d", math.floor(h), math.floor(mh)) end
 
     local heldItem = "None"
-    if char then
-        local tool = char:FindFirstChildOfClass("Tool")
+    if targetChar then
+        local tool = targetChar:FindFirstChildOfClass("Tool")
         if tool then heldItem = tool.Name end
     end
     if labels["Held Item"] then labels["Held Item"].Text = heldItem end
 
     -- Nearest Players to selected player
-    if root then
-        local targetPos = root.Position
+    if targetChar and targetChar:FindFirstChild("PrimaryPart") then
+        local targetPos = targetChar.PrimaryPart.Position
         local others = {}
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player then
-                local _, r = GetCharacter(p)
-                if r then
+                local pChar = p.Character
+                if pChar and pChar:FindFirstChild("PrimaryPart") then
+                    local r = pChar.PrimaryPart
                     table.insert(others, {p = p, d = (r.Position - targetPos).Magnitude})
                 end
             end
@@ -5726,8 +5805,14 @@ function UpdateAdvancedPlayerDetails()
                 end
             end
         end
+    else
+        for i = 1, 3 do
+            local key = "Nearest Player " .. i
+            if labels[key] then
+                labels[key].Text = "---"
+            end
+        end
     end
-
 end
 
 
@@ -7643,6 +7728,7 @@ function Cleanup()
     table.clear(AdvancedPlayerPanelState.TeamWhitelist)
     table.clear(AdvancedPlayerPanelState.TeamBlacklist)
     table.clear(AdvancedPlayerPanelState.TeamExpanded)
+    table.clear(AdvancedPlayerPanelState.PlayerRowCache)
     AdvancedPlayerPanelUI.MainFrame = nil
     AdvancedPlayerPanelUI.ListFrame = nil
     AdvancedPlayerPanelUI.DetailsFrame = nil
@@ -9048,28 +9134,42 @@ local function handleShortcuts(actionName, inputState, inputObject)
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.K then
             if not UIState.Visible then
-                -- Menu is completely hidden: Make visible, ensure maximized, and switch tab
-                if UIState.ToggleVisible then UIState.ToggleVisible(true) end
-                if UIState.Minimized and UIState.ToggleMinimize then UIState.ToggleMinimize() end
+                -- If Menu is Hidden: Make menu visible, ensure it is maximized, and trigger PlayerPage tab selection
+                if UIState.Minimized and UIState.ToggleMinimize then
+                    UIState.ToggleMinimize()
+                end
+                if UIState.ToggleVisible then
+                    UIState.ToggleVisible(true)
+                end
                 for _, t in ipairs(UIState.Tabs) do
-                    if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                    if t.Label.Text == "PlayerPage" and t.Select then
+                        t.Select()
+                    end
                 end
             elseif UIState.Minimized then
-                -- Menu is visible but minimized: Maximize it and switch tab
-                if UIState.ToggleMinimize then UIState.ToggleMinimize() end
+                -- If Menu is Visible but Minimized: Maximize the menu and trigger PlayerPage tab selection
+                if UIState.ToggleMinimize then
+                    UIState.ToggleMinimize()
+                end
                 for _, t in ipairs(UIState.Tabs) do
-                    if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                    if t.Label.Text == "PlayerPage" and t.Select then
+                        t.Select()
+                    end
                 end
             else
-                -- Menu is visible and maximized
+                -- Menu is Visible and Maximized
                 if UIState.CurrentTab ~= "PlayerPage" then
-                    -- Wrong tab: Switch to PlayerPage
+                    -- If Menu is Visible, Maximized, but on a different tab: Trigger PlayerPage tab selection
                     for _, t in ipairs(UIState.Tabs) do
-                        if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                        if t.Label.Text == "PlayerPage" and t.Select then
+                            t.Select()
+                        end
                     end
                 else
-                    -- Already on PlayerPage: Minimize the menu
-                    if UIState.ToggleMinimize then UIState.ToggleMinimize() end
+                    -- If Menu is Visible, Maximized, AND currently on PlayerPage: Minimize the menu
+                    if UIState.ToggleMinimize then
+                        UIState.ToggleMinimize()
+                    end
                 end
             end
             return Enum.ContextActionResult.Sink
