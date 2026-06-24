@@ -4753,7 +4753,7 @@ function InitializePlayerPage(page)
     AdvancedPlayerPanelUI.TeamContent = teamContent
     AdvancedPlayerPanelUI.SearchBox = searchBox
     
-    task.spawn(function()
+    TrackThread(task.spawn(function()
         while task.wait(0.5) do
             if UIState.CurrentTab == "PlayerPage" and UIState.Visible then
                 if AdvancedPlayerPanelState.CurrentView == "List" then
@@ -4789,7 +4789,7 @@ function InitializePlayerPage(page)
                 end
             end
         end
-    end)
+    end))
     
     TrackConnection(UIState.Tabs[#UIState.Tabs].Button:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
         if UIState.CurrentTab ~= "PlayerPage" and AdvancedPlayerPanelState.selectionHighlight then
@@ -4956,6 +4956,7 @@ function UpdateTeamPanelList()
 end
 
 function UpdateAdvancedPlayerList()
+    if not AdvancedPlayerPanelUI.Initialized or not AdvancedPlayerPanelUI.SearchBox then return end
     if not UIState.Visible or UIState.CurrentTab ~= "PlayerPage" then return end
     if AdvancedPlayerPanelState.CurrentView ~= "List" then return end
 
