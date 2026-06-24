@@ -4226,12 +4226,16 @@ function SwitchToPlayerPageView(viewName)
     local teamFrame = AdvancedPlayerPanelUI.TeamFrame
     local headerFrame = AdvancedPlayerPanelUI.HeaderFrame
     local actionHeader = AdvancedPlayerPanelUI.ActionsHeaderFrame
+    local listBtn = AdvancedPlayerPanelUI.ListBtn
+    local teamsBtn = AdvancedPlayerPanelUI.TeamsBtn
 
     if viewName == "List" then
         if teamFrame then teamFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = false end
         if listFrame then listFrame.Visible = true end
         if actionHeader then actionHeader.Visible = false end
+        if listBtn then listBtn.Visible = true end
+        if teamsBtn then teamsBtn.Visible = true end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
         if listFrame then 
             listFrame.Position = UDim2.fromOffset(0, 35) 
@@ -4245,6 +4249,8 @@ function SwitchToPlayerPageView(viewName)
             UpdateTeamPanelList()
         end
         if actionHeader then actionHeader.Visible = false end
+        if listBtn then listBtn.Visible = true end
+        if teamsBtn then teamsBtn.Visible = true end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
         if teamFrame then 
             teamFrame.Position = UDim2.fromOffset(0, 35) 
@@ -4255,6 +4261,8 @@ function SwitchToPlayerPageView(viewName)
         if teamFrame then teamFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = true end
         if actionHeader then actionHeader.Visible = true end
+        if listBtn then listBtn.Visible = false end
+        if teamsBtn then teamsBtn.Visible = false end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 30) end
         if detailsFrame then 
             detailsFrame.Position = UDim2.fromOffset(0, 65) 
@@ -4419,6 +4427,7 @@ function InitializePlayerPage(page)
     listBtn.TextSize = 12
     listBtn.TextColor3 = UI_THEME.Text
     listBtn.Parent = headerFrame
+    AdvancedPlayerPanelUI.ListBtn = listBtn
     local lbCorner = Instance.new("UICorner"); lbCorner.CornerRadius = UDim.new(0, 4); lbCorner.Parent = listBtn
 
     local teamsBtn = Instance.new("TextButton")
@@ -4430,6 +4439,7 @@ function InitializePlayerPage(page)
     teamsBtn.TextSize = 12
     teamsBtn.TextColor3 = UI_THEME.Text
     teamsBtn.Parent = headerFrame
+    AdvancedPlayerPanelUI.TeamsBtn = teamsBtn
     local tbCorner = Instance.new("UICorner"); tbCorner.CornerRadius = UDim.new(0, 4); tbCorner.Parent = teamsBtn
 
     -- List View
@@ -7887,6 +7897,8 @@ function Cleanup()
     AdvancedPlayerPanelUI.BlacklistBtn = nil
     AdvancedPlayerPanelUI.TeleportBtn = nil
     AdvancedPlayerPanelUI.SpectateBtn = nil
+    AdvancedPlayerPanelUI.ListBtn = nil
+    AdvancedPlayerPanelUI.TeamsBtn = nil
     AdvancedPlayerPanelUI.ListContent = nil
     AdvancedPlayerPanelUI.DetailsContent = nil
     AdvancedPlayerPanelUI.TeamContent = nil
