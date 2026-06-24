@@ -8982,7 +8982,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
             end
             return Enum.ContextActionResult.Sink
         end
-
+    end
 
     return Enum.ContextActionResult.Pass
 end
