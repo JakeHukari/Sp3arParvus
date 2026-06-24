@@ -136,7 +136,7 @@ local Flags = {
     ["Misc/D3vTool"] = true,
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
-    ["Misc/QTeleport"] = false
+    ["Misc/QTeleport"] = true
 }
 
 -- SAFE_MODE overrides: force-disable high-risk input simulation features
@@ -8384,7 +8384,7 @@ UI.CreateToggle(MiscTab, "Toggle Item Panel", "Misc/ItemPanel", Flags["Misc/Item
         end
     end
 end)
-UI.CreateToggle(MiscTab, "Q-Teleport — Press Q to jump to mouse position (SAFE_MODE gates this)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
+UI.CreateToggle(MiscTab, "Q-Teleport — Press Ctrl+Q to jump to mouse position (SAFE_MODE gates this)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
     Flags["Misc/QTeleport"] = state
 end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
@@ -8899,12 +8899,14 @@ local function handleShortcuts(actionName, inputState, inputObject)
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Q then
-            Flags["Misc/QTeleport"] = not Flags["Misc/QTeleport"]
-            local state = Flags["Misc/QTeleport"]
-            local updater = UIState.Updaters["Misc/QTeleport"]
-            if updater then updater(state) end
-            UI.Notify("Q-Teleport", string.format("Q-Teleport has been %s with 'Ctrl+Q'", state and "activated" or "deactivated"))
-            return Enum.ContextActionResult.Sink
+            if not SAFE_MODE and Flags["Misc/QTeleport"] then
+                local character = LocalPlayer and LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                if rootPart and Mouse.Target then
+                    rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+                end
+                return Enum.ContextActionResult.Sink
+            end
         elseif inputObject.KeyCode == Enum.KeyCode.Minus then
             if UIState.ToggleMinimize then
                 UIState.ToggleMinimize(true)
@@ -8980,21 +8982,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
             end
             return Enum.ContextActionResult.Sink
         end
-    else
-        -- Ctrl is NOT held
-        if inputObject.KeyCode == Enum.KeyCode.Q then
-            if shiftHeld then
-                if not SAFE_MODE and Flags["Misc/QTeleport"] then
-                    local character = LocalPlayer and LocalPlayer.Character
-                    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                    if rootPart and Mouse.Target then
-                        rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
-                    end
-                    return Enum.ContextActionResult.Sink
-                end
-            end
-        end
-    end
+
 
     return Enum.ContextActionResult.Pass
 end

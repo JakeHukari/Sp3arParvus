@@ -67,7 +67,7 @@ Execute the script in your testing environment workspace.
 *   **Humanoid Editor**: Directly override your LocalPlayer's humanoid properties (WalkSpeed, JumpPower, MaxSlopeAngle) to test movement edge cases.
 *   **Anti-AFK**: Built-in mechanism to prevent idle disconnections during long observation sessions.
 *   **Scroll-unlocker**: Dynamically unlocks camera zoom limits, useful for surveying large maps.
-*   **Q-Teleport**: Quick teleportation to mouse cursor position (Press Q) for rapid map traversal.
+*   **Q-Teleport**: Quick teleportation to mouse cursor position (Press Ctrl+Q) for rapid map traversal.
 
 ## Shortcut Keys
 
@@ -81,7 +81,7 @@ Execute the script in your testing environment workspace.
 ### Interaction & Testing
 *   **Camera Tracking Toggle**: `Ctrl + ~`
 *   **Camera Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
-*   **Mouse Teleport**: `Ctrl + Q` to toggle, `Q` to teleport to mouse position
+*   **Mouse Teleport**: `Ctrl + Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
 *   **Toggle Full-Body Camera Tracking**: `Ctrl + H`
 *   **Position-Force**: `Ctrl` + `Up↑`, `Down↓`, `Left←`, `Right→` (Arrow keys)
