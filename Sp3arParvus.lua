@@ -8758,6 +8758,8 @@ local UpdateItemPanelUI = UpdateItemPanelUI
 local loadstring = loadstring
 local game = game
 local ActiveWaypoints = ActiveWaypoints
+local GetMouseRay = GetMouseRay
+local WorldRaycastBr3ak3r = WorldRaycastBr3ak3r
 
 local function handleShortcuts(actionName, inputState, inputObject)
     if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
@@ -8907,9 +8909,26 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if not SAFE_MODE and Flags["Misc/QTeleport"] then
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                local mouse = LocalPlayer:GetMouse()
-                if rootPart and mouse and mouse.Hit then
-                    rootPart.CFrame = CFrame.new(mouse.Hit.X, mouse.Hit.Y + 1, mouse.Hit.Z)
+                if rootPart then
+                    local origin, direction = GetMouseRay()
+                    local raycastHit = nil
+                    if origin and direction then
+                        raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
+                    end
+                    
+                    local tpPos = nil
+                    if raycastHit then
+                        tpPos = raycastHit.Position
+                    else
+                        local mouse = LocalPlayer:GetMouse()
+                        if mouse and mouse.Hit then
+                            tpPos = mouse.Hit.Position
+                        end
+                    end
+                    
+                    if tpPos then
+                        rootPart.CFrame = CFrame.new(tpPos + Vector3.new(0, 3, 0))
+                    end
                 end
                 return Enum.ContextActionResult.Sink
             end
