@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.2                                                  ║
+-- ║  Version: 4.2.3                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.2" -- Fixed Q-Teleport, added ctrl+shift+x to undo ALL highlights, & decoupled shortcut logic so that keybinds work with certain executors
+local VERSION = "4.2.3" -- Fixed duplication & explorer bugs, stabilized distance tracking, relocated player actions to a minimalist header bar for easier access
 local SAFE_MODE = false  -- ← SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -254,6 +254,9 @@ local AdvancedPlayerPanelUI = {
     PropertyContent = nil,
     PropertySearch = nil
 }
+
+local SwitchToPlayerPageView
+local UpdateActionButtonsState
 
 local ItemPanelUI = {
     MainFrame = nil,
@@ -3256,7 +3259,7 @@ function ValidateESPObjects()
 
             if AdvancedPlayerPanelState.SelectedPlayer == player then
                 AdvancedPlayerPanelState.SelectedPlayer = nil
-                AdvancedPlayerPanelState.CurrentView = "List"
+                SwitchToPlayerPageView("List")
             end
             if AdvancedPlayerPanelState.Spectating == player then
                 AdvancedPlayerPanelState.Spectating = nil
@@ -3994,7 +3997,7 @@ function UpdateClosestPlayerTracker()
     end
 end
 
--- ADVANCED PLAYER PANEL (Ctrl+K)
+-- PLAYERPAGE (Ctrl+K)
 
 function CreateItemPanel()
     if ItemPanelUI.MainFrame then return end
@@ -4190,6 +4193,80 @@ local function ClearFrame(container)
     end
 end
 
+function UpdateActionButtonsState(player)
+    if not player or not AdvancedPlayerPanelUI.Initialized then return end
+    local wBtn = AdvancedPlayerPanelUI.WhitelistBtn
+    local bBtn = AdvancedPlayerPanelUI.BlacklistBtn
+    local specBtn = AdvancedPlayerPanelUI.SpectateBtn
+
+    local isW = AdvancedPlayerPanelState.Whitelist[player.UserId]
+    local isB = AdvancedPlayerPanelState.Blacklist[player.UserId]
+    local isSpec = (AdvancedPlayerPanelState.Spectating == player)
+
+    if wBtn then
+        wBtn.Text = isW and "Unwhitelist" or "Whitelist"
+        wBtn.TextColor3 = isW and UI_THEME.Accent or UI_THEME.Text
+    end
+    if bBtn then
+        bBtn.Text = isB and "Unblacklist" or "Blacklist"
+        bBtn.TextColor3 = isB and UI_THEME.Accent or UI_THEME.Text
+    end
+    if specBtn then
+        specBtn.Text = isSpec and "Stop Spec" or "Spectate"
+        specBtn.BackgroundColor3 = isSpec and UI_THEME.Fail or UI_THEME.Element
+    end
+end
+
+function SwitchToPlayerPageView(viewName)
+    AdvancedPlayerPanelState.CurrentView = viewName
+    if not AdvancedPlayerPanelUI.Initialized then return end
+
+    local listFrame = AdvancedPlayerPanelUI.ListFrame
+    local detailsFrame = AdvancedPlayerPanelUI.DetailsFrame
+    local teamFrame = AdvancedPlayerPanelUI.TeamFrame
+    local headerFrame = AdvancedPlayerPanelUI.HeaderFrame
+    local actionHeader = AdvancedPlayerPanelUI.ActionsHeaderFrame
+
+    if viewName == "List" then
+        if teamFrame then teamFrame.Visible = false end
+        if detailsFrame then detailsFrame.Visible = false end
+        if listFrame then listFrame.Visible = true end
+        if actionHeader then actionHeader.Visible = false end
+        if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
+        if listFrame then 
+            listFrame.Position = UDim2.fromOffset(0, 35) 
+            listFrame.Size = UDim2.new(1, 0, 1, -35)
+        end
+    elseif viewName == "Teams" then
+        if listFrame then listFrame.Visible = false end
+        if detailsFrame then detailsFrame.Visible = false end
+        if teamFrame then 
+            teamFrame.Visible = true 
+            UpdateTeamPanelList()
+        end
+        if actionHeader then actionHeader.Visible = false end
+        if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
+        if teamFrame then 
+            teamFrame.Position = UDim2.fromOffset(0, 35) 
+            teamFrame.Size = UDim2.new(1, 0, 1, -35)
+        end
+    elseif viewName == "Details" then
+        if listFrame then listFrame.Visible = false end
+        if teamFrame then teamFrame.Visible = false end
+        if detailsFrame then detailsFrame.Visible = true end
+        if actionHeader then actionHeader.Visible = true end
+        if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 30) end
+        if detailsFrame then 
+            detailsFrame.Position = UDim2.fromOffset(0, 65) 
+            detailsFrame.Size = UDim2.new(1, 0, 1, -65)
+        end
+        local selectedPlayer = AdvancedPlayerPanelState.SelectedPlayer
+        if selectedPlayer then
+            UpdateActionButtonsState(selectedPlayer)
+        end
+    end
+end
+
 function InitializePlayerPage(page)
     if AdvancedPlayerPanelUI.Initialized then return end
     AdvancedPlayerPanelUI.Initialized = true
@@ -4207,10 +4284,121 @@ function InitializePlayerPage(page)
     wrapperPadding.PaddingTop = UDim.new(0, 35)
     wrapperPadding.Parent = Wrapper
 
+    -- Action Buttons (Top Bar)
+    local actionHeaderFrame = Instance.new("Frame")
+    actionHeaderFrame.Name = "ActionsHeaderFrame"
+    actionHeaderFrame.Size = UDim2.new(1, 0, 0, 30)
+    actionHeaderFrame.Position = UDim2.fromOffset(0, 0)
+    actionHeaderFrame.BackgroundTransparency = 1
+    actionHeaderFrame.Visible = false
+    actionHeaderFrame.Parent = Wrapper
+    AdvancedPlayerPanelUI.ActionsHeaderFrame = actionHeaderFrame
+
+    local actionLayout = Instance.new("UIListLayout")
+    actionLayout.FillDirection = Enum.FillDirection.Horizontal
+    actionLayout.Padding = UDim.new(0, 5)
+    actionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    actionLayout.Parent = actionHeaderFrame
+
+    local actionPadding = Instance.new("UIPadding")
+    actionPadding.PaddingLeft = UDim.new(0, 10)
+    actionPadding.Parent = actionHeaderFrame
+
+    local function createMinBtn(text, parent)
+        local btn = Instance.new("TextButton")
+        btn.BackgroundColor3 = UI_THEME.Element
+        btn.Text = text
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 11
+        btn.TextColor3 = UI_THEME.Text
+        btn.Parent = parent
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 4); corner.Parent = btn
+        return btn
+    end
+
+    local wBtn = createMinBtn("Whitelist", actionHeaderFrame)
+    wBtn.Size = UDim2.new(0.24, -4, 0, 24)
+    AdvancedPlayerPanelUI.WhitelistBtn = wBtn
+
+    local bBtn = createMinBtn("Blacklist", actionHeaderFrame)
+    bBtn.Size = UDim2.new(0.24, -4, 0, 24)
+    AdvancedPlayerPanelUI.BlacklistBtn = bBtn
+
+    local tpBtn = createMinBtn("Teleport to", actionHeaderFrame)
+    tpBtn.Size = UDim2.new(0.26, -4, 0, 24)
+    AdvancedPlayerPanelUI.TeleportBtn = tpBtn
+
+    local specBtn = createMinBtn("Spectate", actionHeaderFrame)
+    specBtn.Size = UDim2.new(0.26, -4, 0, 24)
+    AdvancedPlayerPanelUI.SpectateBtn = specBtn
+
+    TrackConnection(wBtn.MouseButton1Click:Connect(function()
+        local player = AdvancedPlayerPanelState.SelectedPlayer
+        if player then
+            ToggleWhitelist(player)
+            UpdateActionButtonsState(player)
+        end
+    end))
+
+    TrackConnection(bBtn.MouseButton1Click:Connect(function()
+        local player = AdvancedPlayerPanelState.SelectedPlayer
+        if player then
+            ToggleBlacklist(player)
+            UpdateActionButtonsState(player)
+        end
+    end))
+
+    TrackConnection(tpBtn.MouseButton1Click:Connect(function()
+        local player = AdvancedPlayerPanelState.SelectedPlayer
+        if player then
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Teleport-to-Player is disabled while Safe Mode is ON. Set SAFE_MODE = false at the top to enable it.")
+                return
+            end
+            local myChar = LocalPlayer.Character
+            local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+            local targetChar, targetRoot = GetCharacter(player)
+            if myRoot and targetRoot then
+                myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+            end
+        end
+    end))
+
+    TrackConnection(specBtn.MouseButton1Click:Connect(function()
+        local player = AdvancedPlayerPanelState.SelectedPlayer
+        if player then
+            local targetChar = player.Character
+            local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+            local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
+            
+            if AdvancedPlayerPanelState.Spectating == player then
+                AdvancedPlayerPanelState.Spectating = nil
+                local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if myHum then
+                    Camera.CameraSubject = myHum
+                end
+                LocalPlayer.ReplicationFocus = nil
+                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
+            else
+                if targetHum then
+                    AdvancedPlayerPanelState.Spectating = player
+                    Camera.CameraSubject = targetHum
+                    if targetRoot then
+                        LocalPlayer.ReplicationFocus = targetRoot
+                    end
+                    pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
+                end
+            end
+            UpdateActionButtonsState(player)
+        end
+    end))
+
     local headerFrame = Instance.new("Frame")
     headerFrame.Size = UDim2.new(1, 0, 0, 30)
     headerFrame.BackgroundTransparency = 1
     headerFrame.Parent = Wrapper
+    AdvancedPlayerPanelUI.HeaderFrame = headerFrame
 
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(0, 140, 1, 0)
@@ -4254,20 +4442,11 @@ function InitializePlayerPage(page)
     ListFrame.Parent = Wrapper
 
     TrackConnection(listBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.CurrentView = "List"
-        if AdvancedPlayerPanelUI.TeamFrame then AdvancedPlayerPanelUI.TeamFrame.Visible = false end
-        if AdvancedPlayerPanelUI.DetailsFrame then AdvancedPlayerPanelUI.DetailsFrame.Visible = false end
-        if AdvancedPlayerPanelUI.ListFrame then AdvancedPlayerPanelUI.ListFrame.Visible = true end
+        SwitchToPlayerPageView("List")
     end))
 
     TrackConnection(teamsBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.CurrentView = "Teams"
-        if AdvancedPlayerPanelUI.ListFrame then AdvancedPlayerPanelUI.ListFrame.Visible = false end
-        if AdvancedPlayerPanelUI.DetailsFrame then AdvancedPlayerPanelUI.DetailsFrame.Visible = false end
-        if AdvancedPlayerPanelUI.TeamFrame then 
-            AdvancedPlayerPanelUI.TeamFrame.Visible = true 
-            UpdateTeamPanelList()
-        end
+        SwitchToPlayerPageView("Teams")
     end))
 
     local searchBox = Instance.new("TextBox")
@@ -4370,9 +4549,7 @@ function InitializePlayerPage(page)
     local bbCorner = Instance.new("UICorner"); bbCorner.CornerRadius = UDim.new(0, 4); bbCorner.Parent = backBtn
 
     TrackConnection(backBtn.MouseButton1Click:Connect(function()
-        AdvancedPlayerPanelState.CurrentView = "List"
-        DetailsFrame.Visible = false
-        ListFrame.Visible = true
+        SwitchToPlayerPageView("List")
     end))
 
     local detailsTabFrame = Instance.new("Frame")
@@ -4617,6 +4794,7 @@ function InitializePlayerPage(page)
             AdvancedPlayerPanelState.selectionHighlight = nil
         end
     end))
+    SwitchToPlayerPageView("List")
 end
 
 function UpdateTeamPanelList()
@@ -4954,9 +5132,7 @@ function UpdateAdvancedPlayerList()
             
             TrackConnection(btn.MouseButton1Click:Connect(function()
                 AdvancedPlayerPanelState.SelectedPlayer = player
-                AdvancedPlayerPanelState.CurrentView = "Details"
-                AdvancedPlayerPanelUI.ListFrame.Visible = false
-                AdvancedPlayerPanelUI.DetailsFrame.Visible = true
+                SwitchToPlayerPageView("Details")
                 ShowAdvancedPlayerDetails(player)
             end))
 
@@ -5567,6 +5743,7 @@ local function VisualizeInstance(instance, content, depth)
 end
 
 function ShowAdvancedPlayerDetails(player)
+    UpdateActionButtonsState(player)
     ExplorerCounter = 0
     local content = AdvancedPlayerPanelUI.DetailsContent
     local oldPos = content.CanvasPosition
@@ -5664,88 +5841,6 @@ function ShowAdvancedPlayerDetails(player)
     createLabel("Nearest Player 2", "---")
     createLabel("Nearest Player 3", "---")
 
-    createSection("Actions")
-    
-    local whitelistBtn = createButton("", function() end)
-    local blacklistBtn = createButton("", function() end)
-
-    local function updateDetailsButtons()
-        local isW = AdvancedPlayerPanelState.Whitelist[player.UserId]
-        local isB = AdvancedPlayerPanelState.Blacklist[player.UserId]
-        
-        whitelistBtn.Text = isW and "Unwhitelist Player" or "Whitelist Player"
-        whitelistBtn.TextColor3 = isW and UI_THEME.Accent or UI_THEME.Text
-        
-        blacklistBtn.Text = isB and "Unblacklist Player" or "Blacklist Player"
-        blacklistBtn.TextColor3 = isB and UI_THEME.Accent or UI_THEME.Text
-    end
-
-    TrackConnection(whitelistBtn.MouseButton1Click:Connect(function()
-        ToggleWhitelist(player)
-        updateDetailsButtons()
-    end))
-
-    TrackConnection(blacklistBtn.MouseButton1Click:Connect(function()
-        ToggleBlacklist(player)
-        updateDetailsButtons()
-    end))
-    
-    updateDetailsButtons()
-
-    createButton("Teleport to Player", function()
-        if SAFE_MODE then
-            UI.Notify("Safe Mode", "Teleport-to-Player is disabled while Safe Mode is ON. Set SAFE_MODE = false at the script top to enable it.")
-            return
-        end
-        local myChar = LocalPlayer.Character
-        local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
-        local targetChar, targetRoot = GetCharacter(player)
-        if myRoot and targetRoot then
-            myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
-        end
-    end)
-
-    local spectateBtn
-    spectateBtn = createButton(AdvancedPlayerPanelState.Spectating == player and "Stop Spectating" or "Spectate Player", function()
-        local targetChar = player.Character
-        local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
-        local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
-        
-        if AdvancedPlayerPanelState.Spectating == player then
-            -- Stop Spectating
-            AdvancedPlayerPanelState.Spectating = nil
-            local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if myHum then
-                Camera.CameraSubject = myHum
-            end
-            LocalPlayer.ReplicationFocus = nil
-            pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
-            if spectateBtn then
-                spectateBtn.BackgroundColor3 = UI_THEME.Element
-                spectateBtn.Text = "Spectate Player"
-            end
-        else
-            -- Start Spectating
-            if targetHum then
-                AdvancedPlayerPanelState.Spectating = player
-                Camera.CameraSubject = targetHum
-                
-                -- Chunk Support
-                if targetRoot then
-                    LocalPlayer.ReplicationFocus = targetRoot
-                end
-                -- Disable the annoying "Gameplay Paused" screen
-                pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
-                if spectateBtn then
-                    spectateBtn.BackgroundColor3 = UI_THEME.Fail
-                    spectateBtn.Text = "Stop Spectating"
-                end
-            end
-        end
-    end)
-    if AdvancedPlayerPanelState.Spectating == player then
-        spectateBtn.BackgroundColor3 = UI_THEME.Fail
-    end
     elseif AdvancedPlayerPanelState.DetailsTab == "Player" then
         content.Size = UDim2.new(1, -10, 1, -195)
         if AdvancedPlayerPanelUI.PropertyFrame then 
@@ -5790,6 +5885,9 @@ function UpdateAdvancedPlayerDetails()
     local player = AdvancedPlayerPanelState.SelectedPlayer
     if not player or not player.Parent then return end
     if AdvancedPlayerPanelState.CurrentView ~= "Details" then return end
+    
+    UpdateActionButtonsState(player)
+    
     if AdvancedPlayerPanelState.DetailsTab ~= "General" then return end
     
     local labels = AdvancedPlayerPanelUI.DetailLabels
@@ -7783,6 +7881,12 @@ function Cleanup()
     AdvancedPlayerPanelUI.ListFrame = nil
     AdvancedPlayerPanelUI.DetailsFrame = nil
     AdvancedPlayerPanelUI.TeamFrame = nil
+    AdvancedPlayerPanelUI.HeaderFrame = nil
+    AdvancedPlayerPanelUI.ActionsHeaderFrame = nil
+    AdvancedPlayerPanelUI.WhitelistBtn = nil
+    AdvancedPlayerPanelUI.BlacklistBtn = nil
+    AdvancedPlayerPanelUI.TeleportBtn = nil
+    AdvancedPlayerPanelUI.SpectateBtn = nil
     AdvancedPlayerPanelUI.ListContent = nil
     AdvancedPlayerPanelUI.DetailsContent = nil
     AdvancedPlayerPanelUI.TeamContent = nil
@@ -8840,7 +8944,7 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
 
     if AdvancedPlayerPanelState.SelectedPlayer == player then
         AdvancedPlayerPanelState.SelectedPlayer = nil
-        AdvancedPlayerPanelState.CurrentView = "List"
+        SwitchToPlayerPageView("List")
     end
     if AdvancedPlayerPanelState.Spectating == player then
         AdvancedPlayerPanelState.Spectating = nil
@@ -9502,7 +9606,7 @@ function UnifiedHeartbeat(dt)
         UpdateHumanoidUI()
         UpdateWorldHumanoidEditorUI()
         
-        -- Update Advanced Player Panel
+        -- Update PlayerPage
         if AdvancedPlayerPanelState.Visible then
             if AdvancedPlayerPanelState.CurrentView == "Teams" then
                 if (now - lastTeamsUpdate) > 1.0 then

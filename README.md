@@ -55,7 +55,7 @@ Execute the script in your testing environment workspace.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create visual markers for any item, folder, or instance group in your workspace to track spawns and replication.
 
 ### Developer Utilities
-*   **Advanced Player Panel**: Comprehensive player management including whitelisting, blacklisting, and detailed property viewing/spectating for testing moderation and replication.
+*   **PlayerPage**: Comprehensive player management including whitelisting, blacklisting, and detailed property viewing/spectating for testing moderation and replication.
 *   **Item Panel**: Robust item explorer and property editor for backpack and character tools.
 *   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC to test AI behavior and limits.
 *   **Br3ak3r (Collision Debugger)**: Isolate map geometry, remove physical obstacles, and disable collisions to analyze map structure and walk through walls.
@@ -99,7 +99,7 @@ Execute the script in your testing environment workspace.
 *   **Delete all existing waypoints**: `Ctrl + Shift + Middle Mouse Button`
 
 ### Developer Utilities
-*   **Advanced Player Panel**: `Ctrl + K`
+*   **PlayerPage**: `Ctrl + K`
 *   **Item Panel**: `Ctrl + J`
 *   **D3v Tool**: `Ctrl + .` (Period)
 *   **Br3ak3r**: `Ctrl + Left Click` to **Break** objects, `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
