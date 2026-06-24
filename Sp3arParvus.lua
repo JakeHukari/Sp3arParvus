@@ -5472,6 +5472,12 @@ local function VisualizeInstance(instance, content, depth)
                                 AdvancedPlayerPanelState.CurrentPaths = {}
                                 ExplorerCounter = 0
                                 VisualizeInstance(targetPlayer.Character, AdvancedPlayerPanelUI.ExplorerContent, 0)
+                                for p, r in pairs(AdvancedPlayerPanelState.RowCache) do
+                                    if not AdvancedPlayerPanelState.CurrentPaths[p] then
+                                        r:Destroy()
+                                        AdvancedPlayerPanelState.RowCache[p] = nil
+                                    end
+                                end
                             end
                         end
                     end
@@ -5520,6 +5526,12 @@ local function VisualizeInstance(instance, content, depth)
                                 AdvancedPlayerPanelState.CurrentPaths = {}
                                 ExplorerCounter = 0
                                 VisualizeInstance(targetPlayer.Character, AdvancedPlayerPanelUI.ExplorerContent, 0)
+                                for p, r in pairs(AdvancedPlayerPanelState.RowCache) do
+                                    if not AdvancedPlayerPanelState.CurrentPaths[p] then
+                                        r:Destroy()
+                                        AdvancedPlayerPanelState.RowCache[p] = nil
+                                    end
+                                end
                             end
                         end
                     end
@@ -5559,6 +5571,10 @@ function ShowAdvancedPlayerDetails(player)
     local content = AdvancedPlayerPanelUI.DetailsContent
     local oldPos = content.CanvasPosition
     
+    if AdvancedPlayerPanelState.DetailsTab == "Player" then
+        AdvancedPlayerPanelState.RowCache = {}
+    end
+
     ClearFrame(content)
     table.clear(AdvancedPlayerPanelUI.DetailLabels)
 
