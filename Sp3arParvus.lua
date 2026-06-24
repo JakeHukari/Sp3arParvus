@@ -1206,7 +1206,7 @@ end
 
 -- Mark a part as broken (hide it)
 function markBroken(part)
-    if not part or not part:IsA("BasePart") then return end
+    if not part or not part:IsA("BasePart") or part:IsA("Terrain") then return end
     local path = GetUniquePath(part)
     if Br3ak3rState.brokenSet[path] then return end
 
@@ -1398,7 +1398,7 @@ end
 
 -- MARK HIGHLIGHTED (H1GHL1GHT3R)
 function markHighlighted(part)
-    if not part or not part:IsA("BasePart") then return end
+    if not part or not part:IsA("BasePart") or part:IsA("Terrain") then return end
     if H1ghl1ght3rState.highlightedSet[part] then return end
     
     local hl = Instance.new("Highlight")
@@ -8635,7 +8635,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             local origin, direction = GetMouseRay()
             if origin and direction then
                 local hit = WorldRaycastBr3ak3r(origin, direction, true)
-                if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+                if hit and hit.Instance and hit.Instance:IsA("BasePart") and not hit.Instance:IsA("Terrain") then
                     markHighlighted(hit.Instance)
                 end
             end
@@ -8643,7 +8643,7 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             local origin, direction = GetMouseRay()
             if origin and direction then
                 local hit = WorldRaycastBr3ak3r(origin, direction, true)
-                if hit and hit.Instance and hit.Instance:IsA("BasePart") then
+                if hit and hit.Instance and hit.Instance:IsA("BasePart") and not hit.Instance:IsA("Terrain") then
                     markBroken(hit.Instance)
                 end
             end
@@ -8706,6 +8706,11 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                 if not deleted then
                     if raycastHit then
                         CreateWaypoint(raycastHit.Position)
+                    else
+                        local mouse = LocalPlayer:GetMouse()
+                        if mouse and mouse.Hit then
+                            CreateWaypoint(mouse.Hit.Position)
+                        end
                     end
                 end
             end
@@ -8902,8 +8907,9 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if not SAFE_MODE and Flags["Misc/QTeleport"] then
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart and Mouse.Target then
-                    rootPart.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 1, Mouse.Hit.Z)
+                local mouse = LocalPlayer:GetMouse()
+                if rootPart and mouse and mouse.Hit then
+                    rootPart.CFrame = CFrame.new(mouse.Hit.X, mouse.Hit.Y + 1, mouse.Hit.Z)
                 end
                 return Enum.ContextActionResult.Sink
             end
