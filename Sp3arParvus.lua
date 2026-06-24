@@ -4593,7 +4593,7 @@ function InitializePlayerPage(page)
 end
 
 function UpdateTeamPanelList()
-    if not AdvancedPlayerPanelUI.MainFrame or not AdvancedPlayerPanelUI.MainFrame.Visible then return end
+    if not UIState.Visible or UIState.CurrentTab ~= "PlayerPage" then return end
     if AdvancedPlayerPanelState.CurrentView ~= "Teams" then return end
 
     local content = AdvancedPlayerPanelUI.TeamContent
@@ -4743,7 +4743,7 @@ function UpdateTeamPanelList()
 end
 
 function UpdateAdvancedPlayerList()
-    if not AdvancedPlayerPanelUI.MainFrame or not AdvancedPlayerPanelUI.MainFrame.Visible then return end
+    if not UIState.Visible or UIState.CurrentTab ~= "PlayerPage" then return end
     if AdvancedPlayerPanelState.CurrentView ~= "List" then return end
 
     local players = Players:GetPlayers()
@@ -9029,17 +9029,28 @@ local function handleShortcuts(actionName, inputState, inputObject)
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.K then
             if not UIState.Visible then
+                -- Menu is completely hidden: Make visible, ensure maximized, and switch tab
                 if UIState.ToggleVisible then UIState.ToggleVisible(true) end
+                if UIState.Minimized and UIState.ToggleMinimize then UIState.ToggleMinimize() end
+                for _, t in ipairs(UIState.Tabs) do
+                    if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
+                end
+            elseif UIState.Minimized then
+                -- Menu is visible but minimized: Maximize it and switch tab
+                if UIState.ToggleMinimize then UIState.ToggleMinimize() end
                 for _, t in ipairs(UIState.Tabs) do
                     if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
                 end
             else
+                -- Menu is visible and maximized
                 if UIState.CurrentTab ~= "PlayerPage" then
+                    -- Wrong tab: Switch to PlayerPage
                     for _, t in ipairs(UIState.Tabs) do
                         if t.Label.Text == "PlayerPage" and t.Select then t.Select() end
                     end
                 else
-                    if UIState.ToggleVisible then UIState.ToggleVisible(false) end
+                    -- Already on PlayerPage: Minimize the menu
+                    if UIState.ToggleMinimize then UIState.ToggleMinimize() end
                 end
             end
             return Enum.ContextActionResult.Sink
@@ -9134,7 +9145,7 @@ local function IsCursorOverMenu()
     end
     
     if isOverFrame(UIState.MainFrame) then return true end
-    if isOverFrame(AdvancedPlayerPanelUI.MainFrame) then return true end
+
     if isOverFrame(ItemPanelUI.MainFrame) then return true end
     return false
 end
