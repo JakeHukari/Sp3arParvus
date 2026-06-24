@@ -7556,7 +7556,7 @@ local function CreateFreecamUI()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.LayoutOrder = 1
     title.Parent = frame
-
+-- Freecam keybind info panel
     local binds = {
         "W/A/S/D - Move Cam",
         "E/Q - Move Cam Up/Down",
