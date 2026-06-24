@@ -4,8 +4,8 @@
 -- ║  Version: 4.2.3                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.3" -- Fixed duplication & explorer bugs, stabilized distance tracking, relocated player actions to a minimalist header bar for easier access
-local SAFE_MODE = false  -- ← SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
+local VERSION = "4.2.3" -- Moved 'PlayerPanel' to 'PlayerPage' inside Main Settings Menu (ctrl+k to open)
+local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
