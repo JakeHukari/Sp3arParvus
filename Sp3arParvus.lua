@@ -6678,6 +6678,7 @@ Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 LocalPlayer = Players.LocalPlayer
 end
 
+local FreecamProxy = {}
 local Camera = workspace.CurrentCamera
 TrackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 local newCamera = workspace.CurrentCamera
@@ -6912,7 +6913,9 @@ if character then
 local hrp = character:FindFirstChild("HumanoidRootPart")
 if hrp then
 character:PivotTo(Camera.CFrame)
-if type(_G.StopFreecamFunc) == "function" then
+if type(FreecamProxy.StopFreecam) == "function" then
+FreecamProxy.StopFreecam()
+elseif type(_G.StopFreecamFunc) == "function" then
 _G.StopFreecamFunc()
 end
 end
@@ -7252,6 +7255,7 @@ UI.Notify("Freecam", "Freecam is now " .. (enabled and "ON" or "OFF"))
 end
 
 _G.ToggleFreecamFunc = ToggleFreecam
+FreecamProxy.ToggleFreecam = ToggleFreecam
 
 _G.StopFreecamFunc = function()
     if enabled then
@@ -7259,6 +7263,7 @@ _G.StopFreecamFunc = function()
         enabled = false
     end
 end
+FreecamProxy.StopFreecam = _G.StopFreecamFunc
 
 CheckMacro = function(macro)
 for i = 1, #macro - 1 do
@@ -7292,7 +7297,9 @@ function Cleanup()
         pcall(delfile, "Sp3arParvus_Icon.png")
     end
 
-    if type(_G.StopFreecamFunc) == "function" then
+    if type(FreecamProxy.StopFreecam) == "function" then
+        pcall(FreecamProxy.StopFreecam)
+    elseif type(_G.StopFreecamFunc) == "function" then
         pcall(_G.StopFreecamFunc)
     end
     pcall(function()
@@ -8401,12 +8408,16 @@ do
     smLabel.Parent = smRow
 end
 UI.CreateButton(MiscTab, "Activate/Deactivate Freecam", function()
-    if type(_G.ToggleFreecamFunc) == "function" then
+    if type(FreecamProxy.ToggleFreecam) == "function" then
+        FreecamProxy.ToggleFreecam()
+    elseif type(_G.ToggleFreecamFunc) == "function" then
         _G.ToggleFreecamFunc()
     end
 end)
 UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", Flags["Settings/Freecam Toggle"], function(state)
-    if not state and type(_G.StopFreecamFunc) == "function" then
+    if not state and type(FreecamProxy.StopFreecam) == "function" then
+        FreecamProxy.StopFreecam()
+    elseif not state and type(_G.StopFreecamFunc) == "function" then
         _G.StopFreecamFunc()
     end
 end)
