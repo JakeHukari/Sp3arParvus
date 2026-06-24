@@ -7574,7 +7574,7 @@ local function CreateFreecamUI()
 
     for i, bind in ipairs(binds) do
         local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.Size = UDim2.new(1, 0, 0, 18)
         lbl.Text = "    " .. bind
         lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
         lbl.BackgroundTransparency = 1
