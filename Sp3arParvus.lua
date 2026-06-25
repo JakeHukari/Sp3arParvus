@@ -4853,7 +4853,7 @@ function UpdateTeamPanelList()
         expandBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         expandBtn.Text = isExpanded and "↓" or "→"
         expandBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-        expandBtn.TextSize = 20
+        expandBtn.TextSize = 25
         expandBtn.TextColor3 = Color3.new(1, 1, 1)
         expandBtn.Parent = row
         local eCorner = Instance.new("UICorner"); eCorner.CornerRadius = UDim.new(0, 4); eCorner.Parent = expandBtn
@@ -5644,7 +5644,7 @@ local function VisualizeInstance(instance, content, depth)
                 toggleBtn.Size = UDim2.new(0, 24, 1, 0)
                 toggleBtn.BackgroundTransparency = 1
                 toggleBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-                toggleBtn.TextSize = 20
+                toggleBtn.TextSize = 25
                 toggleBtn.TextColor3 = UI_THEME.Accent
                 toggleBtn.Parent = row
 
