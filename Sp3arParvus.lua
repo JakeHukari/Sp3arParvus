@@ -4851,9 +4851,9 @@ function UpdateTeamPanelList()
         expandBtn.Size = UDim2.fromOffset(25, 25)
         expandBtn.Position = UDim2.new(1, -35, 0.5, -12)
         expandBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        expandBtn.Text = isExpanded and "⬇️" or "➡️"
+        expandBtn.Text = isExpanded and "↓" or "→"
         expandBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-        expandBtn.TextSize = 12
+        expandBtn.TextSize = 20
         expandBtn.TextColor3 = Color3.new(1, 1, 1)
         expandBtn.Parent = row
         local eCorner = Instance.new("UICorner"); eCorner.CornerRadius = UDim.new(0, 4); eCorner.Parent = expandBtn
@@ -5644,7 +5644,7 @@ local function VisualizeInstance(instance, content, depth)
                 toggleBtn.Size = UDim2.new(0, 24, 1, 0)
                 toggleBtn.BackgroundTransparency = 1
                 toggleBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-                toggleBtn.TextSize = 10
+                toggleBtn.TextSize = 20
                 toggleBtn.TextColor3 = UI_THEME.Accent
                 toggleBtn.Parent = row
 
@@ -5736,7 +5736,7 @@ local function VisualizeInstance(instance, content, depth)
             if hasChildren then
                 toggleBtn.Visible = true
                 toggleBtn.Position = UDim2.fromOffset(indent, 0)
-                toggleBtn.Text = isExpanded and "⬇️" or "➡️"
+                toggleBtn.Text = isExpanded and "↓" or "→"
             else
                 toggleBtn.Visible = false
             end
