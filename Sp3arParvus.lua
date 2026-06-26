@@ -89,6 +89,7 @@ local Flags = {
     ["Aim/VisibilityCheck"] = true,
     ["Aim/AttractionStrength"] = 200,
     ["Aim/FOV/Radius"] = 50,
+    ["Aim/FOV/ShowCircle"] = false,
     ["Aim/Dampening"] = true,
     ["Aim/Dampening/Threshold"] = 5,
     ["Aim/Dampening/Strength"] = 5,
@@ -148,6 +149,7 @@ if SAFE_MODE then
     Flags["Misc/QTeleport"]     = false
 end
 local ScreenGui = nil
+local FovCircleFrame = nil
 local UI = {}
 local UI_THEME = {
     Background = Color3.fromRGB(18, 18, 18),
@@ -7717,6 +7719,7 @@ function Cleanup()
         pcall(function() ScreenGui:Destroy() end)
         ScreenGui = nil
     end
+    FovCircleFrame = nil
     table.clear(UIState.Tabs)
     table.clear(UIState.DraggableFrames)
     table.clear(UIState.Updaters)
@@ -8521,6 +8524,7 @@ UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Fla
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
+UI.CreateToggle(AimTab, "Show FOV Circle", "Aim/FOV/ShowCircle", Flags["Aim/FOV/ShowCircle"])
 UI.CreateToggle(AimTab, "Enable Dampening", "Aim/Dampening", Flags["Aim/Dampening"])
 UI.CreateNumericInput(AimTab, "Dampening Threshold", "Aim/Dampening/Threshold", Flags["Aim/Dampening/Threshold"], 0, 500, 5, "px")
 UI.CreateNumericInput(AimTab, "Dampening Min Strength", "Aim/Dampening/Strength", Flags["Aim/Dampening/Strength"], 0, 100, 1, "%")
@@ -9566,10 +9570,71 @@ function GetCachedTarget()
     return CachedTarget
 end
 
+local function UpdateFOVCircle()
+    local showCircle = Sp3arParvus.Active and LocalCharReady and not SAFE_MODE and Flags["Aim/AimLock"] and Flags["Aim/FOV/ShowCircle"]
+    
+    if not showCircle then
+        if FovCircleFrame then
+            FovCircleFrame.Visible = false
+        end
+        return
+    end
+
+    local screenGui = EnsureScreenGui()
+    if not screenGui then
+        if FovCircleFrame then
+            FovCircleFrame.Visible = false
+        end
+        return
+    end
+
+    if not FovCircleFrame or FovCircleFrame.Parent ~= screenGui then
+        if FovCircleFrame then
+            pcall(function() FovCircleFrame:Destroy() end)
+        end
+
+        FovCircleFrame = Instance.new("Frame")
+        FovCircleFrame.Name = "FOVCircle"
+        FovCircleFrame.BackgroundTransparency = 1
+        FovCircleFrame.BorderSizePixel = 0
+        FovCircleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+        FovCircleFrame.ZIndex = 10
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(1, 0)
+        corner.Parent = FovCircleFrame
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1
+        stroke.Color = UI_THEME.Accent
+        stroke.Transparency = 0.3
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Parent = FovCircleFrame
+
+        FovCircleFrame.Parent = screenGui
+    end
+
+    local currentMode = UserInputService.MouseBehavior
+    local crosshairX, crosshairY, crosshairValid = GetCrosshairViewportPosition(currentMode)
+    
+    if crosshairValid then
+        local radius = Flags["Aim/FOV/Radius"] or 50
+        local diameter = radius * 2
+        
+        FovCircleFrame.Size = UDim2.fromOffset(diameter, diameter)
+        FovCircleFrame.Position = UDim2.fromOffset(crosshairX, crosshairY)
+        FovCircleFrame.Visible = not Flags["Settings/GhostMode"]
+    else
+        FovCircleFrame.Visible = false
+    end
+end
+
 -- Camera tracking update loop — moves the local camera toward the nearest in-FOV target.
 -- Uses mousemoverel for smooth sub-pixel camera adjustment.
 -- SAFE_MODE gates this entirely to avoid continuous input-simulation detection.
 function UpdateAim()
+    pcall(UpdateFOVCircle)
+
     -- Never run camera tracking in Safe Mode
     if SAFE_MODE then return end
 
