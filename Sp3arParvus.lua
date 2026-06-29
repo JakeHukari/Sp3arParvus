@@ -5029,7 +5029,7 @@ function InitializePlayerPage(page)
         settingsContent.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 20)
     end))
 
-    UI.CreateSection(settingsContent, "Targeting Rules")
+    UI.CreateSection(settingsContent, "Targeting Rules for blacklisted (☠️) players")
     UI.CreateToggle(settingsContent, "Target Blacklisted Through Terrain", "Aim/TargetBlacklistedThroughTerrain", Flags["Aim/TargetBlacklistedThroughTerrain"])
     UI.CreateToggle(settingsContent, "Bypass Blacklist Priority If Occluded/Far", "Aim/BypassBlacklistPriorityIfOccludedOrFar", Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"])
     UI.CreateNumericInput(settingsContent, "Blacklist Bypass Distance", "Aim/BlacklistBypassDistance", Flags["Aim/BlacklistBypassDistance"], 0, 10000, 10, "studs")
