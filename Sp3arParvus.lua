@@ -5034,7 +5034,7 @@ function InitializePlayerPage(page)
     UI.CreateToggle(settingsContent, "Bypass Blacklist Priority If Occluded/Far", "Aim/BypassBlacklistPriorityIfOccludedOrFar", Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"])
     UI.CreateNumericInput(settingsContent, "Blacklist Bypass Distance", "Aim/BlacklistBypassDistance", Flags["Aim/BlacklistBypassDistance"], 0, 10000, 10, "studs")
 
-    UI.CreateSection(settingsContent, "Target Prioritization List")
+    UI.CreateSection(settingsContent, "Target Prioritization (⭐) List")
 
     local addPanel = Instance.new("Frame")
     addPanel.Size = UDim2.new(1, 0, 0, 30)
@@ -5256,7 +5256,7 @@ function UpdateTeamPanelList()
         pBtn.Size = UDim2.fromOffset(25, 25)
         pBtn.Position = UDim2.new(1, -125, 0.5, -12)
         pBtn.BackgroundColor3 = isTeamPrioritized and UI_THEME.Accent or Color3.fromRGB(40, 40, 40)
-        pBtn.Text = "P"
+        pBtn.Text = "⭐"
         pBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         pBtn.TextSize = 12
         pBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -5328,7 +5328,7 @@ function UpdateTeamPanelList()
                 ppBtn.Size = UDim2.fromOffset(20, 20)
                 ppBtn.Position = UDim2.new(1, -75, 0.5, -10)
                 ppBtn.BackgroundColor3 = IsPlayerPrioritized(player) and UI_THEME.Accent or Color3.fromRGB(45, 45, 45)
-                ppBtn.Text = "P"
+                ppBtn.Text = "⭐"
                 ppBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
                 ppBtn.TextSize = 10
                 ppBtn.TextColor3 = Color3.new(1, 1, 1)
