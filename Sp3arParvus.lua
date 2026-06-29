@@ -5460,7 +5460,7 @@ function UpdateAdvancedPlayerList()
 
             local function createCopyableLabel(parent, text, position, font, size, color)
                 local container = Instance.new("Frame")
-                container.Size = UDim2.new(1, -145, 0, 20)
+                container.Size = UDim2.new(1, -175, 0, 20)
                 container.Position = position
                 container.BackgroundTransparency = 1
                 container.ZIndex = 3
@@ -5536,7 +5536,7 @@ function UpdateAdvancedPlayerList()
                 ShowAdvancedPlayerDetails(player)
             end))
 
-            -- Whitelist/Blacklist Quick Buttons
+            -- Whitelist/Blacklist/Priority Quick Buttons
             local wBtn = Instance.new("TextButton")
             wBtn.Name = "WBtn"
             wBtn.Size = UDim2.fromOffset(25, 25)
@@ -5554,6 +5554,7 @@ function UpdateAdvancedPlayerList()
             
             TrackConnection(wBtn.MouseButton1Click:Connect(function()
                 ToggleWhitelist(player)
+                UpdateAdvancedPlayerList()
             end))
 
             local bBtn = Instance.new("TextButton")
@@ -5573,6 +5574,27 @@ function UpdateAdvancedPlayerList()
             
             TrackConnection(bBtn.MouseButton1Click:Connect(function()
                 ToggleBlacklist(player)
+                UpdateAdvancedPlayerList()
+            end))
+
+            local pBtn = Instance.new("TextButton")
+            pBtn.Name = "PBtn"
+            pBtn.Size = UDim2.fromOffset(25, 25)
+            pBtn.Position = UDim2.new(1, -160, 0.5, -12)
+            pBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            pBtn.Text = "⭐"
+            pBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            pBtn.TextSize = 12
+            pBtn.TextColor3 = Color3.new(1, 1, 1)
+            pBtn.ZIndex = 2
+            pBtn.Parent = frame
+            local pCorner = Instance.new("UICorner")
+            pCorner.CornerRadius = UDim.new(0, 4)
+            pCorner.Parent = pBtn
+            
+            TrackConnection(pBtn.MouseButton1Click:Connect(function()
+                TogglePlayerPriority(player)
+                UpdateAdvancedPlayerList()
             end))
 
             entry.Frame = frame
@@ -5582,6 +5604,7 @@ function UpdateAdvancedPlayerList()
             entry.DistanceLabel = distLbl
             entry.WBtn = wBtn
             entry.BBtn = bBtn
+            entry.PBtn = pBtn
 
             AdvancedPlayerPanelState.PlayerRowCache[userId] = entry
         else
@@ -5605,6 +5628,16 @@ function UpdateAdvancedPlayerList()
             entry.Frame.BackgroundColor3 = UI_THEME.Fail
         else
             entry.Frame.BackgroundColor3 = UI_THEME.Element
+        end
+
+        if entry.WBtn then
+            entry.WBtn.BackgroundColor3 = isIndivWhitelisted and UI_THEME.Success or Color3.fromRGB(40, 40, 40)
+        end
+        if entry.BBtn then
+            entry.BBtn.BackgroundColor3 = isIndivBlacklisted and UI_THEME.Fail or Color3.fromRGB(40, 40, 40)
+        end
+        if entry.PBtn then
+            entry.PBtn.BackgroundColor3 = IsPlayerPrioritized(player) and UI_THEME.Accent or Color3.fromRGB(40, 40, 40)
         end
     end
 
