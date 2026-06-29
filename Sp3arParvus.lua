@@ -221,9 +221,9 @@ function ToggleWhitelist(player)
     AdvancedPlayerPanelState.Whitelist[id] = not AdvancedPlayerPanelState.Whitelist[id]
     if AdvancedPlayerPanelState.Whitelist[id] then
         AdvancedPlayerPanelState.Blacklist[id] = nil
-        UI.Notify("Player Explorer", player.Name .. " has been whitelisted.", 3)
+        UI.Notify("Player Whitelisted ☮️", player.Name .. " has been whitelisted.", 3)
     else
-        UI.Notify("Player Explorer", player.Name .. " has been unwhitelisted.", 3)
+        UI.Notify("Player unWhitelisted ☮️", player.Name .. " has been unwhitelisted.", 3)
     end
 end
 
@@ -233,9 +233,9 @@ function ToggleBlacklist(player)
     AdvancedPlayerPanelState.Blacklist[id] = not AdvancedPlayerPanelState.Blacklist[id]
     if AdvancedPlayerPanelState.Blacklist[id] then
         AdvancedPlayerPanelState.Whitelist[id] = nil
-        UI.Notify("Player Explorer", player.Name .. " has been blacklisted.", 3)
+        UI.Notify("Player Blacklisted ☠️", player.Name .. " has been blacklisted.", 3)
     else
-        UI.Notify("Player Explorer", player.Name .. " has been unblacklisted.", 3)
+        UI.Notify("Player unBlacklisted ☠️", player.Name .. " has been unblacklisted.", 3)
     end
 end
 
@@ -244,9 +244,9 @@ function ToggleTeamWhitelist(teamName)
     AdvancedPlayerPanelState.TeamWhitelist[teamName] = not AdvancedPlayerPanelState.TeamWhitelist[teamName]
     if AdvancedPlayerPanelState.TeamWhitelist[teamName] then
         AdvancedPlayerPanelState.TeamBlacklist[teamName] = nil
-        UI.Notify("Player Explorer", "Team " .. teamName .. " has been whitelisted.", 3)
+        UI.Notify("Team Whitelisted ☮️", "Team " .. teamName .. " has been whitelisted.", 3)
     else
-        UI.Notify("Player Explorer", "Team " .. teamName .. " has been unwhitelisted.", 3)
+        UI.Notify("Team unWhitelisted ☮️", "Team " .. teamName .. " has been unwhitelisted.", 3)
     end
 end
 
@@ -255,9 +255,9 @@ function ToggleTeamBlacklist(teamName)
     AdvancedPlayerPanelState.TeamBlacklist[teamName] = not AdvancedPlayerPanelState.TeamBlacklist[teamName]
     if AdvancedPlayerPanelState.TeamBlacklist[teamName] then
         AdvancedPlayerPanelState.TeamWhitelist[teamName] = nil
-        UI.Notify("Player Explorer", "Team " .. teamName .. " has been blacklisted.", 3)
+        UI.Notify("Team Blacklisted ☠️", "Team " .. teamName .. " has been blacklisted.", 3)
     else
-        UI.Notify("Player Explorer", "Team " .. teamName .. " has been unblacklisted.", 3)
+        UI.Notify("Team unBlacklisted ☠️", "Team " .. teamName .. " has been unblacklisted.", 3)
     end
 end
 
@@ -299,13 +299,13 @@ function TogglePlayerPriority(player)
 
     if foundIdx then
         table.remove(AdvancedPlayerPanelState.PriorityList, foundIdx)
-        UI.Notify("Player Explorer", player.Name .. " has been deprioritized.", 3)
+        UI.Notify("Player Deprioritized ⭐", player.Name .. " has been deprioritized.", 3)
     else
         table.insert(AdvancedPlayerPanelState.PriorityList, {
             type = "Player",
             value = player.Name
         })
-        UI.Notify("Player Explorer", player.Name .. " has been prioritized.", 3)
+        UI.Notify("Player Prioritized ⭐", player.Name .. " has been prioritized.", 3)
     end
 end
 
