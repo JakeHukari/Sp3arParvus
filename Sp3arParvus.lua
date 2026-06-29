@@ -9345,7 +9345,6 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         ZoomState.LastSetMin = nil
     end
 end)
-UI.CreateButton(MiscTab, "Complete Reload (Ctrl+Shift+R)", ForceReload)
 
 UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
     local url = "https://www.pingbird.xyz/~/sp3arparvus"
