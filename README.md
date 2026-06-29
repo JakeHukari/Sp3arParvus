@@ -76,6 +76,7 @@ Execute the script in your testing environment workspace.
 *   **Menu Minimize/Maximize**: `Ctrl + -`
 *   **Gh0st Mode**: `Ctrl + G`
 *   **Rejoin Server**: `Ctrl + R`
+*   **Complete Reload**: `Ctrl + Shift + R`
 *   **Unload Sp3arParvus**: `Ctrl + U`
 
 ### Interaction & Testing

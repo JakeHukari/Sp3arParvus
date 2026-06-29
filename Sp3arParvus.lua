@@ -8422,6 +8422,15 @@ function Reload()
     end
 end
 
+-- Force Reload Function (fully unload & cleanup -> fetch latest version from GitHub)
+function ForceReload()
+    UI.Notify("Sp3arParvus", "Fetching and reloading latest script version...")
+    task.wait(0.1)
+    Cleanup()
+    task.wait(0.2) -- Safe brief delay for cleanup to complete
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()
+end
+
 -- Create Main Window
 local Window = UI.CreateWindow("Sp3arParvus")
 
@@ -9277,6 +9286,7 @@ UI.CreateButton(MiscTab, "Copy gameInstanceId Link", function()
 end)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 UI.CreateButton(MiscTab, "Reload Script", Reload)
+UI.CreateButton(MiscTab, "Force Reload (GitHub)", ForceReload)
 
 UI.CreateSection(MiscTab, "Configuration")
 -- Safe Mode status row
@@ -9637,6 +9647,7 @@ local game = game
 local ActiveWaypoints = ActiveWaypoints
 local GetMouseRay = GetMouseRay
 local WorldRaycastBr3ak3r = WorldRaycastBr3ak3r
+local ForceReload = ForceReload
 
 local function handleShortcuts(actionName, inputState, inputObject)
     if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
@@ -9680,7 +9691,11 @@ local function handleShortcuts(actionName, inputState, inputObject)
             loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Any-Item-ESP/refs/heads/main/any_item_esp.lua", true))()
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.R then
-            Rejoin()
+            if shiftHeld then
+                ForceReload()
+            else
+                Rejoin()
+            end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.U then
             UI.Notify("Sp3arParvus", "Unloaded with 'Ctrl+U'")
