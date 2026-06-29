@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.3                                                  ║
+-- ║  Version: 4.2.4                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.3" -- Moved 'PlayerPanel' to 'PlayerPage' inside Main Settings Menu (ctrl+k to open)
+local VERSION = "4.2.4" -- PlayerPage Settings Update
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -94,6 +94,9 @@ local Flags = {
     ["Aim/Dampening/Threshold"] = 5,
     ["Aim/Dampening/Strength"] = 5,
     ["Aim/Priority"] = "Head",
+    ["Aim/TargetBlacklistedThroughTerrain"] = true,
+    ["Aim/BypassBlacklistPriorityIfOccludedOrFar"] = false,
+    ["Aim/BlacklistBypassDistance"] = 200,
     ["Aim/BodyParts"] = {"Head"},
     ["Aim/TargetGroups"] = {
         Head = true,
@@ -199,7 +202,8 @@ local AdvancedPlayerPanelState = {
     TeamWhitelist = {},
     TeamBlacklist = {},
     TeamExpanded = {},
-    PlayerRowCache = {}
+    PlayerRowCache = {},
+    PriorityList = {}
 }
 
 local ItemPanelState = {
@@ -242,6 +246,82 @@ function ToggleTeamBlacklist(teamName)
     AdvancedPlayerPanelState.TeamBlacklist[teamName] = not AdvancedPlayerPanelState.TeamBlacklist[teamName]
     if AdvancedPlayerPanelState.TeamBlacklist[teamName] then
         AdvancedPlayerPanelState.TeamWhitelist[teamName] = nil
+    end
+end
+
+function GetPriorityRank(player, teamName)
+    if not AdvancedPlayerPanelState.PriorityList then return nil end
+    for index, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+        if item.type == "Player" then
+            if player.UserId == item.value or player.Name == item.value then
+                return index
+            end
+        elseif item.type == "Team" then
+            if teamName == item.value then
+                return index
+            end
+        end
+    end
+    return nil
+end
+
+function IsPlayerPrioritized(player)
+    if not player then return false end
+    for _, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+        if item.type == "Player" and (item.value == player.UserId or item.value == player.Name) then
+            return true
+        end
+    end
+    return false
+end
+
+function TogglePlayerPriority(player)
+    if not player then return end
+    local foundIdx = nil
+    for i, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+        if item.type == "Player" and (item.value == player.UserId or item.value == player.Name) then
+            foundIdx = i
+            break
+        end
+    end
+
+    if foundIdx then
+        table.remove(AdvancedPlayerPanelState.PriorityList, foundIdx)
+    else
+        table.insert(AdvancedPlayerPanelState.PriorityList, {
+            type = "Player",
+            value = player.Name
+        })
+    end
+end
+
+function IsTeamPrioritized(teamName)
+    if not teamName then return false end
+    for _, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+        if item.type == "Team" and item.value == teamName then
+            return true
+        end
+    end
+    return false
+end
+
+function ToggleTeamPriority(teamName)
+    if not teamName then return end
+    local foundIdx = nil
+    for i, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+        if item.type == "Team" and item.value == teamName then
+            foundIdx = i
+            break
+        end
+    end
+
+    if foundIdx then
+        table.remove(AdvancedPlayerPanelState.PriorityList, foundIdx)
+    else
+        table.insert(AdvancedPlayerPanelState.PriorityList, {
+            type = "Team",
+            value = teamName
+        })
     end
 end
 local AdvancedPlayerPanelUI = {
@@ -3515,12 +3595,24 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local dx, dy = screenX - crosshairX, screenY - crosshairY
                 local Magnitude = sqrt(dx * dx + dy * dy)
 
-                -- Blacklist Prioritization
-                if isBlacklisted then
-                    Magnitude = Magnitude - 10000 -- Force to front of sort
+                -- Custom Blacklist and Prioritization Logic
+                local bypassBlacklistPriority = false
+                if isBlacklisted and Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"] then
+                    local isOccluded = ObjectOccluded(VisibilityCheck, CameraPosition, ActualPosition, Character)
+                    local isFar = Distance > Flags["Aim/BlacklistBypassDistance"]
+                    if isOccluded or isFar then
+                        bypassBlacklistPriority = true
+                    end
                 end
 
-                if isBlacklisted or Magnitude < FieldOfView then
+                local priorityRank = GetPriorityRank(Player, teamName)
+                if priorityRank then
+                    Magnitude = Magnitude - (30000 - priorityRank * 100)
+                elseif isBlacklisted and not bypassBlacklistPriority then
+                    Magnitude = Magnitude - 10000
+                end
+
+                if isBlacklisted or priorityRank or Magnitude < FieldOfView then
                     local TargetPosition = ActualPosition
 
                     if CandidateCount < maxCandsLimit then
@@ -3566,7 +3658,12 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local teamName = pTeam and pTeam.Name
                 local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
                 
-                if isSpecTargetBlacklisted or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
+                local performStickyOcclusion = true
+                if isSpecTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+                    performStickyOcclusion = false
+                end
+                
+                if not performStickyOcclusion or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
                     ClosestResult[3] = entry.part
@@ -3593,7 +3690,12 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         local teamName = pTeam and pTeam.Name
         local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
 
-        if not isEntryBlacklisted and ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
+        local performOcclusionCheck = true
+        if isEntryBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+            performOcclusionCheck = false
+        end
+
+        if performOcclusionCheck and ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
             continue
         end
 
@@ -4199,10 +4301,12 @@ function UpdateActionButtonsState(player)
     if not player or not AdvancedPlayerPanelUI.Initialized then return end
     local wBtn = AdvancedPlayerPanelUI.WhitelistBtn
     local bBtn = AdvancedPlayerPanelUI.BlacklistBtn
+    local pBtn = AdvancedPlayerPanelUI.PrioritizeBtn
     local specBtn = AdvancedPlayerPanelUI.SpectateBtn
 
     local isW = AdvancedPlayerPanelState.Whitelist[player.UserId]
     local isB = AdvancedPlayerPanelState.Blacklist[player.UserId]
+    local isP = IsPlayerPrioritized(player)
     local isSpec = (AdvancedPlayerPanelState.Spectating == player)
 
     if wBtn then
@@ -4213,10 +4317,96 @@ function UpdateActionButtonsState(player)
         bBtn.Text = isB and "Unblacklist" or "Blacklist"
         bBtn.TextColor3 = isB and UI_THEME.Accent or UI_THEME.Text
     end
+    if pBtn then
+        pBtn.Text = isP and "Deprioritize" or "Prioritize"
+        pBtn.TextColor3 = isP and UI_THEME.Accent or UI_THEME.Text
+    end
     if specBtn then
         specBtn.Text = isSpec and "Stop Spec" or "Spectate"
         specBtn.BackgroundColor3 = isSpec and UI_THEME.Fail or UI_THEME.Element
     end
+function UpdateSettingsPanelList()
+    local container = AdvancedPlayerPanelUI.PriorityListContainer
+    if not container then return end
+    ClearFrame(container)
+
+    local priorityList = AdvancedPlayerPanelState.PriorityList
+    if #priorityList == 0 then
+        local emptyLabel = Instance.new("TextLabel")
+        emptyLabel.Size = UDim2.new(1, 0, 0, 30)
+        emptyLabel.BackgroundTransparency = 1
+        emptyLabel.Text = "Priority list is empty."
+        emptyLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Italic)
+        emptyLabel.TextSize = 12
+        emptyLabel.TextColor3 = UI_THEME.TextDark
+        emptyLabel.Parent = container
+        return
+    end
+
+    for index, item in ipairs(priorityList) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 32)
+        row.BackgroundColor3 = UI_THEME.Element
+        row.BorderSizePixel = 0
+        row.Parent = container
+        local rCorner = Instance.new("UICorner"); rCorner.CornerRadius = UDim.new(0, 6); rCorner.Parent = row
+
+        local typeIcon = item.type == "Player" and "👤" or "👥"
+        local itemText = string.format("%d. %s  %s", index, typeIcon, item.value)
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -110, 1, 0)
+        label.Position = UDim2.fromOffset(10, 0)
+        label.BackgroundTransparency = 1
+        label.Text = itemText
+        label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        label.TextSize = 12
+        label.TextColor3 = UI_THEME.Text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = row
+
+        local function createRowBtn(text, posX, callback)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.fromOffset(24, 24)
+            btn.Position = UDim2.new(1, posX, 0.5, -12)
+            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            btn.Text = text
+            btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            btn.TextSize = 11
+            btn.TextColor3 = UI_THEME.Text
+            btn.Parent = row
+            local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 4); corner.Parent = btn
+            TrackConnection(btn.MouseButton1Click:Connect(callback))
+            return btn
+        end
+
+        if index > 1 then
+            createRowBtn("▲", -85, function()
+                local temp = priorityList[index]
+                priorityList[index] = priorityList[index - 1]
+                priorityList[index - 1] = temp
+                UpdateSettingsPanelList()
+            end)
+        end
+
+        if index < #priorityList then
+            createRowBtn("▼", -55, function()
+                local temp = priorityList[index]
+                priorityList[index] = priorityList[index + 1]
+                priorityList[index + 1] = temp
+                UpdateSettingsPanelList()
+            end)
+        end
+
+        createRowBtn("❌", -26, function()
+            table.remove(priorityList, index)
+            UpdateSettingsPanelList()
+        end)
+    end
+end
+
+function UpdateSettingsPanel()
+    UpdateSettingsPanelList()
 end
 
 function SwitchToPlayerPageView(viewName)
@@ -4226,14 +4416,21 @@ function SwitchToPlayerPageView(viewName)
     local listFrame = AdvancedPlayerPanelUI.ListFrame
     local detailsFrame = AdvancedPlayerPanelUI.DetailsFrame
     local teamFrame = AdvancedPlayerPanelUI.TeamFrame
+    local settingsFrame = AdvancedPlayerPanelUI.SettingsFrame
     local headerFrame = AdvancedPlayerPanelUI.HeaderFrame
     local actionHeader = AdvancedPlayerPanelUI.ActionsHeaderFrame
     local listBtn = AdvancedPlayerPanelUI.ListBtn
     local teamsBtn = AdvancedPlayerPanelUI.TeamsBtn
+    local settingsBtn = AdvancedPlayerPanelUI.SettingsBtn
+
+    if settingsBtn then
+        settingsBtn.BackgroundColor3 = (viewName == "Settings") and UI_THEME.Accent or UI_THEME.Element
+    end
 
     if viewName == "List" then
         if teamFrame then teamFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = false end
+        if settingsFrame then settingsFrame.Visible = false end
         if listFrame then listFrame.Visible = true end
         if actionHeader then actionHeader.Visible = false end
         if listBtn then listBtn.Visible = true end
@@ -4246,6 +4443,7 @@ function SwitchToPlayerPageView(viewName)
     elseif viewName == "Teams" then
         if listFrame then listFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = false end
+        if settingsFrame then settingsFrame.Visible = false end
         if teamFrame then 
             teamFrame.Visible = true 
             UpdateTeamPanelList()
@@ -4261,6 +4459,7 @@ function SwitchToPlayerPageView(viewName)
     elseif viewName == "Details" then
         if listFrame then listFrame.Visible = false end
         if teamFrame then teamFrame.Visible = false end
+        if settingsFrame then settingsFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = true end
         if actionHeader then actionHeader.Visible = true end
         if listBtn then listBtn.Visible = false end
@@ -4273,6 +4472,22 @@ function SwitchToPlayerPageView(viewName)
         local selectedPlayer = AdvancedPlayerPanelState.SelectedPlayer
         if selectedPlayer then
             UpdateActionButtonsState(selectedPlayer)
+        end
+    elseif viewName == "Settings" then
+        if listFrame then listFrame.Visible = false end
+        if teamFrame then teamFrame.Visible = false end
+        if detailsFrame then detailsFrame.Visible = false end
+        if settingsFrame then 
+            settingsFrame.Visible = true 
+            UpdateSettingsPanel()
+        end
+        if actionHeader then actionHeader.Visible = false end
+        if listBtn then listBtn.Visible = true end
+        if teamsBtn then teamsBtn.Visible = true end
+        if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
+        if settingsFrame then 
+            settingsFrame.Position = UDim2.fromOffset(0, 35) 
+            settingsFrame.Size = UDim2.new(1, 0, 1, -35)
         end
     end
 end
@@ -4328,19 +4543,23 @@ function InitializePlayerPage(page)
     end
 
     local wBtn = createMinBtn("Whitelist", actionHeaderFrame)
-    wBtn.Size = UDim2.new(0.24, -4, 0, 24)
+    wBtn.Size = UDim2.new(0.19, -4, 0, 24)
     AdvancedPlayerPanelUI.WhitelistBtn = wBtn
 
     local bBtn = createMinBtn("Blacklist", actionHeaderFrame)
-    bBtn.Size = UDim2.new(0.24, -4, 0, 24)
+    bBtn.Size = UDim2.new(0.19, -4, 0, 24)
     AdvancedPlayerPanelUI.BlacklistBtn = bBtn
 
+    local pBtn = createMinBtn("Prioritize", actionHeaderFrame)
+    pBtn.Size = UDim2.new(0.19, -4, 0, 24)
+    AdvancedPlayerPanelUI.PrioritizeBtn = pBtn
+
     local tpBtn = createMinBtn("Teleport to", actionHeaderFrame)
-    tpBtn.Size = UDim2.new(0.26, -4, 0, 24)
+    tpBtn.Size = UDim2.new(0.21, -4, 0, 24)
     AdvancedPlayerPanelUI.TeleportBtn = tpBtn
 
     local specBtn = createMinBtn("Spectate", actionHeaderFrame)
-    specBtn.Size = UDim2.new(0.26, -4, 0, 24)
+    specBtn.Size = UDim2.new(0.21, -4, 0, 24)
     AdvancedPlayerPanelUI.SpectateBtn = specBtn
 
     TrackConnection(wBtn.MouseButton1Click:Connect(function()
@@ -4355,6 +4574,14 @@ function InitializePlayerPage(page)
         local player = AdvancedPlayerPanelState.SelectedPlayer
         if player then
             ToggleBlacklist(player)
+            UpdateActionButtonsState(player)
+        end
+    end))
+
+    TrackConnection(pBtn.MouseButton1Click:Connect(function()
+        local player = AdvancedPlayerPanelState.SelectedPlayer
+        if player then
+            TogglePlayerPriority(player)
             UpdateActionButtonsState(player)
         end
     end))
@@ -4443,6 +4670,22 @@ function InitializePlayerPage(page)
     teamsBtn.Parent = headerFrame
     AdvancedPlayerPanelUI.TeamsBtn = teamsBtn
     local tbCorner = Instance.new("UICorner"); tbCorner.CornerRadius = UDim.new(0, 4); tbCorner.Parent = teamsBtn
+
+    local settingsBtn = Instance.new("TextButton")
+    settingsBtn.Size = UDim2.fromOffset(28, 24)
+    settingsBtn.Position = UDim2.new(0, 330, 0.5, -12)
+    settingsBtn.BackgroundColor3 = UI_THEME.Element
+    settingsBtn.Text = "⚙️"
+    settingsBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    settingsBtn.TextSize = 14
+    settingsBtn.TextColor3 = UI_THEME.Text
+    settingsBtn.Parent = headerFrame
+    AdvancedPlayerPanelUI.SettingsBtn = settingsBtn
+    local sbCorner = Instance.new("UICorner"); sbCorner.CornerRadius = UDim.new(0, 4); sbCorner.Parent = settingsBtn
+
+    TrackConnection(settingsBtn.MouseButton1Click:Connect(function()
+        SwitchToPlayerPageView("Settings")
+    end))
 
     -- List View
     local ListFrame = Instance.new("Frame")
@@ -4754,6 +4997,115 @@ function InitializePlayerPage(page)
     AdvancedPlayerPanelUI.DetailsContent = detailsContent
     AdvancedPlayerPanelUI.TeamContent = teamContent
     AdvancedPlayerPanelUI.SearchBox = searchBox
+
+    -- Settings View
+    local SettingsFrame = Instance.new("Frame")
+    SettingsFrame.Name = "SettingsFrame"
+    SettingsFrame.Size = UDim2.new(1, 0, 1, -35)
+    SettingsFrame.Position = UDim2.fromOffset(0, 35)
+    SettingsFrame.BackgroundTransparency = 1
+    SettingsFrame.Visible = false
+    SettingsFrame.Parent = Wrapper
+    AdvancedPlayerPanelUI.SettingsFrame = SettingsFrame
+
+    local settingsContent = Instance.new("ScrollingFrame")
+    settingsContent.Name = "SettingsContent"
+    settingsContent.Size = UDim2.new(1, -10, 1, -10)
+    settingsContent.Position = UDim2.fromOffset(5, 5)
+    settingsContent.BackgroundTransparency = 1
+    settingsContent.BorderSizePixel = 0
+    settingsContent.ScrollBarThickness = 4
+    settingsContent.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
+    settingsContent.Parent = SettingsFrame
+
+    local settingsLayout = Instance.new("UIListLayout")
+    settingsLayout.Padding = UDim.new(0, 8)
+    settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    settingsLayout.Parent = settingsContent
+
+    TrackConnection(settingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        settingsContent.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 20)
+    end))
+
+    UI.CreateSection(settingsContent, "Targeting Rules")
+    UI.CreateToggle(settingsContent, "Target Blacklisted Through Terrain", "Aim/TargetBlacklistedThroughTerrain", Flags["Aim/TargetBlacklistedThroughTerrain"])
+    UI.CreateToggle(settingsContent, "Bypass Blacklist Priority If Occluded/Far", "Aim/BypassBlacklistPriorityIfOccludedOrFar", Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"])
+    UI.CreateNumericInput(settingsContent, "Blacklist Bypass Distance", "Aim/BlacklistBypassDistance", Flags["Aim/BlacklistBypassDistance"], 0, 10000, 10, "studs")
+
+    UI.CreateSection(settingsContent, "Target Prioritization List")
+
+    local addPanel = Instance.new("Frame")
+    addPanel.Size = UDim2.new(1, 0, 0, 30)
+    addPanel.BackgroundTransparency = 1
+    addPanel.Parent = settingsContent
+
+    local addInput = Instance.new("TextBox")
+    addInput.Size = UDim2.new(0.5, -5, 1, 0)
+    addInput.Position = UDim2.fromOffset(0, 0)
+    addInput.BackgroundColor3 = UI_THEME.Element
+    addInput.Text = ""
+    addInput.PlaceholderText = "Player or Team name..."
+    addInput.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    addInput.TextSize = 12
+    addInput.TextColor3 = UI_THEME.Text
+    addInput.PlaceholderColor3 = UI_THEME.TextDark
+    addInput.Parent = addPanel
+    local aiCorner = Instance.new("UICorner"); aiCorner.CornerRadius = UDim.new(0, 6); aiCorner.Parent = addInput
+
+    local function createAddBtn(text, posX, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.24, -4, 1, 0)
+        btn.Position = UDim2.new(posX, 2, 0, 0)
+        btn.BackgroundColor3 = UI_THEME.Element
+        btn.Text = text
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 11
+        btn.TextColor3 = UI_THEME.Accent
+        btn.Parent = addPanel
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = btn
+        
+        TrackConnection(btn.MouseButton1Click:Connect(callback))
+        return btn
+    end
+
+    createAddBtn("+ Player", 0.5, function()
+        local name = addInput.Text
+        if name and #name > 0 then
+            table.insert(AdvancedPlayerPanelState.PriorityList, {
+                type = "Player",
+                value = name
+            })
+            addInput.Text = ""
+            UpdateSettingsPanelList()
+        end
+    end)
+
+    createAddBtn("+ Team", 0.74, function()
+        local name = addInput.Text
+        if name and #name > 0 then
+            table.insert(AdvancedPlayerPanelState.PriorityList, {
+                type = "Team",
+                value = name
+            })
+            addInput.Text = ""
+            UpdateSettingsPanelList()
+        end
+    end)
+
+    local listContainer = Instance.new("Frame")
+    listContainer.Size = UDim2.new(1, 0, 0, 0)
+    listContainer.BackgroundTransparency = 1
+    listContainer.Parent = settingsContent
+    AdvancedPlayerPanelUI.PriorityListContainer = listContainer
+
+    local containerLayout = Instance.new("UIListLayout")
+    containerLayout.Padding = UDim.new(0, 4)
+    containerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    containerLayout.Parent = listContainer
+
+    TrackConnection(containerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        listContainer.Size = UDim2.new(1, 0, 0, containerLayout.AbsoluteContentSize.Y)
+    end))
     
     TrackThread(task.spawn(function()
         while task.wait(0.5) do
@@ -4897,6 +5249,23 @@ function UpdateTeamPanelList()
             UpdateTeamPanelList()
         end))
 
+        local isTeamPrioritized = IsTeamPrioritized(teamName)
+        local pBtn = Instance.new("TextButton")
+        pBtn.Size = UDim2.fromOffset(25, 25)
+        pBtn.Position = UDim2.new(1, -125, 0.5, -12)
+        pBtn.BackgroundColor3 = isTeamPrioritized and UI_THEME.Accent or Color3.fromRGB(40, 40, 40)
+        pBtn.Text = "P"
+        pBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        pBtn.TextSize = 12
+        pBtn.TextColor3 = Color3.new(1, 1, 1)
+        pBtn.Parent = row
+        local pCorner = Instance.new("UICorner"); pCorner.CornerRadius = UDim.new(0, 4); pCorner.Parent = pBtn
+
+        TrackConnection(pBtn.MouseButton1Click:Connect(function()
+            ToggleTeamPriority(teamName)
+            UpdateTeamPanelList()
+        end))
+
         if isExpanded then
             for _, player in ipairs(playersOnTeam) do
                 local pId = player.UserId
@@ -4911,7 +5280,7 @@ function UpdateTeamPanelList()
                 local pCorner = Instance.new("UICorner"); pCorner.CornerRadius = UDim.new(0, 4); pCorner.Parent = pRow
 
                 local pLabel = Instance.new("TextLabel")
-                pLabel.Size = UDim2.new(1, -70, 1, 0)
+                pLabel.Size = UDim2.new(1, -95, 1, 0)
                 pLabel.Position = UDim2.fromOffset(10, 0)
                 pLabel.BackgroundTransparency = 1
                 pLabel.Text = player.DisplayName or player.Name
@@ -4950,6 +5319,22 @@ function UpdateTeamPanelList()
 
                 TrackConnection(pbBtn.MouseButton1Click:Connect(function()
                     ToggleBlacklist(player)
+                    UpdateTeamPanelList()
+                end))
+
+                local ppBtn = Instance.new("TextButton")
+                ppBtn.Size = UDim2.fromOffset(20, 20)
+                ppBtn.Position = UDim2.new(1, -75, 0.5, -10)
+                ppBtn.BackgroundColor3 = IsPlayerPrioritized(player) and UI_THEME.Accent or Color3.fromRGB(45, 45, 45)
+                ppBtn.Text = "P"
+                ppBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+                ppBtn.TextSize = 10
+                ppBtn.TextColor3 = Color3.new(1, 1, 1)
+                ppBtn.Parent = pRow
+                local ppCorner = Instance.new("UICorner"); ppCorner.CornerRadius = UDim.new(0, 4); ppCorner.Parent = ppBtn
+
+                TrackConnection(ppBtn.MouseButton1Click:Connect(function()
+                    TogglePlayerPriority(player)
                     UpdateTeamPanelList()
                 end))
             end
