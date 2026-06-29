@@ -4325,6 +4325,8 @@ function UpdateActionButtonsState(player)
         specBtn.Text = isSpec and "Stop Spec" or "Spectate"
         specBtn.BackgroundColor3 = isSpec and UI_THEME.Fail or UI_THEME.Element
     end
+end
+
 function UpdateSettingsPanelList()
     local container = AdvancedPlayerPanelUI.PriorityListContainer
     if not container then return end
