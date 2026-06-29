@@ -5223,7 +5223,7 @@ function UpdateTeamPanelList()
         wBtn.Size = UDim2.fromOffset(25, 25)
         wBtn.Position = UDim2.new(1, -65, 0.5, -12)
         wBtn.BackgroundColor3 = isWhitelisted and UI_THEME.Success or Color3.fromRGB(40, 40, 40)
-        wBtn.Text = "W"
+        wBtn.Text = "☮️"
         wBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         wBtn.TextSize = 12
         wBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -5296,7 +5296,7 @@ function UpdateTeamPanelList()
                 pwBtn.Size = UDim2.fromOffset(20, 20)
                 pwBtn.Position = UDim2.new(1, -25, 0.5, -10)
                 pwBtn.BackgroundColor3 = pWhitelisted and UI_THEME.Success or Color3.fromRGB(45, 45, 45)
-                pwBtn.Text = "W"
+                pwBtn.Text = "☮️"
                 pwBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
                 pwBtn.TextSize = 10
                 pwBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -5542,7 +5542,7 @@ function UpdateAdvancedPlayerList()
             wBtn.Size = UDim2.fromOffset(25, 25)
             wBtn.Position = UDim2.new(1, -100, 0.5, -12)
             wBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-            wBtn.Text = "W"
+            wBtn.Text = "☮️"
             wBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
             wBtn.TextSize = 12
             wBtn.TextColor3 = Color3.new(1, 1, 1)
