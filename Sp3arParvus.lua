@@ -5239,7 +5239,7 @@ function UpdateTeamPanelList()
         bBtn.Size = UDim2.fromOffset(25, 25)
         bBtn.Position = UDim2.new(1, -95, 0.5, -12)
         bBtn.BackgroundColor3 = isBlacklisted and UI_THEME.Fail or Color3.fromRGB(40, 40, 40)
-        bBtn.Text = "B"
+        bBtn.Text = ☠️
         bBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         bBtn.TextSize = 12
         bBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -5312,7 +5312,7 @@ function UpdateTeamPanelList()
                 pbBtn.Size = UDim2.fromOffset(20, 20)
                 pbBtn.Position = UDim2.new(1, -50, 0.5, -10)
                 pbBtn.BackgroundColor3 = pBlacklisted and UI_THEME.Fail or Color3.fromRGB(45, 45, 45)
-                pbBtn.Text = "B"
+                pbBtn.Text = ☠️
                 pbBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
                 pbBtn.TextSize = 10
                 pbBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -5562,7 +5562,7 @@ function UpdateAdvancedPlayerList()
             bBtn.Size = UDim2.fromOffset(25, 25)
             bBtn.Position = UDim2.new(1, -130, 0.5, -12)
             bBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-            bBtn.Text = "B"
+            bBtn.Text = ☠️
             bBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
             bBtn.TextSize = 12
             bBtn.TextColor3 = Color3.new(1, 1, 1)
