@@ -221,6 +221,9 @@ function ToggleWhitelist(player)
     AdvancedPlayerPanelState.Whitelist[id] = not AdvancedPlayerPanelState.Whitelist[id]
     if AdvancedPlayerPanelState.Whitelist[id] then
         AdvancedPlayerPanelState.Blacklist[id] = nil
+        UI.Notify("Player Explorer", player.Name .. " has been whitelisted.", 3)
+    else
+        UI.Notify("Player Explorer", player.Name .. " has been unwhitelisted.", 3)
     end
 end
 
@@ -230,6 +233,9 @@ function ToggleBlacklist(player)
     AdvancedPlayerPanelState.Blacklist[id] = not AdvancedPlayerPanelState.Blacklist[id]
     if AdvancedPlayerPanelState.Blacklist[id] then
         AdvancedPlayerPanelState.Whitelist[id] = nil
+        UI.Notify("Player Explorer", player.Name .. " has been blacklisted.", 3)
+    else
+        UI.Notify("Player Explorer", player.Name .. " has been unblacklisted.", 3)
     end
 end
 
@@ -238,6 +244,9 @@ function ToggleTeamWhitelist(teamName)
     AdvancedPlayerPanelState.TeamWhitelist[teamName] = not AdvancedPlayerPanelState.TeamWhitelist[teamName]
     if AdvancedPlayerPanelState.TeamWhitelist[teamName] then
         AdvancedPlayerPanelState.TeamBlacklist[teamName] = nil
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been whitelisted.", 3)
+    else
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been unwhitelisted.", 3)
     end
 end
 
@@ -246,6 +255,9 @@ function ToggleTeamBlacklist(teamName)
     AdvancedPlayerPanelState.TeamBlacklist[teamName] = not AdvancedPlayerPanelState.TeamBlacklist[teamName]
     if AdvancedPlayerPanelState.TeamBlacklist[teamName] then
         AdvancedPlayerPanelState.TeamWhitelist[teamName] = nil
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been blacklisted.", 3)
+    else
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been unblacklisted.", 3)
     end
 end
 
@@ -287,11 +299,13 @@ function TogglePlayerPriority(player)
 
     if foundIdx then
         table.remove(AdvancedPlayerPanelState.PriorityList, foundIdx)
+        UI.Notify("Player Explorer", player.Name .. " has been deprioritized.", 3)
     else
         table.insert(AdvancedPlayerPanelState.PriorityList, {
             type = "Player",
             value = player.Name
         })
+        UI.Notify("Player Explorer", player.Name .. " has been prioritized.", 3)
     end
 end
 
@@ -317,11 +331,13 @@ function ToggleTeamPriority(teamName)
 
     if foundIdx then
         table.remove(AdvancedPlayerPanelState.PriorityList, foundIdx)
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been deprioritized.", 3)
     else
         table.insert(AdvancedPlayerPanelState.PriorityList, {
             type = "Team",
             value = teamName
         })
+        UI.Notify("Player Explorer", "Team " .. teamName .. " has been prioritized.", 3)
     end
 end
 local AdvancedPlayerPanelUI = {
@@ -4600,6 +4616,9 @@ function InitializePlayerPage(page)
             local targetChar, targetRoot = GetCharacter(player)
             if myRoot and targetRoot then
                 myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+                UI.Notify("Player Explorer", "Teleported to " .. player.Name .. ".", 3)
+            else
+                UI.Notify("Player Explorer", "Failed to teleport: character root part not found.", 3)
             end
         end
     end))
@@ -4619,6 +4638,7 @@ function InitializePlayerPage(page)
                 end
                 LocalPlayer.ReplicationFocus = nil
                 pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
+                UI.Notify("Player Explorer", "Stopped spectating " .. player.Name .. ".", 3)
             else
                 if targetHum then
                     AdvancedPlayerPanelState.Spectating = player
@@ -4627,6 +4647,9 @@ function InitializePlayerPage(page)
                         LocalPlayer.ReplicationFocus = targetRoot
                     end
                     pcall(function() GuiService:SetGameplayPausedNotificationEnabled(false) end)
+                    UI.Notify("Player Explorer", "Now spectating " .. player.Name .. ".", 3)
+                else
+                    UI.Notify("Player Explorer", "Failed to spectate: target humanoid not found.", 3)
                 end
             end
             UpdateActionButtonsState(player)
@@ -5501,7 +5524,10 @@ function UpdateAdvancedPlayerList()
 
                 TrackConnection(copyBtn.MouseButton1Click:Connect(function()
                     local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
-                    if copy then copy(lbl.Text) end
+                    if copy then 
+                        copy(lbl.Text) 
+                        UI.Notify("Player Explorer", "Copied to clipboard: " .. lbl.Text, 3)
+                    end
                 end))
 
                 return lbl, copyBtn
