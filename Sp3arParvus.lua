@@ -4762,8 +4762,8 @@ function InitializePlayerPage(page)
     end
 
     CreateTab("All", "All")
-    CreateTab("Whitelisted", "Whitelisted")
-    CreateTab("Blacklisted", "Blacklisted")
+    CreateTab("Whitelisted", "Whitelisted (☮️)")
+    CreateTab("Blacklisted", "Blacklisted (☠️)")
 
     local listContent = Instance.new("ScrollingFrame")
     listContent.Name = "ListContent"
