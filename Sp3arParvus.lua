@@ -9460,9 +9460,9 @@ TrackConnection(Players.PlayerAdded:Connect(function(player)
     SetupPlayerESP(player)
 
     if AdvancedPlayerPanelState.Whitelist[player.UserId] then
-        UI.Notify("Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has joined the server")
+        UI.Notify("☮️ Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has joined the server")
     elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
-        UI.Notify("Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has joined the server")
+        UI.Notify("☠️ Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has joined the server")
     end
 end))
 TrackConnection(Players.PlayerRemoving:Connect(function(player) 
