@@ -8698,6 +8698,25 @@ local MouseButtons = {
 }
 
 function InitializeShortcutsPage(page)
+    -- Help & Legend Section
+    UI.CreateSection(page, "Shortcuts Legend")
+
+    local legendLabel = Instance.new("TextLabel")
+    legendLabel.Size = UDim2.new(1, -10, 0, 90)
+    legendLabel.BackgroundTransparency = 1
+    legendLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+    legendLabel.TextSize = 11
+    legendLabel.TextColor3 = UI_THEME.Text
+    legendLabel.TextXAlignment = Enum.TextXAlignment.Left
+    legendLabel.TextYAlignment = Enum.TextYAlignment.Top
+    legendLabel.TextWrapped = true
+    legendLabel.Text = "• Teal Keys/Buttons: Have active game shortcuts assigned.\n" ..
+                      "• Gray Keys/Buttons: Standard keyboard layout (no shortcut).\n" ..
+                      "• Toggles (Active/Inactive): Features like Fullbright (Ctrl+F) or Dev Tool (Ctrl+.) show active/inactive state inside the tooltip popup in real-time.\n" ..
+                      "• Modifiers (Ctrl/Shift): Hold these keys in game to execute actions.\n" ..
+                      "• Hover over any highlighted key/button to view its detailed shortcut function."
+    legendLabel.Parent = page
+
     -- Demo layout wrapper frame
     local DemoWrapper = Instance.new("Frame")
     DemoWrapper.Name = "DemoWrapper"
@@ -9000,25 +9019,6 @@ function InitializeShortcutsPage(page)
     bodyLabel.TextColor3 = UI_THEME.TextDark
     bodyLabel.Text = "SP"
     bodyLabel.Parent = bodyFrame
-
-    -- Help & Legend Section
-    UI.CreateSection(page, "Shortcuts Legend")
-
-    local legendLabel = Instance.new("TextLabel")
-    legendLabel.Size = UDim2.new(1, -10, 0, 90)
-    legendLabel.BackgroundTransparency = 1
-    legendLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
-    legendLabel.TextSize = 11
-    legendLabel.TextColor3 = UI_THEME.Text
-    legendLabel.TextXAlignment = Enum.TextXAlignment.Left
-    legendLabel.TextYAlignment = Enum.TextYAlignment.Top
-    legendLabel.TextWrapped = true
-    legendLabel.Text = "• Teal Keys/Buttons: Have active game shortcuts assigned.\n" ..
-                      "• Gray Keys/Buttons: Standard keyboard layout (no shortcut).\n" ..
-                      "• Toggles (Active/Inactive): Features like Fullbright (Ctrl+F) or Dev Tool (Ctrl+.) show active/inactive state inside the tooltip popup in real-time.\n" ..
-                      "• Modifiers (Ctrl/Shift): Hold these keys in game to execute actions.\n" ..
-                      "• Hover over any highlighted key/button to view its detailed shortcut function."
-    legendLabel.Parent = page
 end
 
 -- Create Main Window
