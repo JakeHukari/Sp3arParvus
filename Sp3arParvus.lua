@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.4                                                  ║
+-- ║  Version: 4.2.5                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.4" -- PlayerPage Settings Update
+local VERSION = "4.2.5" -- Shortcuts Page Update, Performance Update, and Closest-Player-Panel Settings Update
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
