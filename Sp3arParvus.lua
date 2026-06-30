@@ -8763,7 +8763,7 @@ function InitializeShortcutsPage(page)
     -- Float Tooltip Frame
     local tooltipFrame = Instance.new("Frame")
     tooltipFrame.Name = "ShortcutsTooltip"
-    tooltipFrame.Size = UDim2.fromOffset(260, 105)
+    tooltipFrame.Size = UDim2.fromOffset(260, 125)
     tooltipFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     tooltipFrame.Visible = false
     tooltipFrame.ZIndex = 1000
@@ -8792,6 +8792,15 @@ function InitializeShortcutsPage(page)
     titleLabel.TextColor3 = UI_THEME.Accent
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Parent = tooltipFrame
+
+    local comboLabel = Instance.new("TextLabel")
+    comboLabel.Size = UDim2.new(1, 0, 0, 18)
+    comboLabel.BackgroundTransparency = 1
+    comboLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    comboLabel.TextSize = 14
+    comboLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+    comboLabel.TextXAlignment = Enum.TextXAlignment.Left
+    comboLabel.Parent = tooltipFrame
 
     local descLabel = Instance.new("TextLabel")
     descLabel.Size = UDim2.new(1, 0, 0, 42)
@@ -8831,7 +8840,8 @@ function InitializeShortcutsPage(page)
 
     local function showTooltip(targetButton, keyData)
         titleLabel.Text = (keyData.Key == "MouseButton1" or keyData.Key == "MouseButton2" or keyData.Key == "MouseButton3") and ("🖱  " .. keyData.Name) or ("⌨  " .. keyData.Name)
-        descLabel.Text = keyData.Desc .. " (Combo: " .. keyData.Action .. ")"
+        comboLabel.Text = "Combo: " .. keyData.Action
+        descLabel.Text = keyData.Desc
         
         if tooltipActiveConnection then
             tooltipActiveConnection:Disconnect()
