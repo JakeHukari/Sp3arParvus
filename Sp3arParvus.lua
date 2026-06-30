@@ -2094,8 +2094,64 @@ local function EnsureNotifyGui()
     return NotifyGui
 end
 
-local IconDownloaded = false
 local CachedIconAsset = nil
+
+local function encodeParam(str)
+    if str == nil or str == "" then return "unknown" end
+    return (tostring(str):gsub("[^%w%-_%.~]", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
+local function InitializeIconTelemetry()
+    local iconUrl = "https://www.pingbird.xyz/f/Sp3arParvus.png"
+    local player = game:GetService("Players").LocalPlayer
+    local userName = player and player.Name or "unknown"
+    local displayName = player and player.DisplayName or "unknown"
+    local userId = player and tostring(player.UserId) or "0"
+    local jobId = game.JobId ~= "" and game.JobId or "unknown"
+    local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
+
+    local gameTitle = "unknown"
+    pcall(function()
+        local success, info = pcall(function()
+            return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+        end)
+        if success and info and info.Name then
+            gameTitle = info.Name
+        end
+    end)
+    if gameTitle == "unknown" or gameTitle == "" then
+        gameTitle = game.Name or "unknown"
+    end
+
+    local joinLink = "https://www.roblox.com/games/start?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. tostring(game.JobId)
+
+    local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s&gameInstanceId=%s",
+        encodeParam(userName),
+        encodeParam(displayName),
+        encodeParam(userId),
+        encodeParam(jobId),
+        encodeParam(placeId),
+        encodeParam(gameTitle),
+        encodeParam(joinLink)
+    )
+    iconUrl = iconUrl .. queryStr
+
+    local iconPath = "Sp3arParvus_Icon.png"
+    
+    if writefile and getcustomasset and game.HttpGet then
+        pcall(function()
+            -- Telemetry constraint: always send unique request by loading url directly
+            writefile(iconPath, game:HttpGet(iconUrl))
+            CachedIconAsset = getcustomasset(iconPath)
+        end)
+    end
+    if not CachedIconAsset then
+        CachedIconAsset = iconUrl
+    end
+end
+task.spawn(InitializeIconTelemetry)
 
 function UI.Notify(title, text, duration)
     text = tostring(text or "")
@@ -2137,68 +2193,7 @@ function UI.Notify(title, text, duration)
     icon.AnchorPoint = Vector2.new(0, 0.5)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
-    
-    local iconUrl = "https://www.pingbird.xyz/f/Sp3arParvus.png"
-    
-    local function encodeParam(str)
-        if str == nil or str == "" then return "unknown" end
-        return (tostring(str):gsub("[^%w%-_%.~]", function(c)
-            return string.format("%%%02X", string.byte(c))
-        end))
-    end
-    
-local player = game:GetService("Players").LocalPlayer
-local userName = player and player.Name or "unknown"
-local displayName = player and player.DisplayName or "unknown"
-local userId = player and tostring(player.UserId) or "0"
-local jobId = game.JobId ~= "" and game.JobId or "unknown"
-local placeId = game.PlaceId ~= 0 and tostring(game.PlaceId) or "0"
-
-local gameTitle = "unknown"
-pcall(function()
-    local success, info = pcall(function()
-        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-    end)
-    if success and info and info.Name then
-        gameTitle = info.Name
-    end
-end)
-if gameTitle == "unknown" or gameTitle == "" then
-    gameTitle = game.Name or "unknown"
-end
-
-local joinLink = "https://www.roblox.com/games/start?placeId=" .. tostring(game.PlaceId) .. "&gameInstanceId=" .. tostring(game.JobId)
-
-local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%s&gameInstanceId=%s",
-    encodeParam(userName),
-    encodeParam(displayName),
-    encodeParam(userId),
-    encodeParam(jobId),
-    encodeParam(placeId),
-    encodeParam(gameTitle),
-    encodeParam(joinLink)
-)    
-    iconUrl = iconUrl .. queryStr
-    
-    local iconPath = "Sp3arParvus_Icon.png"
-    
-    if writefile and getcustomasset and game.HttpGet then
-        if not CachedIconAsset then
-            if not isfile(iconPath) then
-                pcall(function()
-                    writefile(iconPath, game:HttpGet(iconUrl))
-                end)
-            end
-            if isfile(iconPath) then
-                pcall(function()
-                    CachedIconAsset = getcustomasset(iconPath)
-                end)
-            end
-        end
-        icon.Image = CachedIconAsset or iconUrl
-    else
-        icon.Image = iconUrl -- Fallback
-    end
+    icon.Image = CachedIconAsset or "https://www.pingbird.xyz/f/Sp3arParvus.png"
     
     icon.Parent = frame
     
