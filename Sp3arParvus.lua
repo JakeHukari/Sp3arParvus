@@ -8763,7 +8763,8 @@ function InitializeShortcutsPage(page)
     -- Float Tooltip Frame
     local tooltipFrame = Instance.new("Frame")
     tooltipFrame.Name = "ShortcutsTooltip"
-    tooltipFrame.Size = UDim2.fromOffset(260, 125)
+    tooltipFrame.Size = UDim2.new(0, 280, 0, 0)
+    tooltipFrame.AutomaticSize = Enum.AutomaticSize.Y
     tooltipFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
     tooltipFrame.Visible = false
     tooltipFrame.ZIndex = 1000
@@ -8785,25 +8786,30 @@ function InitializeShortcutsPage(page)
     tLayout.Parent = tooltipFrame
 
     local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, 0, 0, 18)
+    titleLabel.Size = UDim2.new(1, 0, 0, 0)
+    titleLabel.AutomaticSize = Enum.AutomaticSize.Y
     titleLabel.BackgroundTransparency = 1
     titleLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     titleLabel.TextSize = 14
     titleLabel.TextColor3 = UI_THEME.Accent
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.TextWrapped = true
     titleLabel.Parent = tooltipFrame
 
     local comboLabel = Instance.new("TextLabel")
-    comboLabel.Size = UDim2.new(1, 0, 0, 18)
+    comboLabel.Size = UDim2.new(1, 0, 0, 0)
+    comboLabel.AutomaticSize = Enum.AutomaticSize.Y
     comboLabel.BackgroundTransparency = 1
     comboLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     comboLabel.TextSize = 14
     comboLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
     comboLabel.TextXAlignment = Enum.TextXAlignment.Left
+    comboLabel.TextWrapped = true
     comboLabel.Parent = tooltipFrame
 
     local descLabel = Instance.new("TextLabel")
-    descLabel.Size = UDim2.new(1, 0, 0, 42)
+    descLabel.Size = UDim2.new(1, 0, 0, 0)
+    descLabel.AutomaticSize = Enum.AutomaticSize.Y
     descLabel.BackgroundTransparency = 1
     descLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
     descLabel.TextSize = 11
