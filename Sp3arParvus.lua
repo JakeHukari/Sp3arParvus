@@ -9992,7 +9992,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     end
                     
                     if tpPos then
-                        rootPart.CFrame = CFrame.new(tpPos + Vector3.new(0, 3, 0))
+                        rootPart.CFrame = CFrame.new(tpPos + Vector3.new(0, 3, 0)) * (rootPart.CFrame - rootPart.CFrame.Position)
                     end
                 end
                 return Enum.ContextActionResult.Sink
