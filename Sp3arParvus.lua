@@ -8231,6 +8231,7 @@ else
 StartFreecam()
 end
 enabled = not enabled
+_G.FreecamActive = enabled
 UI.Notify("Freecam", "Freecam is now " .. (enabled and "ON" or "OFF"))
 end
 
@@ -8241,6 +8242,7 @@ _G.StopFreecamFunc = function()
     if enabled then
         StopFreecam()
         enabled = false
+        _G.FreecamActive = false
     end
 end
 FreecamProxy.StopFreecam = _G.StopFreecamFunc
@@ -8587,6 +8589,438 @@ function ForceReload()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()
 end
 
+-- ==========================================
+-- INTERACTIVE SHORTCUTS PAGE INITIALIZATION
+-- ==========================================
+
+local KeyboardRows = {
+    { -- Row 1
+        {Text = "` ~", Key = "Backquote", Width = 1, KeyCode = Enum.KeyCode.Backquote, Name = "Aimlock Assist Toggle", Action = "Ctrl + ~", Desc = "Toggles camera-lock tracking assistant.", StatusKey = "Aim/AimLock"},
+        {Text = "1", Width = 1},
+        {Text = "2", Width = 1},
+        {Text = "3", Width = 1},
+        {Text = "4", Width = 1},
+        {Text = "5", Width = 1},
+        {Text = "6", Width = 1},
+        {Text = "7", Width = 1},
+        {Text = "8", Width = 1},
+        {Text = "9", Width = 1},
+        {Text = "0", Width = 1},
+        {Text = "-", Key = "Minus", Width = 1, KeyCode = Enum.KeyCode.Minus, Name = "Minimize Menu", Action = "Ctrl + -", Desc = "Minimizes or maximizes the main Sp3arParvus GUI window."},
+        {Text = "+", Width = 1},
+        {Text = "<-", Width = 2},
+        {Text = "del", Width = 1}
+    },
+    { -- Row 2
+        {Text = "tab", Width = 1.5},
+        {Text = "Q", Key = "Q", Width = 1, KeyCode = Enum.KeyCode.Q, Name = "QTeleport", Action = "Ctrl + Q", Desc = "Teleports player to the mouse position (character face preserved).", StatusKey = "Misc/QTeleport"},
+        {Text = "W", Width = 1},
+        {Text = "E", Key = "E", Width = 1, KeyCode = Enum.KeyCode.E, Name = "Execute ESP", Action = "Ctrl + E", Desc = "Fetches and runs the external Any-Item-ESP script from GitHub."},
+        {Text = "R", Key = "R", Width = 1, KeyCode = Enum.KeyCode.R, Name = "Rejoin / Reload", Action = "Ctrl+R / Ctrl+Shift+R", Desc = "Rejoins server, or unloads and reloads script from GitHub (with Shift)."},
+        {Text = "T", Width = 1},
+        {Text = "Y", Key = "Y", Width = 1, KeyCode = Enum.KeyCode.Y, Name = "Waypoint Teleport", Action = "Ctrl + Y", Desc = "Teleports player to the most recently created active waypoint."},
+        {Text = "U", Key = "U", Width = 1, KeyCode = Enum.KeyCode.U, Name = "Unload Script", Action = "Ctrl + U", Desc = "Unloads the script, removes all UI elements, and cleans up connections."},
+        {Text = "I", Width = 1},
+        {Text = "O", Width = 1},
+        {Text = "P", Key = "P", Width = 1, KeyCode = Enum.KeyCode.P, Name = "Toggle Freecam", Action = "Ctrl + P", Desc = "Toggles cinematic free-camera mode.", StatusKey = "FreecamActive"},
+        {Text = "[", Width = 1},
+        {Text = "]", Width = 1},
+        {Text = "\\", Width = 1.5},
+        {Text = "pg up", Width = 1}
+    },
+    { -- Row 3
+        {Text = "caps", Key = "CapsLock", Width = 1.75, KeyCode = Enum.KeyCode.CapsLock, Name = "Toggle Menu Visibility", Action = "CapsLock", Desc = "Toggles visibility of the main Sp3arParvus menu GUI."},
+        {Text = "A", Width = 1},
+        {Text = "S", Width = 1},
+        {Text = "D", Width = 1},
+        {Text = "F", Key = "F", Width = 1, KeyCode = Enum.KeyCode.F, Name = "Toggle Fullbright", Action = "Ctrl + F", Desc = "Toggles full bright lighting, removing shadows.", StatusKey = "Visuals/Fullbright"},
+        {Text = "G", Key = "G", Width = 1, KeyCode = Enum.KeyCode.G, Name = "Toggle Ghost Mode", Action = "Ctrl + G", Desc = "Toggles Ghost Mode (character transparency & noclip).", StatusKey = "Settings/GhostMode"},
+        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "Toggle Headshot Only", Action = "Ctrl + H", Desc = "Toggles between headshot-only and all-body tracking.", StatusKey = "Aim/HeadshotOnlyState"},
+        {Text = "J", Key = "J", Width = 1, KeyCode = Enum.KeyCode.J, Name = "Toggle Item Panel", Action = "Ctrl + J", Desc = "Toggles visibility of the item panel HUD.", StatusKey = "Misc/ItemPanel"},
+        {Text = "K", Key = "K", Width = 1, KeyCode = Enum.KeyCode.K, Name = "PlayerPage Shortcut", Action = "Ctrl + K", Desc = "Opens menu and navigates directly to the PlayerPage tab."},
+        {Text = "L", Width = 1},
+        {Text = ";", Width = 1},
+        {Text = "\"", Width = 1},
+        {Text = "enter", Width = 2.25},
+        {Text = "pg dn", Width = 1}
+    },
+    { -- Row 4
+        {Text = "shift", Key = "Shift", Width = 2.25, KeyCode = Enum.KeyCode.LeftShift, Name = "Shift Modifier", Action = "Shift (Held)", Desc = "Modifies other shortcut actions (e.g. Reload script, clear waypoints)."},
+        {Text = "Z", Key = "Z", Width = 1, KeyCode = Enum.KeyCode.Z, Name = "Undo Last Break / Highlight", Action = "Ctrl+Z / Ctrl+Shift+Z", Desc = "Undo last broken collision (Ctrl+Z) or last highlight (Ctrl+Shift+Z)."},
+        {Text = "X", Key = "X", Width = 1, KeyCode = Enum.KeyCode.X, Name = "Clear Breaks / Highlights", Action = "Ctrl+X / Ctrl+Shift+X", Desc = "Unbreak all collisions (Ctrl+X) or clear all highlights (Ctrl+Shift+X)."},
+        {Text = "C", Width = 1},
+        {Text = "V", Width = 1},
+        {Text = "B", Key = "B", Width = 1, KeyCode = Enum.KeyCode.B, Name = "Clickbreak State", Action = "Ctrl + B", Desc = "Toggles click-to-break collision debugger (Br3ak3r).", StatusKey = "Br3ak3r/Enabled"},
+        {Text = "N", Key = "N", Width = 1, KeyCode = Enum.KeyCode.N, Name = "Toggle FullDark", Action = "Ctrl + N", Desc = "Toggles full dark lighting mode.", StatusKey = "Visuals/FullDark"},
+        {Text = "M", Width = 1},
+        {Text = ",", Width = 1},
+        {Text = ".", Key = "Period", Width = 1, KeyCode = Enum.KeyCode.Period, Name = "Toggle Dev Tool", Action = "Ctrl + .", Desc = "Toggles developer HUD panels / D3vTool.", StatusKey = "Misc/D3vTool"},
+        {Text = "/", Width = 1},
+        {Text = "shift", Width = 1.75},
+        {Text = "↑", Key = "Up", Width = 1, KeyCode = Enum.KeyCode.Up, Name = "Position Force Up", Action = "Ctrl + Up", Desc = "Forces character position up by 3.75 studs."},
+        {Text = "ins", Width = 1}
+    },
+    { -- Row 5
+        {Text = "ctrl", Key = "Ctrl", Width = 1.25, KeyCode = Enum.KeyCode.LeftControl, Name = "Control Modifier", Action = "Ctrl (Held)", Desc = "Modifier key held to execute script keyboard shortcuts."},
+        {Text = "❖", Width = 1.25},
+        {Text = "alt", Width = 1.25},
+        {Text = "space", Width = 5.5},
+        {Text = "alt", Width = 1.25},
+        {Text = "fn", Width = 1.25},
+        {Text = "ctrl", Width = 1.25},
+        {Text = "←", Key = "Left", Width = 1, KeyCode = Enum.KeyCode.Left, Name = "Position Force Left", Action = "Ctrl + Left", Desc = "Forces character position left by 3 studs."},
+        {Text = "↓", Key = "Down", Width = 1, KeyCode = Enum.KeyCode.Down, Name = "Position Force Down", Action = "Ctrl + Down", Desc = "Forces character position down by 3.75 studs."},
+        {Text = "→", Key = "Right", Width = 1, KeyCode = Enum.KeyCode.Right, Name = "Position Force Right", Action = "Ctrl + Right", Desc = "Forces character position right by 3 studs."}
+    }
+}
+
+local MouseButtons = {
+    MouseButton1 = {
+        Key = "MouseButton1",
+        Name = "Break / Highlight Part",
+        Action = "Ctrl + Click / Ctrl + Shift + Click",
+        Desc = "Ctrl+Click breaks target part collision. Ctrl+Shift+Click highlights part.",
+        StatusKey = "MouseButton1"
+    },
+    MouseButton2 = {
+        Key = "MouseButton2",
+        Name = "Aimlock Assist Hold",
+        Action = "Right Click (Held)",
+        Desc = "Hold Right Click to track closest target inside FOV radius."
+    },
+    MouseButton3 = {
+        Key = "MouseButton3",
+        Name = "Waypoint Controls",
+        Action = "Ctrl+MidClick / Ctrl+Shift+MidClick",
+        Desc = "Ctrl+MiddleClick creates/deletes waypoint. Ctrl+Shift+MiddleClick clears all waypoints.",
+        StatusKey = "MouseButton3"
+    }
+}
+
+function InitializeShortcutsPage(page)
+    -- Demo layout wrapper frame
+    local DemoWrapper = Instance.new("Frame")
+    DemoWrapper.Name = "DemoWrapper"
+    DemoWrapper.Size = UDim2.new(1, 0, 0, 115) -- Safe initial default height
+    DemoWrapper.BackgroundTransparency = 1
+    DemoWrapper.Parent = page
+
+    local function updateDemoSize()
+        local width = DemoWrapper.AbsoluteSize.X
+        if width > 0 then
+            DemoWrapper.Size = UDim2.new(1, 0, 0, width / 3.636)
+        end
+    end
+    TrackConnection(DemoWrapper:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateDemoSize))
+    task.spawn(function()
+        task.wait(0.1)
+        updateDemoSize()
+    end)
+
+    -- Keyboard frame
+    local KeyboardFrame = Instance.new("Frame")
+    KeyboardFrame.Name = "KeyboardFrame"
+    KeyboardFrame.Size = UDim2.new(16/20, 0, 5/5.5, 0)
+    KeyboardFrame.Position = UDim2.new(0, 0, 0.25/5.5, 0)
+    KeyboardFrame.BackgroundTransparency = 1
+    KeyboardFrame.Parent = DemoWrapper
+
+    -- Mouse frame
+    local MouseFrame = Instance.new("Frame")
+    MouseFrame.Name = "MouseFrame"
+    MouseFrame.Size = UDim2.new(3.5/20, 0, 1, 0)
+    MouseFrame.Position = UDim2.new(16.5/20, 0, 0, 0)
+    MouseFrame.BackgroundTransparency = 1
+    MouseFrame.Parent = DemoWrapper
+
+    local MouseOutline = Instance.new("Frame")
+    MouseOutline.Name = "MouseOutline"
+    MouseOutline.Size = UDim2.new(1, 0, 1, 0)
+    MouseOutline.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    MouseOutline.Parent = MouseFrame
+    local mCorner = Instance.new("UICorner"); mCorner.CornerRadius = UDim.new(0.12, 0); mCorner.Parent = MouseOutline
+    local mStroke = Instance.new("UIStroke"); mStroke.Color = Color3.fromRGB(0, 180, 80); mStroke.Thickness = 1; mStroke.Parent = MouseOutline
+
+    -- Float Tooltip Frame
+    local tooltipFrame = Instance.new("Frame")
+    tooltipFrame.Name = "ShortcutsTooltip"
+    tooltipFrame.Size = UDim2.fromOffset(260, 105)
+    tooltipFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    tooltipFrame.Visible = false
+    tooltipFrame.ZIndex = 1000
+    tooltipFrame.BorderSizePixel = 0
+    tooltipFrame.Parent = ScreenGui
+
+    local tCorner = Instance.new("UICorner"); tCorner.CornerRadius = UDim.new(0, 6); tCorner.Parent = tooltipFrame
+    local tStroke = Instance.new("UIStroke"); tStroke.Color = UI_THEME.Accent; tStroke.Thickness = 1.5; tStroke.Parent = tooltipFrame
+    local tPadding = Instance.new("UIPadding")
+    tPadding.PaddingTop = UDim.new(0, 8)
+    tPadding.PaddingBottom = UDim.new(0, 8)
+    tPadding.PaddingLeft = UDim.new(0, 10)
+    tPadding.PaddingRight = UDim.new(0, 10)
+    tPadding.Parent = tooltipFrame
+
+    local tLayout = Instance.new("UIListLayout")
+    tLayout.Padding = UDim.new(0, 4)
+    tLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tLayout.Parent = tooltipFrame
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 0, 18)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    titleLabel.TextSize = 14
+    titleLabel.TextColor3 = UI_THEME.Accent
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = tooltipFrame
+
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Size = UDim2.new(1, 0, 0, 42)
+    descLabel.BackgroundTransparency = 1
+    descLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+    descLabel.TextSize = 11
+    descLabel.TextColor3 = UI_THEME.Text
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.TextWrapped = true
+    descLabel.Parent = tooltipFrame
+
+    local statusFrame = Instance.new("Frame")
+    statusFrame.Size = UDim2.new(1, 0, 0, 16)
+    statusFrame.BackgroundTransparency = 1
+    statusFrame.Parent = tooltipFrame
+
+    local sLayout = Instance.new("UIListLayout")
+    sLayout.FillDirection = Enum.FillDirection.Horizontal
+    sLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    sLayout.Padding = UDim.new(0, 6)
+    sLayout.Parent = statusFrame
+
+    local statusDot = Instance.new("Frame")
+    statusDot.Size = UDim2.fromOffset(8, 8)
+    statusDot.Parent = statusFrame
+    local sdCorner = Instance.new("UICorner"); sdCorner.CornerRadius = UDim.new(1, 0); sdCorner.Parent = statusDot
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0.8, 0, 1, 0)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    statusLabel.TextSize = 11
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = statusFrame
+
+    local tooltipActiveConnection = nil
+
+    local function showTooltip(targetButton, keyData)
+        titleLabel.Text = (keyData.Key == "MouseButton1" or keyData.Key == "MouseButton2" or keyData.Key == "MouseButton3") and ("🖱  " .. keyData.Name) or ("⌨  " .. keyData.Name)
+        descLabel.Text = keyData.Desc .. " (Combo: " .. keyData.Action .. ")"
+        
+        if tooltipActiveConnection then
+            tooltipActiveConnection:Disconnect()
+            tooltipActiveConnection = nil
+        end
+
+        local function updateStatus()
+            local status = nil
+            if keyData.StatusKey then
+                if keyData.StatusKey == "FreecamActive" then
+                    status = _G.FreecamActive
+                elseif keyData.StatusKey == "Misc/ItemPanel" then
+                    status = ItemPanelState.Visible
+                elseif keyData.StatusKey == "MouseButton1" or keyData.StatusKey == "MouseButton3" then
+                    status = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+                else
+                    status = Flags[keyData.StatusKey]
+                end
+            end
+
+            if status ~= nil then
+                statusDot.BackgroundColor3 = status and UI_THEME.Success or UI_THEME.Fail
+                statusLabel.Text = status and "Active" or "Inactive"
+                statusLabel.TextColor3 = status and UI_THEME.Success or UI_THEME.Fail
+                statusFrame.Visible = true
+            else
+                statusFrame.Visible = false
+            end
+
+            -- Position update
+            local btnPos = targetButton.AbsolutePosition
+            local btnSize = targetButton.AbsoluteSize
+            local tooltipSize = tooltipFrame.AbsoluteSize
+            local screenSize = ScreenGui.AbsoluteSize
+
+            local x = btnPos.X + (btnSize.X / 2) - (tooltipSize.X / 2)
+            local y = btnPos.Y - tooltipSize.Y - 8
+
+            if x < 10 then x = 10
+            elseif x + tooltipSize.X > screenSize.X - 10 then x = screenSize.X - tooltipSize.X - 10 end
+
+            if y < 10 then y = btnPos.Y + btnSize.Y + 8 end
+
+            tooltipFrame.Position = UDim2.fromOffset(x, y)
+        end
+
+        updateStatus()
+        tooltipFrame.Visible = true
+        tooltipActiveConnection = RunService.Heartbeat:Connect(updateStatus)
+    end
+
+    local function hideTooltip()
+        tooltipFrame.Visible = false
+        if tooltipActiveConnection then
+            tooltipActiveConnection:Disconnect()
+            tooltipActiveConnection = nil
+        end
+    end
+
+    -- Create Keyboard Rows
+    for rowIndex = 1, 5 do
+        local rowFrame = Instance.new("Frame")
+        rowFrame.Name = "Row" .. rowIndex
+        rowFrame.Size = UDim2.new(1, 0, 0.2, 0)
+        rowFrame.Position = UDim2.new(0, 0, (rowIndex - 1) * 0.2, 0)
+        rowFrame.BackgroundTransparency = 1
+        rowFrame.Parent = KeyboardFrame
+
+        local currentX = 0
+        for _, keyData in ipairs(KeyboardRows[rowIndex]) do
+            local btn = Instance.new("TextButton")
+            btn.Name = keyData.Text
+            btn.Text = keyData.Text
+            btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            btn.TextSize = 10
+            btn.TextColor3 = keyData.Key and Color3.fromRGB(224, 251, 252) or Color3.fromRGB(130, 130, 130)
+            btn.BackgroundColor3 = keyData.Key and Color3.fromRGB(0, 95, 115) or Color3.fromRGB(15, 15, 15)
+            btn.Size = UDim2.new(keyData.Width / 16, -2, 1, -2)
+            btn.Position = UDim2.new(currentX, 1, 0, 1)
+            btn.Parent = rowFrame
+
+            local kCorner = Instance.new("UICorner"); kCorner.CornerRadius = UDim.new(0, 4); kCorner.Parent = btn
+            local kStroke = Instance.new("UIStroke"); kStroke.Color = Color3.fromRGB(0, 180, 80); kStroke.Thickness = 1; kStroke.Parent = btn
+
+            if keyData.Key then
+                btn.MouseEnter:Connect(function()
+                    TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+                    showTooltip(btn, keyData)
+                end)
+                btn.MouseLeave:Connect(function()
+                    TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+                    hideTooltip()
+                end)
+            else
+                btn.MouseEnter:Connect(function()
+                    TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
+                end)
+                btn.MouseLeave:Connect(function()
+                    TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(15, 15, 15)}):Play()
+                end)
+            end
+
+            currentX = currentX + keyData.Width / 16
+        end
+    end
+
+    -- Create Mouse Buttons
+    local leftBtn = Instance.new("TextButton")
+    leftBtn.Name = "LeftClick"
+    leftBtn.Text = "L"
+    leftBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    leftBtn.TextSize = 11
+    leftBtn.TextColor3 = Color3.fromRGB(224, 251, 252)
+    leftBtn.BackgroundColor3 = Color3.fromRGB(0, 95, 115)
+    leftBtn.Size = UDim2.new(0.425, -2, 0.45, -2)
+    leftBtn.Position = UDim2.new(0.05, 1, 0.05, 1)
+    leftBtn.Parent = MouseOutline
+    local lCorner = Instance.new("UICorner"); lCorner.CornerRadius = UDim.new(0.2, 0); lCorner.Parent = leftBtn
+    local lStroke = Instance.new("UIStroke"); lStroke.Color = Color3.fromRGB(0, 180, 80); lStroke.Thickness = 1; lStroke.Parent = leftBtn
+
+    leftBtn.MouseEnter:Connect(function()
+        TweenService:Create(leftBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+        showTooltip(leftBtn, MouseButtons.MouseButton1)
+    end)
+    leftBtn.MouseLeave:Connect(function()
+        TweenService:Create(leftBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+        hideTooltip()
+    end)
+
+    local rightBtn = Instance.new("TextButton")
+    rightBtn.Name = "RightClick"
+    rightBtn.Text = "R"
+    rightBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    rightBtn.TextSize = 11
+    rightBtn.TextColor3 = Color3.fromRGB(224, 251, 252)
+    rightBtn.BackgroundColor3 = Color3.fromRGB(0, 95, 115)
+    rightBtn.Size = UDim2.new(0.425, -2, 0.45, -2)
+    rightBtn.Position = UDim2.new(0.525, 1, 0.05, 1)
+    rightBtn.Parent = MouseOutline
+    local rCorner = Instance.new("UICorner"); rCorner.CornerRadius = UDim.new(0.2, 0); rCorner.Parent = rightBtn
+    local rStroke = Instance.new("UIStroke"); rStroke.Color = Color3.fromRGB(0, 180, 80); rStroke.Thickness = 1; rStroke.Parent = rightBtn
+
+    rightBtn.MouseEnter:Connect(function()
+        TweenService:Create(rightBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+        showTooltip(rightBtn, MouseButtons.MouseButton2)
+    end)
+    rightBtn.MouseLeave:Connect(function()
+        TweenService:Create(rightBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+        hideTooltip()
+    end)
+
+    local wheelBtn = Instance.new("TextButton")
+    wheelBtn.Name = "MiddleClick"
+    wheelBtn.Text = ""
+    wheelBtn.BackgroundColor3 = Color3.fromRGB(0, 95, 115)
+    wheelBtn.Size = UDim2.new(0.08, 0, 0.18, 0)
+    wheelBtn.Position = UDim2.new(0.46, 0, 0.12, 0)
+    wheelBtn.ZIndex = 5
+    wheelBtn.Parent = MouseOutline
+    local wCorner = Instance.new("UICorner"); wCorner.CornerRadius = UDim.new(1, 0); wCorner.Parent = wheelBtn
+    local wStroke = Instance.new("UIStroke"); wStroke.Color = Color3.fromRGB(0, 180, 80); wStroke.Thickness = 1; wStroke.Parent = wheelBtn
+
+    wheelBtn.MouseEnter:Connect(function()
+        TweenService:Create(wheelBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+        showTooltip(wheelBtn, MouseButtons.MouseButton3)
+    end)
+    wheelBtn.MouseLeave:Connect(function()
+        TweenService:Create(wheelBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+        hideTooltip()
+    end)
+
+    local bodyFrame = Instance.new("Frame")
+    bodyFrame.Name = "MouseBody"
+    bodyFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    bodyFrame.Size = UDim2.new(0.9, -2, 0.425, -2)
+    bodyFrame.Position = UDim2.new(0.05, 1, 0.525, 1)
+    bodyFrame.Parent = MouseOutline
+    local bCorner = Instance.new("UICorner"); bCorner.CornerRadius = UDim.new(0.2, 0); bCorner.Parent = bodyFrame
+
+    local bodyLabel = Instance.new("TextLabel")
+    bodyLabel.Size = UDim2.new(1, 0, 1, 0)
+    bodyLabel.BackgroundTransparency = 1
+    bodyLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    bodyLabel.TextSize = 11
+    bodyLabel.TextColor3 = UI_THEME.TextDark
+    bodyLabel.Text = "SP"
+    bodyLabel.Parent = bodyFrame
+
+    -- Help & Legend Section
+    UI.CreateSection(page, "Shortcuts Legend")
+
+    local legendLabel = Instance.new("TextLabel")
+    legendLabel.Size = UDim2.new(1, -10, 0, 90)
+    legendLabel.BackgroundTransparency = 1
+    legendLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+    legendLabel.TextSize = 11
+    legendLabel.TextColor3 = UI_THEME.Text
+    legendLabel.TextXAlignment = Enum.TextXAlignment.Left
+    legendLabel.TextYAlignment = Enum.TextYAlignment.Top
+    legendLabel.TextWrapped = true
+    legendLabel.Text = "• Teal Keys/Buttons: Have active game shortcuts assigned.\n" ..
+                      "• Gray Keys/Buttons: Standard keyboard layout (no shortcut).\n" ..
+                      "• Toggles (Active/Inactive): Features like Fullbright (Ctrl+F) or Dev Tool (Ctrl+.) show active/inactive state inside the tooltip popup in real-time.\n" ..
+                      "• Modifiers (Ctrl/Shift): Hold these keys in game to execute actions.\n" ..
+                      "• Hover over any highlighted key/button to view its detailed shortcut function."
+    legendLabel.Parent = page
+end
+
 -- Create Main Window
 local Window = UI.CreateWindow("Sp3arParvus")
 
@@ -8604,6 +9038,8 @@ WorldHumState.Page = UI.CreateTab("WorldHumanoids")
 local PlayerPage = UI.CreateTab("PlayerPage")
 InitializePlayerPage(PlayerPage)
 local MiscTab = UI.CreateTab("Misc")
+local ShortcutsTab = UI.CreateTab("Shortcuts")
+InitializeShortcutsPage(ShortcutsTab)
 
 function ShowWorldHumList(page)
     if not page then return end
