@@ -3902,7 +3902,7 @@ function CreateClosestPlayerTracker()
     
     local sizeConstraint = Instance.new("UISizeConstraint")
     sizeConstraint.MinSize = Vector2.new(180, 30)
-    sizeConstraint.MaxSize = Vector2.new(250, 250)
+    sizeConstraint.MaxSize = Vector2.new(450, 250)
     sizeConstraint.Parent = ClosestPlayerTrackerLabel
 
     ClosestPlayerTrackerLabel.BackgroundTransparency = 0.5
@@ -4162,9 +4162,16 @@ function UpdateClosestPlayerTracker()
             NearestPlayerRef = nil
         end
 
-        -- Determine visibility and update sizes
+        -- Determine visibility, text widths, and update sizes
         local visibleCount = 1 -- Header is always visible
+        local maxTextWidth = 100 -- Default minimum width
         
+        -- Measure Header width
+        if TrackerHeaderLabel and TrackerHeaderLabel.Text ~= "" then
+            local headerSize = TextService:GetTextSize(TrackerHeaderLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
+            maxTextWidth = math.max(maxTextWidth, headerSize.X)
+        end
+
         local showNameLabel = hasPlayer and (showDisplay or showUser)
         if not hasPlayer then
             showNameLabel = true -- shows "No players nearby", "Searching...", or "---"
@@ -4172,15 +4179,34 @@ function UpdateClosestPlayerTracker()
 
         if TrackerNameLabel then
             TrackerNameLabel.Visible = showNameLabel
+            if showNameLabel and TrackerNameLabel.Text ~= "" then
+                local nameSize = TextService:GetTextSize(TrackerNameLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
+                maxTextWidth = math.max(maxTextWidth, nameSize.X)
+            end
         end
         if TrackerDistanceLabel then
-            TrackerDistanceLabel.Visible = hasPlayer and showDistance
+            local showDistanceLabel = hasPlayer and showDistance
+            TrackerDistanceLabel.Visible = showDistanceLabel
+            if showDistanceLabel and TrackerDistanceLabel.Text ~= "" then
+                local distanceSize = TextService:GetTextSize(TrackerDistanceLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
+                maxTextWidth = math.max(maxTextWidth, distanceSize.X)
+            end
         end
         if TrackerHealthLabel then
-            TrackerHealthLabel.Visible = hasPlayer and showHealth
+            local showHealthLabel = hasPlayer and showHealth
+            TrackerHealthLabel.Visible = showHealthLabel
+            if showHealthLabel and TrackerHealthLabel.Text ~= "" then
+                local healthSize = TextService:GetTextSize(TrackerHealthLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
+                maxTextWidth = math.max(maxTextWidth, healthSize.X)
+            end
         end
         if TrackerEquippedLabel then
-            TrackerEquippedLabel.Visible = hasPlayer and showEquipped
+            local showEquippedLabel = hasPlayer and showEquipped
+            TrackerEquippedLabel.Visible = showEquippedLabel
+            if showEquippedLabel and TrackerEquippedLabel.Text ~= "" then
+                local equippedSize = TextService:GetTextSize(TrackerEquippedLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
+                maxTextWidth = math.max(maxTextWidth, equippedSize.X)
+            end
         end
 
         if showNameLabel then visibleCount = visibleCount + 1 end
@@ -4189,7 +4215,9 @@ function UpdateClosestPlayerTracker()
         if hasPlayer and showEquipped then visibleCount = visibleCount + 1 end
 
         local targetHeight = 12 + (visibleCount * 18) + (math.max(0, visibleCount - 1) * 2)
-        TweenService:Create(ClosestPlayerTrackerLabel, TWEENS.SMOOTH, {Size = UDim2.fromOffset(220, targetHeight)}):Play()
+        local targetWidth = math.clamp(maxTextWidth + 50, 180, 450)
+        
+        TweenService:Create(ClosestPlayerTrackerLabel, TWEENS.SMOOTH, {Size = UDim2.fromOffset(targetWidth, targetHeight)}):Play()
     end
 end
 
@@ -9250,6 +9278,21 @@ UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlaye
     if ClosestPlayerTrackerLabel then ClosestPlayerTrackerLabel.Visible = state end
 end)
 
+UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
+    if state then
+        Flags["Visuals/FullDark"] = false
+        local updater = UIState.Updaters["Visuals/FullDark"]
+        if updater then updater(false) end
+    end
+end)
+UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
+    if state then
+        Flags["Visuals/Fullbright"] = false
+        local updater = UIState.Updaters["Visuals/Fullbright"]
+        if updater then updater(false) end
+    end
+end)
+
 UI.CreateSection(VisualsTab, "Closest Player Panel Settings")
 UI.CreateToggle(VisualsTab, "Show Display Name", "LocalUI/ClosestPlayer/ShowDisplayName", Flags["LocalUI/ClosestPlayer/ShowDisplayName"], function(state)
     UpdateClosestPlayerTracker()
@@ -9265,21 +9308,6 @@ UI.CreateToggle(VisualsTab, "Show Health", "LocalUI/ClosestPlayer/ShowHealth", F
 end)
 UI.CreateToggle(VisualsTab, "Show Equipped Item", "LocalUI/ClosestPlayer/ShowEquipped", Flags["LocalUI/ClosestPlayer/ShowEquipped"], function(state)
     UpdateClosestPlayerTracker()
-end)
-
-UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
-    if state then
-        Flags["Visuals/FullDark"] = false
-        local updater = UIState.Updaters["Visuals/FullDark"]
-        if updater then updater(false) end
-    end
-end)
-UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
-    if state then
-        Flags["Visuals/Fullbright"] = false
-        local updater = UIState.Updaters["Visuals/Fullbright"]
-        if updater then updater(false) end
-    end
 end)
 
 UI.CreateSection(VisualsTab, "Waypoints Settings(Ctrl+Middle Mouse Button)")
