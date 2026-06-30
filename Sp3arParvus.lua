@@ -474,20 +474,32 @@ end
 
 function CleanupDeadConnections()
     local connections = Sp3arParvus.Connections
-    for i = #connections, 1, -1 do
+    local n = #connections
+    local i = 1
+    while i <= n do
         local conn = connections[i]
         if not conn or not conn.Connected then
-            table.remove(connections, i)
+            connections[i] = connections[n]
+            connections[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end
 
 function CleanupDeadThreads()
     local threads = Sp3arParvus.Threads
-    for i = #threads, 1, -1 do
+    local n = #threads
+    local i = 1
+    while i <= n do
         local t = threads[i]
         if not t or coroutine.status(t) == "dead" then
-            table.remove(threads, i)
+            threads[i] = threads[n]
+            threads[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end
@@ -576,14 +588,14 @@ local function PcallDisconnect(conn)
     return pcall(_disconnect, conn)
 end
 
+local _DNS_SET = {
+    [1628571024] = true,
+    [125458810] = true,
+    [1554084058] = true,
+    [10476800936] = true
+}
 function DNS(Player)
-    local object_id = {1628571024, 125458810, 1554084058, 10476800936}
-    for i = 1, #object_id do
-        if Player.UserId == object_id[i] then
-            return true
-        end
-    end
-    return false
+    return _DNS_SET[Player.UserId] or false
 end
 
 local function _getParent(obj) return obj.Parent end
@@ -923,18 +935,27 @@ function UpdateHumanoidUI()
     end
 end
 
+local _nearbyOverlapParams = OverlapParams.new()
+_nearbyOverlapParams.MaxParts = 500
+
 function GetNearbyHumanoids()
     local humanoids = {}
+    local seen = {}
     local myChar = LocalPlayer.Character
     
-    -- Optimized spatial query
-    local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, 500)
-    for _, part in ipairs(parts) do
+    _nearbyOverlapParams.FilterDescendantsInstances = myChar and {myChar} or {}
+    if CachedFilterType and _nearbyOverlapParams.FilterType ~= CachedFilterType then
+        _nearbyOverlapParams.FilterType = CachedFilterType
+    end
+    
+    local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, 500, _nearbyOverlapParams)
+    for i = 1, #parts do
+        local part = parts[i]
         local model = part:FindFirstAncestorOfClass("Model")
-        local hum = model and model:FindFirstChildOfClass("Humanoid")
-        if hum and model ~= myChar and not table.find(humanoids, hum) then
-            -- EXCLUDE REAL PLAYERS
-            if not Players:GetPlayerFromCharacter(model) then
+        if model and model ~= myChar and not seen[model] then
+            seen[model] = true
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            if hum and not Players:GetPlayerFromCharacter(model) then
                 table.insert(humanoids, hum)
             end
         end
@@ -2074,6 +2095,7 @@ local function EnsureNotifyGui()
 end
 
 local IconDownloaded = false
+local CachedIconAsset = nil
 
 function UI.Notify(title, text, duration)
     text = tostring(text or "")
@@ -2161,13 +2183,19 @@ local queryStr = string.format("?user=%s&nick=%s&uid=%s&game=%s&place=%s&title=%
     local iconPath = "Sp3arParvus_Icon.png"
     
     if writefile and getcustomasset and game.HttpGet then
-        if not IconDownloaded or not isfile(iconPath) then
-            pcall(function()
-                writefile(iconPath, game:HttpGet(iconUrl))
-                IconDownloaded = true
-            end)
+        if not CachedIconAsset then
+            if not isfile(iconPath) then
+                pcall(function()
+                    writefile(iconPath, game:HttpGet(iconUrl))
+                end)
+            end
+            if isfile(iconPath) then
+                pcall(function()
+                    CachedIconAsset = getcustomasset(iconPath)
+                end)
+            end
         end
-        icon.Image = getcustomasset(iconPath)
+        icon.Image = CachedIconAsset or iconUrl
     else
         icon.Image = iconUrl -- Fallback
     end
@@ -3292,7 +3320,7 @@ function PruneCharCache()
     if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
     lastCharCachePrune = now
     
-    local players = Players:GetPlayers()
+    local players = GetPlayersCache()
     local playerMap = {}
     for i = 1, #players do playerMap[players[i]] = true end
 
@@ -3433,15 +3461,12 @@ end)()
 
 SharedRaycastParams = RaycastParams.new()
 SharedRaycastParams.IgnoreWater = true
+if CachedFilterType then
+    SharedRaycastParams.FilterType = CachedFilterType
+end
 
 function Raycast(Origin, Direction, Filter)
     SharedRaycastParams.FilterDescendantsInstances = Filter
-
-    -- Only set FilterType if we successfully cached a valid enum
-    if CachedFilterType then
-        SharedRaycastParams.FilterType = CachedFilterType
-    end
-
     return Workspace:Raycast(Origin, Direction, SharedRaycastParams)
 end
 
@@ -3460,6 +3485,7 @@ function ObjectOccluded(Enabled, Origin, Position, Object)
     
     -- Reuse filter table instead of creating new one every call
     OcclusionFilter[1] = LocalPlayer.Character
+    OcclusionFilter[2] = Object
     local hit = Raycast(Origin, Position - Origin, OcclusionFilter)
     
     if hit and hit.Instance and not hit.Instance:IsDescendantOf(Object) then
@@ -3512,6 +3538,28 @@ function ClearCandidateReferences()
 end
 
 
+local _hoistedCheckParts = {}
+local _lastTargetGroupsHash = nil
+
+local function RebuildCheckParts()
+    table.clear(_hoistedCheckParts)
+    local anySelected = false
+    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+        if enabled then
+            anySelected = true
+            for _, partName in ipairs(TARGET_GROUPS[category]) do
+                table.insert(_hoistedCheckParts, partName)
+            end
+        end
+    end
+    if not anySelected then
+        table.clear(_hoistedCheckParts)
+        for _, partName in ipairs(ALL_BODY_PARTS) do
+            table.insert(_hoistedCheckParts, partName)
+        end
+    end
+end
+
 -- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, StickyTarget)
     if not Enabled then
@@ -3535,20 +3583,17 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local maxCandsLimit = MAX_CANDIDATES * 3
     
     -- HOISTED ALLOCATION: Compute checkParts once per frame instead of per-player
-    local checkParts = {}
-    local anySelected = false
-    for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
-        if enabled then
-            anySelected = true
-            for _, partName in ipairs(TARGET_GROUPS[category]) do
-                table.insert(checkParts, partName)
-            end
-        end
+    local currentHash = (Flags["Aim/TargetGroups"].Head and 1 or 0) +
+                        (Flags["Aim/TargetGroups"].Torso and 2 or 0) +
+                        (Flags["Aim/TargetGroups"].LeftArm and 4 or 0) +
+                        (Flags["Aim/TargetGroups"].RightArm and 8 or 0) +
+                        (Flags["Aim/TargetGroups"].LeftLeg and 16 or 0) +
+                        (Flags["Aim/TargetGroups"].RightLeg and 32 or 0)
+    if currentHash ~= _lastTargetGroupsHash then
+        RebuildCheckParts()
+        _lastTargetGroupsHash = currentHash
     end
-
-    if not anySelected then
-        checkParts = ALL_BODY_PARTS
-    end
+    local checkParts = _hoistedCheckParts
 
     for _, Player in ipairs(players) do
         if Player == LocalPlayer or DNS(Player) then
@@ -6554,6 +6599,8 @@ local function CreateESP(player)
         lastDistanceColor = nil,
         lastEquipped = "",
         lastStatus = "",
+        lastOcclusionCheck = 0,
+        lastOcclusionResult = false,
         Connections = {} -- Store player-specific connections here
     }
 
@@ -7165,7 +7212,13 @@ function UpdateESP(now, player, isClosest)
         end
 
         -- Update Health indicators visibility based on line-of-sight
-        local isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
+        local OCCLUSION_CHECK_INTERVAL = 0.5
+        local isOccluded = espData.lastOcclusionResult or false
+        if (now - (espData.lastOcclusionCheck or 0)) > OCCLUSION_CHECK_INTERVAL then
+            espData.lastOcclusionCheck = now
+            isOccluded = ObjectOccluded(true, Camera.CFrame.Position, rootPart.Position, character)
+            espData.lastOcclusionResult = isOccluded
+        end
         local healthVisible = not isOccluded
         
         local settingEnabled = Flags["ESP/HealthIndicator"]
@@ -8269,6 +8322,10 @@ function Cleanup()
         pcall(function() ScreenGui:Destroy() end)
         ScreenGui = nil
     end
+    if NotifyGui then 
+        pcall(function() NotifyGui:Destroy() end)
+        NotifyGui = nil
+    end
     FovCircleFrame = nil
     table.clear(UIState.Tabs)
     table.clear(UIState.DraggableFrames)
@@ -9258,12 +9315,12 @@ UI.CreateToggle(VisualsTab, "Draw Equipped Item", "ESP/ShowEquipped", Flags["ESP
 UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
     -- When disabled, remove all existing outlines immediately
     if not state then
-        for player, outlines in pairs(PlayerOutlineObjects) do
-            for partName, highlight in pairs(outlines) do
-                pcall(function() highlight:Destroy() end)
-            end
+        local players = GetPlayersCache()
+        for i = 1, #players do
+            pcall(RemovePlayerOutlines, players[i])
         end
         table.clear(PlayerOutlineObjects)
+        ActiveHighlightCount = 0
     end
 end)
 
@@ -10251,6 +10308,8 @@ lastBr3ak3rCleanup = 0
 br3ak3rCleanupRate = 2.0 
 lastHoverUpdate = 0
 hoverUpdateRate = 0.033 -- Hover at 30fps
+lastWaypointUpdate = 0
+waypointUpdateRate = 0.5 -- 2 FPS for waypoints
 lastStateEnforcement = 0
 stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
 lastHumanoidSync = 0
@@ -10388,23 +10447,35 @@ function UnifiedHeartbeat(dt)
     end
     
     -- Update Waypoint Distances
-    if Flags["Waypoints/Enabled"] then
+    if Flags["Waypoints/Enabled"] and (now - lastWaypointUpdate) > waypointUpdateRate then
+        lastWaypointUpdate = now
+        local camPos = Camera.CFrame.Position
         for id, wpData in pairs(ActiveWaypoints) do
             if wpData.Part and wpData.Label then
-                local dist = (wpData.Position - Camera.CFrame.Position).Magnitude
+                local dist = (wpData.Position - camPos).Magnitude
                 local distRounded = math.floor(dist)
-                wpData.DistanceText = distRounded .. " studs"
-                wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+                if math.abs((wpData.lastDist or 0) - distRounded) > 1 then
+                    wpData.lastDist = distRounded
+                    wpData.DistanceText = distRounded .. " studs"
+                    wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
+                end
             end
             local wpVisible = not ghostMode
             if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
             if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
         end
-    else
+    elseif not Flags["Waypoints/Enabled"] then
         -- Hide all if disabled
         for id, wpData in pairs(ActiveWaypoints) do
-            if wpData.Billboard then wpData.Billboard.Enabled = false end
-            if wpData.PinBg then wpData.PinBg.Enabled = false end
+            if wpData.Billboard and wpData.Billboard.Enabled then wpData.Billboard.Enabled = false end
+            if wpData.PinBg and wpData.PinBg.Enabled then wpData.PinBg.Enabled = false end
+        end
+    else
+        -- Just enforce ghostMode visibility change if needed (high frequency)
+        local wpVisible = not ghostMode
+        for id, wpData in pairs(ActiveWaypoints) do
+            if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
+            if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
         end
     end
     
@@ -10416,7 +10487,7 @@ function UnifiedHeartbeat(dt)
         if updater then updater(false) end
     end
 
-    local now = os.clock()
+
     
     -- 1. ESP & Tracker Updates
     -- Check throttle FIRST before anything else to save perf
@@ -10486,8 +10557,11 @@ function UnifiedHeartbeat(dt)
     end
     
     -- 2. Br3ak3r Updates
-    -- Update hover highlight (Per-frame for responsiveness)
-    UpdateBr3ak3rHover()
+    -- Update hover highlight (throttled to ~30fps for responsiveness)
+    if (now - lastHoverUpdate) > hoverUpdateRate then
+        lastHoverUpdate = now
+        UpdateBr3ak3rHover()
+    end
     
     -- Periodic cleanup (throttled)
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
