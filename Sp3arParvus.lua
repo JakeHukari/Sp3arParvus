@@ -9980,6 +9980,40 @@ UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
     end
 end)
 
+UI.CreateButton(MiscTab, "Join Official Discord Server", function()
+    local inviteCode = "KJuxMnBFqB"
+    local url = "https://discord.gg/" .. inviteCode
+    local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+    if copy then
+        pcall(function() copy(url) end)
+        UI.Notify("Discord", "Discord invite link has been copied to clipboard", 5)
+    else
+        UI.Notify("Discord", "Clipboard function not supported by your exploit", 5)
+    end
+    
+    local req = syn and syn.request or http and http.request or http_request or request
+    if req then
+        pcall(function()
+            req({
+                Url = "http://127.0.0.1:6463/rpc?v=1",
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Origin"] = "https://discord.com"
+                },
+                Body = game:GetService("HttpService"):JSONEncode({
+                    cmd = "INVITE_BROWSER",
+                    args = {
+                        code = inviteCode
+                    },
+                    nonce = game:GetService("HttpService"):GenerateGUID(false)
+                })
+            })
+        end)
+    end
+end)
+
+
 -- Helper to setup player ESP and connections
 function SetupPlayerESP(player)
     if player == LocalPlayer then return end

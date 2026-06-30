@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/github/stars/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Stars">
   <img src="https://img.shields.io/github/forks/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Forks">
   <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="License">
+  <a href="https://discord.gg/KJuxMnBFqB"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&color=fc95af" alt="Discord"></a>
 </p>
 
 ## Overview
@@ -120,7 +121,8 @@ Execute the script in your testing environment workspace.
 
 ## Community & Contributing
 
-Any contributions are welcome! If you have ideas for new features or have found any bugs, please check out our:
+Any contributions are welcome! If you have ideas for new features, found any bugs, or want to discuss development, join our community:
+- [Official Discord Server](https://discord.gg/KJuxMnBFqB) - For help, suggestions, and development-related discussion.
 - [Contributing Guidelines](.github\CONTRIBUTING.md)
 - [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md)
 - [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md)
