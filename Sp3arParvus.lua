@@ -10418,26 +10418,9 @@ function UnifiedHeartbeat(dt)
     end
 
     if UIState.CurrentTab == "WorldHumanoids" and not WorldHumState.selectedHum then
-        if (now - lastWorldHumListUpdate) > 1.0 then
+        if (now - lastWorldHumListUpdate) > 4.0 then
             lastWorldHumListUpdate = now
-            local myChar = LocalPlayer.Character
-            local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
-            local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
-
-            for _, entry in ipairs(WorldHumState.listEntries) do
-                local hum = entry.hum
-                local card = entry.card
-                local label = entry.label
-                if hum and hum.Parent and card and label then
-                    local root = hum.RootPart or hum.Parent.PrimaryPart
-                    if root then
-                        local dist = (root.Position - myPos).Magnitude
-                        local distFloor = math.floor(dist)
-                        label.Text = distFloor .. " studs away"
-                        card.LayoutOrder = distFloor
-                    end
-                end
-            end
+            ShowWorldHumList(WorldHumState.Page)
         end
     end
     
