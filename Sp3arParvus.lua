@@ -146,8 +146,8 @@ local Flags = {
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
-    ["ESP/NametagOpacity"] = 75,
-    ["LocalUI/ScreenUIOpacity"] = 75
+    ["ESP/NametagOpacity"] = 90,
+    ["LocalUI/ScreenUIOpacity"] = 90
 }
 
 -- SAFE_MODE overrides: force-disable high-risk input simulation features
