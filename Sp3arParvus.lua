@@ -145,7 +145,9 @@ local Flags = {
     ["Misc/D3vTool"] = true,
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
-    ["Misc/QTeleport"] = true
+    ["Misc/QTeleport"] = true,
+    ["ESP/NametagOpacity"] = 75,
+    ["LocalUI/ScreenUIOpacity"] = 75
 }
 
 -- SAFE_MODE overrides: force-disable high-risk input simulation features
@@ -2301,7 +2303,7 @@ function UI.CreateWindow(title)
     EnsureScreenGui()
 
     -- Main Container
-    local MainFrame = Instance.new("Frame")
+    local MainFrame = Instance.new("CanvasGroup")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.fromScale(0.4, 0.45)
     MainFrame.Position = UDim2.fromScale(0.5, 0.5)
@@ -2645,6 +2647,8 @@ function UI.CreateWindow(title)
             ToggleVisible()
         end
     end))
+
+    pcall(UpdateScreenUIOpacity)
 
     return UI
 end
@@ -3933,7 +3937,7 @@ TrackerHeaderLabel, TrackerNameLabel, TrackerDistanceLabel, TrackerHealthLabel, 
 
 function CreateClosestPlayerTracker()
     -- Main container frame
-    ClosestPlayerTrackerLabel = Instance.new("Frame")
+    ClosestPlayerTrackerLabel = Instance.new("CanvasGroup")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 70)
     local OriginalSize = ClosestPlayerTrackerLabel.Size
@@ -4076,6 +4080,7 @@ function CreateClosestPlayerTracker()
     if UI.MakeDraggable then
         UI.MakeDraggable(ClosestPlayerTrackerLabel)
     end
+    pcall(UpdateScreenUIOpacity)
 end
 
 -- Update Nearest Player (finds closest player once)
@@ -4266,7 +4271,7 @@ end
 function CreateItemPanel()
     if ItemPanelUI.MainFrame then return end
 
-    local MainFrame = Instance.new("Frame")
+    local MainFrame = Instance.new("CanvasGroup")
     MainFrame.Name = "ItemPanel"
     MainFrame.Size = UDim2.fromOffset(500, 400)
     MainFrame.Position = UDim2.fromScale(0.5, 0.5)
@@ -4446,6 +4451,7 @@ function CreateItemPanel()
     ItemPanelUI.PropertyContent = propertyContent
     ItemPanelUI.PropertyFrame = PropertyFrame
     ItemPanelUI.PropertySearch = pfSearch
+    pcall(UpdateScreenUIOpacity)
 end
 
 local function ClearFrame(container)
@@ -7125,6 +7131,42 @@ function UpdateESP(now, player, isClosest)
     -- Update nametag
     if espData.Nametag then
         local nametag = espData.Nametag
+        
+        -- Update opacity/transparency dynamically based on ESP/NametagOpacity
+        local opacity = (Flags["ESP/NametagOpacity"] or 75) / 100
+        local transparency = 1 - opacity
+        
+        if espData.StatusLabel and espData.StatusLabel.TextTransparency ~= transparency then
+            espData.StatusLabel.TextTransparency = transparency
+            espData.StatusLabel.TextStrokeTransparency = transparency
+        end
+        if espData.NicknameLabel and espData.NicknameLabel.TextTransparency ~= transparency then
+            espData.NicknameLabel.TextTransparency = transparency
+            espData.NicknameLabel.TextStrokeTransparency = transparency
+        end
+        if espData.UsernameLabel and espData.UsernameLabel.TextTransparency ~= transparency then
+            espData.UsernameLabel.TextTransparency = transparency
+            espData.UsernameLabel.TextStrokeTransparency = transparency
+        end
+        if espData.DistanceLabel and espData.DistanceLabel.TextTransparency ~= transparency then
+            espData.DistanceLabel.TextTransparency = transparency
+            espData.DistanceLabel.TextStrokeTransparency = transparency
+        end
+        if espData.HealthNumericalLabel and espData.HealthNumericalLabel.TextTransparency ~= transparency then
+            espData.HealthNumericalLabel.TextTransparency = transparency
+            espData.HealthNumericalLabel.TextStrokeTransparency = transparency
+        end
+        if espData.EquippedLabel and espData.EquippedLabel.TextTransparency ~= transparency then
+            espData.EquippedLabel.TextTransparency = transparency
+            espData.EquippedLabel.TextStrokeTransparency = transparency
+        end
+        if espData.HealthBarContainer and espData.HealthBarContainer.BackgroundTransparency ~= transparency then
+            espData.HealthBarContainer.BackgroundTransparency = transparency
+        end
+        if espData.HealthBarFill and espData.HealthBarFill.BackgroundTransparency ~= transparency then
+            espData.HealthBarFill.BackgroundTransparency = transparency
+        end
+
         -- Ensure nametag is attached and enabled
         if nametag.Adornee ~= rootPart then
             nametag.Adornee = rootPart
@@ -7361,7 +7403,7 @@ PerfOriginalSize = UDim2.fromOffset(180, 145)
 PerformanceRows = {}
 
 function CreatePerformanceDisplay(parent)
-    PerformanceLabel = Instance.new("Frame")
+    PerformanceLabel = Instance.new("CanvasGroup")
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
     local OriginalSize = PerformanceLabel.Size
@@ -7491,13 +7533,14 @@ function CreatePerformanceDisplay(parent)
     if UI.MakeDraggable then
         UI.MakeDraggable(PerformanceLabel)
     end
+    pcall(UpdateScreenUIOpacity)
 end
 
 local LocalHealthHUD = nil
 local LocalHealthValueLabel = nil
 
 function CreateLocalHealthHUD(parent)
-    LocalHealthHUD = Instance.new("Frame")
+    LocalHealthHUD = Instance.new("CanvasGroup")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
     LocalHealthHUD.Position = UDim2.new(1, -260, 0, 70) -- Right Side, above Performance
@@ -7536,6 +7579,7 @@ function CreateLocalHealthHUD(parent)
     if UI.MakeDraggable then
         UI.MakeDraggable(LocalHealthHUD)
     end
+    pcall(UpdateScreenUIOpacity)
 end
 
 local lastLocalH, lastLocalMH = -1, -1
@@ -7626,6 +7670,67 @@ function UpdatePerformanceDisplay()
         for _ in pairs(H1ghl1ght3rState.highlightedSet) do highlightedCount = highlightedCount + 1 end
         local val = tostring(highlightedCount)
         if PerformanceRows["H1ghL1ghted Objects"].Text ~= val then PerformanceRows["H1ghL1ghted Objects"].Text = val end
+    end
+end
+
+function UpdateScreenUIOpacity()
+    local opacity = (Flags["LocalUI/ScreenUIOpacity"] or 75) / 100
+    local transparency = 1 - opacity
+    
+    if UIState and UIState.MainFrame then
+        UIState.MainFrame.GroupTransparency = transparency
+    end
+    if ClosestPlayerTrackerLabel then
+        ClosestPlayerTrackerLabel.GroupTransparency = transparency
+    end
+    if PerformanceLabel then
+        PerformanceLabel.GroupTransparency = transparency
+    end
+    if LocalHealthHUD then
+        LocalHealthHUD.GroupTransparency = transparency
+    end
+    if ItemPanelUI and ItemPanelUI.MainFrame then
+        ItemPanelUI.MainFrame.GroupTransparency = transparency
+    end
+end
+
+function UpdateAllNametagOpacities()
+    local opacity = (Flags["ESP/NametagOpacity"] or 75) / 100
+    local transparency = 1 - opacity
+    if not ESPObjects then return end
+    for player, espData in pairs(ESPObjects) do
+        if espData.Nametag then
+            if espData.StatusLabel then
+                espData.StatusLabel.TextTransparency = transparency
+                espData.StatusLabel.TextStrokeTransparency = transparency
+            end
+            if espData.NicknameLabel then
+                espData.NicknameLabel.TextTransparency = transparency
+                espData.NicknameLabel.TextStrokeTransparency = transparency
+            end
+            if espData.UsernameLabel then
+                espData.UsernameLabel.TextTransparency = transparency
+                espData.UsernameLabel.TextStrokeTransparency = transparency
+            end
+            if espData.DistanceLabel then
+                espData.DistanceLabel.TextTransparency = transparency
+                espData.DistanceLabel.TextStrokeTransparency = transparency
+            end
+            if espData.HealthNumericalLabel then
+                espData.HealthNumericalLabel.TextTransparency = transparency
+                espData.HealthNumericalLabel.TextStrokeTransparency = transparency
+            end
+            if espData.EquippedLabel then
+                espData.EquippedLabel.TextTransparency = transparency
+                espData.EquippedLabel.TextStrokeTransparency = transparency
+            end
+            if espData.HealthBarContainer then
+                espData.HealthBarContainer.BackgroundTransparency = transparency
+            end
+            if espData.HealthBarFill then
+                espData.HealthBarFill.BackgroundTransparency = transparency
+            end
+        end
     end
 end
 
@@ -9758,6 +9863,9 @@ UI.CreateToggle(VisualsTab, "Draw Username", "ESP/ShowUsername", Flags["ESP/Show
 UI.CreateToggle(VisualsTab, "Draw Distance", "ESP/ShowDistance", Flags["ESP/ShowDistance"])
 UI.CreateToggle(VisualsTab, "Draw Health Indicator", "ESP/HealthIndicator", Flags["ESP/HealthIndicator"])
 UI.CreateToggle(VisualsTab, "Draw Equipped Item", "ESP/ShowEquipped", Flags["ESP/ShowEquipped"])
+UI.CreateNumericInput(VisualsTab, "Nametag Opacity", "ESP/NametagOpacity", Flags["ESP/NametagOpacity"], 0, 100, 5, "%", function(val)
+    UpdateAllNametagOpacities()
+end)
 
 UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
     -- When disabled, remove all existing outlines immediately
@@ -9780,6 +9888,9 @@ UI.CreateToggle(VisualsTab, "Show Local Health Indicator", "LocalUI/LocalHealthI
 end)
 UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlayerTracker", Flags["LocalUI/ClosestPlayerTracker"], function(state)
     if ClosestPlayerTrackerLabel then ClosestPlayerTrackerLabel.Visible = state end
+end)
+UI.CreateNumericInput(VisualsTab, "Screen UI Opacity", "LocalUI/ScreenUIOpacity", Flags["LocalUI/ScreenUIOpacity"], 0, 100, 5, "%", function(val)
+    UpdateScreenUIOpacity()
 end)
 
 UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
