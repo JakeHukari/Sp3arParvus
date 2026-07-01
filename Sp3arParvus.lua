@@ -146,6 +146,7 @@ local Flags = {
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
+    ["Misc/PositionForceValue"] = 3.75,
     ["ESP/NametagOpacity"] = 90,
     ["LocalUI/ScreenUIOpacity"] = 90
 }
@@ -8762,7 +8763,7 @@ local KeyboardRows = {
         {Text = ".", Key = "Period", Width = 1, KeyCode = Enum.KeyCode.Period, Name = "Toggle Dev Tool", Action = "Ctrl + .", Desc = "Toggles developer HUD panels / D3vTool.", StatusKey = "Misc/D3vTool"},
         {Text = "/", Width = 1},
         {Text = "shift", Width = 1.75},
-        {Text = "↑", Key = "Up", Width = 1, KeyCode = Enum.KeyCode.Up, Name = "Position Force Up", Action = "Ctrl + Up", Desc = "Forces character position up by 3.75 studs."},
+        {Text = "↑", Key = "Up", Width = 1, KeyCode = Enum.KeyCode.Up, Name = "Position Force Up / Forward", Action = "Ctrl+Up / Ctrl+Shift+Up", Desc = "Forces character position up or forward by the configured distance."},
         {Text = "ins", Width = 1}
     },
     { -- Row 5
@@ -8773,9 +8774,9 @@ local KeyboardRows = {
         {Text = "alt", Width = 1.25},
         {Text = "fn", Width = 1.25},
         {Text = "ctrl", Width = 1.25},
-        {Text = "←", Key = "Left", Width = 1, KeyCode = Enum.KeyCode.Left, Name = "Position Force Left", Action = "Ctrl + Left", Desc = "Forces character position left by 3 studs."},
-        {Text = "↓", Key = "Down", Width = 1, KeyCode = Enum.KeyCode.Down, Name = "Position Force Down", Action = "Ctrl + Down", Desc = "Forces character position down by 3.75 studs."},
-        {Text = "→", Key = "Right", Width = 1, KeyCode = Enum.KeyCode.Right, Name = "Position Force Right", Action = "Ctrl + Right", Desc = "Forces character position right by 3 studs."}
+        {Text = "←", Key = "Left", Width = 1, KeyCode = Enum.KeyCode.Left, Name = "Position Force Left", Action = "Ctrl + Left", Desc = "Forces character position left by the configured distance."},
+        {Text = "↓", Key = "Down", Width = 1, KeyCode = Enum.KeyCode.Down, Name = "Position Force Down / Backward", Action = "Ctrl+Down / Ctrl+Shift+Down", Desc = "Forces character position down or backward by the configured distance."},
+        {Text = "→", Key = "Right", Width = 1, KeyCode = Enum.KeyCode.Right, Name = "Position Force Right", Action = "Ctrl + Right", Desc = "Forces character position right by the configured distance."}
     }
 }
 
@@ -9158,7 +9159,7 @@ local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
 local PlayerPage = UI.CreateTab("PlayerPage")
 InitializePlayerPage(PlayerPage)
-local MiscTab = UI.CreateTab("Misc")
+local MiscTab = UI.CreateTab("Dev Tools")
 local ShortcutsTab = UI.CreateTab("Shortcuts")
 InitializeShortcutsPage(ShortcutsTab)
 
@@ -9971,7 +9972,7 @@ UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Hu
 UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end, true)
 
--- MISC TAB
+-- DEV TOOLS TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
 UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Enabled"], function(state)
     Br3ak3rState.CLICKBREAK_ENABLED = state
@@ -10081,6 +10082,7 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         ZoomState.LastSetMin = nil
     end
 end)
+UI.CreateNumericInput(MiscTab, "Position Force Distance", "Misc/PositionForceValue", Flags["Misc/PositionForceValue"], 0.1, 100, 0.05, "studs")
 
 UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
     local url = "https://www.pingbird.xyz/~/sp3arparvus"
@@ -10665,7 +10667,14 @@ local function handleShortcuts(actionName, inputState, inputObject)
             else
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 3.75, 0) end
+                if rootPart then
+                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    if shiftHeld then
+                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -forceVal)
+                    else
+                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, forceVal, 0)
+                    end
+                end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Down then
@@ -10674,7 +10683,14 @@ local function handleShortcuts(actionName, inputState, inputObject)
             else
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart then rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -3.75, 0) end
+                if rootPart then
+                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    if shiftHeld then
+                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, forceVal)
+                    else
+                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -forceVal, 0)
+                    end
+                end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Left then
@@ -10683,7 +10699,10 @@ local function handleShortcuts(actionName, inputState, inputObject)
             else
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(-3, 0, 0) end
+                if rootPart then
+                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    rootPart.CFrame = rootPart.CFrame * CFrame.new(-forceVal, 0, 0)
+                end
             end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Right then
@@ -10692,7 +10711,10 @@ local function handleShortcuts(actionName, inputState, inputObject)
             else
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-                if rootPart then rootPart.CFrame = rootPart.CFrame * CFrame.new(3, 0, 0) end
+                if rootPart then
+                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    rootPart.CFrame = rootPart.CFrame * CFrame.new(forceVal, 0, 0)
+                end
             end
             return Enum.ContextActionResult.Sink
         end
