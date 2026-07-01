@@ -10421,9 +10421,68 @@ local GetMouseRay = GetMouseRay
 local WorldRaycastBr3ak3r = WorldRaycastBr3ak3r
 local ForceReload = ForceReload
 
+local activeMovementLoops = {}
+
+local function startMovementLoop(keyCode)
+    if activeMovementLoops[keyCode] then return end
+    activeMovementLoops[keyCode] = true
+
+    -- Wait initial delay for key repeat threshold (0.4 seconds)
+    task.wait(0.4)
+
+    local RunService = game:GetService("RunService")
+
+    while activeMovementLoops[keyCode] do
+        if SAFE_MODE then break end
+
+        local ctrlHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+        local keyHeld = Services.UserInputService:IsKeyDown(keyCode)
+
+        if not (ctrlHeld and keyHeld) then break end
+
+        local character = LocalPlayer and LocalPlayer.Character
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then break end
+
+        local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+        local shiftHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+
+        local dt = RunService.Heartbeat:Wait()
+        local speed = forceVal * 4
+
+        if keyCode == Enum.KeyCode.Up then
+            if shiftHeld then
+                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -speed * dt)
+            else
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, speed * dt, 0)
+            end
+        elseif keyCode == Enum.KeyCode.Down then
+            if shiftHeld then
+                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, speed * dt)
+            else
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -speed * dt, 0)
+            end
+        elseif keyCode == Enum.KeyCode.Left then
+            rootPart.CFrame = rootPart.CFrame * CFrame.new(-speed * dt, 0, 0)
+        elseif keyCode == Enum.KeyCode.Right then
+            rootPart.CFrame = rootPart.CFrame * CFrame.new(speed * dt, 0, 0)
+        end
+    end
+
+    activeMovementLoops[keyCode] = nil
+end
+
 local function handleShortcuts(actionName, inputState, inputObject)
-    if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
     if Services.UserInputService:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
+
+    if inputState == Enum.UserInputState.End then
+        if inputObject.KeyCode == Enum.KeyCode.Up or inputObject.KeyCode == Enum.KeyCode.Down or inputObject.KeyCode == Enum.KeyCode.Left or inputObject.KeyCode == Enum.KeyCode.Right then
+            activeMovementLoops[inputObject.KeyCode] = nil
+        end
+        return Enum.ContextActionResult.Pass
+    end
+
+    if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
 
     local ctrlHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
     local shiftHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
@@ -10674,6 +10733,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     else
                         rootPart.CFrame = rootPart.CFrame + Vector3.new(0, forceVal, 0)
                     end
+                    task.spawn(startMovementLoop, Enum.KeyCode.Up)
                 end
             end
             return Enum.ContextActionResult.Sink
@@ -10690,6 +10750,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     else
                         rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -forceVal, 0)
                     end
+                    task.spawn(startMovementLoop, Enum.KeyCode.Down)
                 end
             end
             return Enum.ContextActionResult.Sink
@@ -10702,6 +10763,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 if rootPart then
                     local forceVal = Flags["Misc/PositionForceValue"] or 3.75
                     rootPart.CFrame = rootPart.CFrame * CFrame.new(-forceVal, 0, 0)
+                    task.spawn(startMovementLoop, Enum.KeyCode.Left)
                 end
             end
             return Enum.ContextActionResult.Sink
@@ -10714,6 +10776,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 if rootPart then
                     local forceVal = Flags["Misc/PositionForceValue"] or 3.75
                     rootPart.CFrame = rootPart.CFrame * CFrame.new(forceVal, 0, 0)
+                    task.spawn(startMovementLoop, Enum.KeyCode.Right)
                 end
             end
             return Enum.ContextActionResult.Sink
