@@ -10025,7 +10025,6 @@ UI.CreateButton(MiscTab, "Copy gameInstanceId Link", function()
     end
 end)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
-UI.CreateButton(MiscTab, "Reload Script", Reload)
 UI.CreateButton(MiscTab, "Force Reload (Reload latest script version from GitHub)", ForceReload)
 
 UI.CreateSection(MiscTab, "Configuration")
