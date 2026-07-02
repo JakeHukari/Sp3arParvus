@@ -417,7 +417,8 @@ local ZoomState = {
     OriginalMax = LocalPlayer.CameraMaxZoomDistance,
     OriginalMin = LocalPlayer.CameraMinZoomDistance,
     LastSetMax = nil,
-    LastSetMin = nil
+    LastSetMin = nil,
+    Multiplier = 1
 }
 
 -- RESPAWN HANDLING
@@ -10080,6 +10081,7 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         end
         ZoomState.LastSetMax = nil
         ZoomState.LastSetMin = nil
+        ZoomState.Multiplier = 1
     end
 end)
 UI.CreateNumericInput(MiscTab, "Position Force Distance", "Misc/PositionForceValue", Flags["Misc/PositionForceValue"], 0.1, 100, 0.05, "studs")
@@ -11046,10 +11048,21 @@ function UnifiedHeartbeat(dt)
                 LocalPlayer.CameraMinZoomDistance = 0
                 ZoomState.LastSetMax = 10000
                 ZoomState.LastSetMin = 0
-            else
+
                 local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
-                local targetMax = math.max(ZoomState.OriginalMax or 128, currentZoom)
-                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom)
+                local originalMax = ZoomState.OriginalMax or 128
+                if originalMax > 0 then
+                    ZoomState.Multiplier = currentZoom / originalMax
+                else
+                    ZoomState.Multiplier = 1
+                end
+            else
+                local multiplier = ZoomState.Multiplier or 1
+                local targetMax = (ZoomState.OriginalMax or 128) * multiplier
+                local targetMin = (ZoomState.OriginalMin or 0.5) * multiplier
+                if targetMax < targetMin then
+                    targetMax = targetMin
+                end
                 
                 LocalPlayer.CameraMaxZoomDistance = targetMax
                 LocalPlayer.CameraMinZoomDistance = targetMin
