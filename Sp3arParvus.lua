@@ -2808,7 +2808,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Switch.Parent = Frame
     
     local swCorner = Instance.new("UICorner")
-    swCorner.CornerRadius = UDim.new(1, 0)
+    swCorner.CornerRadius = UDim.new(0, 2)
     swCorner.Parent = Switch
     
     local Knob = Instance.new("Frame")
@@ -2820,7 +2820,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Knob.Parent = Switch
     
     local kbCorner = Instance.new("UICorner")
-    kbCorner.CornerRadius = UDim.new(1, 0)
+    kbCorner.CornerRadius = UDim.new(0, 2)
     kbCorner.Parent = Knob
     
     local Button = Instance.new("TextButton")
