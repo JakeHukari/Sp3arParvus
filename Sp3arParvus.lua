@@ -11037,10 +11037,11 @@ function UnifiedHeartbeat(dt)
         local currentMax = LocalPlayer.CameraMaxZoomDistance
         local currentMin = LocalPlayer.CameraMinZoomDistance
         
-        if currentMax ~= ZoomState.LastSetMax then
+        -- Use tolerance check to avoid float precision issues and compounding multiplier bug
+        if not ZoomState.LastSetMax or math.abs(currentMax - ZoomState.LastSetMax) > 0.01 then
             ZoomState.OriginalMax = currentMax
         end
-        if currentMin ~= ZoomState.LastSetMin then
+        if not ZoomState.LastSetMin or math.abs(currentMin - ZoomState.LastSetMin) > 0.01 then
             ZoomState.OriginalMin = currentMin
         end
 
@@ -11072,16 +11073,16 @@ function UnifiedHeartbeat(dt)
                 
                 local multiplier = ZoomState.Multiplier or 1
                 local targetMax = math.max((ZoomState.OriginalMax or 128) * multiplier, currentZoom)
-                local targetMin = math.min((ZoomState.OriginalMin or 0.5) * multiplier, currentZoom)
+                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom) -- Do not scale min zoom with multiplier
                 if targetMax < targetMin then
                     targetMax = targetMin
                 end
                 
-                if LocalPlayer.CameraMaxZoomDistance ~= targetMax then
+                if not ZoomState.LastSetMax or math.abs(LocalPlayer.CameraMaxZoomDistance - targetMax) > 0.01 then
                     LocalPlayer.CameraMaxZoomDistance = targetMax
                     ZoomState.LastSetMax = targetMax
                 end
-                if LocalPlayer.CameraMinZoomDistance ~= targetMin then
+                if not ZoomState.LastSetMin or math.abs(LocalPlayer.CameraMinZoomDistance - targetMin) > 0.01 then
                     LocalPlayer.CameraMinZoomDistance = targetMin
                     ZoomState.LastSetMin = targetMin
                 end
