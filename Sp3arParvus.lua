@@ -418,7 +418,8 @@ local ZoomState = {
     OriginalMin = LocalPlayer.CameraMinZoomDistance,
     LastSetMax = nil,
     LastSetMin = nil,
-    Multiplier = 1
+    Multiplier = 1,
+    WasCtrlHeld = false
 }
 
 -- RESPAWN HANDLING
@@ -10082,6 +10083,7 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         ZoomState.LastSetMax = nil
         ZoomState.LastSetMin = nil
         ZoomState.Multiplier = 1
+        ZoomState.WasCtrlHeld = false
     end
 end)
 UI.CreateNumericInput(MiscTab, "Position Force Distance", "Misc/PositionForceValue", Flags["Misc/PositionForceValue"], 0.1, 100, 0.05, "studs")
@@ -11044,34 +11046,50 @@ function UnifiedHeartbeat(dt)
 
         if Flags["Misc/ScrollUnlocker"] then
             if Br3ak3rState.CTRL_HELD then
-                LocalPlayer.CameraMaxZoomDistance = 10000
-                LocalPlayer.CameraMinZoomDistance = 0
-                ZoomState.LastSetMax = 10000
-                ZoomState.LastSetMin = 0
-
-                local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
-                local originalMax = ZoomState.OriginalMax or 128
-                if originalMax > 0 then
-                    ZoomState.Multiplier = currentZoom / originalMax
-                else
-                    ZoomState.Multiplier = 1
+                ZoomState.WasCtrlHeld = true
+                
+                if LocalPlayer.CameraMaxZoomDistance ~= 10000 then
+                    LocalPlayer.CameraMaxZoomDistance = 10000
+                    ZoomState.LastSetMax = 10000
+                end
+                if LocalPlayer.CameraMinZoomDistance ~= 0 then
+                    LocalPlayer.CameraMinZoomDistance = 0
+                    ZoomState.LastSetMin = 0
                 end
             else
+                local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
+                
+                if ZoomState.WasCtrlHeld then
+                    ZoomState.WasCtrlHeld = false
+                    
+                    local originalMax = ZoomState.OriginalMax or 128
+                    if originalMax > 0 then
+                        ZoomState.Multiplier = currentZoom / originalMax
+                    else
+                        ZoomState.Multiplier = 1
+                    end
+                end
+                
                 local multiplier = ZoomState.Multiplier or 1
-                local targetMax = (ZoomState.OriginalMax or 128) * multiplier
-                local targetMin = (ZoomState.OriginalMin or 0.5) * multiplier
+                local targetMax = math.max((ZoomState.OriginalMax or 128) * multiplier, currentZoom)
+                local targetMin = math.min((ZoomState.OriginalMin or 0.5) * multiplier, currentZoom)
                 if targetMax < targetMin then
                     targetMax = targetMin
                 end
                 
-                LocalPlayer.CameraMaxZoomDistance = targetMax
-                LocalPlayer.CameraMinZoomDistance = targetMin
-                ZoomState.LastSetMax = targetMax
-                ZoomState.LastSetMin = targetMin
+                if LocalPlayer.CameraMaxZoomDistance ~= targetMax then
+                    LocalPlayer.CameraMaxZoomDistance = targetMax
+                    ZoomState.LastSetMax = targetMax
+                end
+                if LocalPlayer.CameraMinZoomDistance ~= targetMin then
+                    LocalPlayer.CameraMinZoomDistance = targetMin
+                    ZoomState.LastSetMin = targetMin
+                end
             end
         else
             ZoomState.LastSetMax = nil
             ZoomState.LastSetMin = nil
+            ZoomState.WasCtrlHeld = nil
         end
     end
     
