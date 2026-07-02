@@ -419,7 +419,8 @@ local ZoomState = {
     LastSetMax = nil,
     LastSetMin = nil,
     Multiplier = 1,
-    WasCtrlHeld = false
+    WasCtrlHeld = false,
+    UserScrolled = false
 }
 
 -- RESPAWN HANDLING
@@ -10084,6 +10085,7 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         ZoomState.LastSetMin = nil
         ZoomState.Multiplier = 1
         ZoomState.WasCtrlHeld = false
+        ZoomState.UserScrolled = false
     end
 end)
 UI.CreateNumericInput(MiscTab, "Position Force Distance", "Misc/PositionForceValue", Flags["Misc/PositionForceValue"], 0.1, 100, 0.05, "studs")
@@ -10291,6 +10293,11 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         AimState.Aim = Flags["Aim/AimLock"]
     end
 
+    -- Track user zoom hotkeys
+    if not gameProcessed and (input.KeyCode == Enum.KeyCode.I or input.KeyCode == Enum.KeyCode.O) then
+        ZoomState.UserScrolled = true
+    end
+
     
     -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -10404,6 +10411,19 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
     
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = false
+    end
+end))
+
+-- Zoom Unlocker Input Handler
+TrackConnection(Services.UserInputService.InputChanged:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseWheel then
+        ZoomState.UserScrolled = true
+    end
+end))
+
+TrackConnection(Services.UserInputService.TouchPinch:Connect(function(pinchScale, velocity, state, gameProcessed)
+    if not gameProcessed then
+        ZoomState.UserScrolled = true
     end
 end))
 
@@ -11065,7 +11085,18 @@ function UnifiedHeartbeat(dt)
                     
                     local originalMax = ZoomState.OriginalMax or 128
                     if originalMax > 0 then
-                        ZoomState.Multiplier = currentZoom / originalMax
+                        local newMultiplier = currentZoom / originalMax
+                        ZoomState.Multiplier = newMultiplier > 1 and newMultiplier or 1
+                    else
+                        ZoomState.Multiplier = 1
+                    end
+                elseif ZoomState.UserScrolled then
+                    ZoomState.UserScrolled = false
+                    
+                    local originalMax = ZoomState.OriginalMax or 128
+                    if originalMax > 0 then
+                        local newMultiplier = currentZoom / originalMax
+                        ZoomState.Multiplier = newMultiplier > 1 and newMultiplier or 1
                     else
                         ZoomState.Multiplier = 1
                     end
@@ -11091,6 +11122,7 @@ function UnifiedHeartbeat(dt)
             ZoomState.LastSetMax = nil
             ZoomState.LastSetMin = nil
             ZoomState.WasCtrlHeld = nil
+            ZoomState.UserScrolled = nil
         end
     end
     
