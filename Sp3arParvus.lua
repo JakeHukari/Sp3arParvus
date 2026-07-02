@@ -10010,7 +10010,7 @@ UI.CreateToggle(MiscTab, "Toggle Item Panel", "Misc/ItemPanel", Flags["Misc/Item
         end
     end
 end)
-UI.CreateToggle(MiscTab, "Q-Teleport — Press Ctrl+Q to jump to mouse position (SAFE_MODE gates this)", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
+UI.CreateToggle(MiscTab, "Q-Teleport — Press Ctrl+Q to tp to mouse position", "Misc/QTeleport", Flags["Misc/QTeleport"], function(state)
     Flags["Misc/QTeleport"] = state
 end)
 UI.CreateButton(MiscTab, "Rejoin Server", Rejoin)
