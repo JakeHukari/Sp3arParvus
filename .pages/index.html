@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sp3arParvus — Advanced Lua Debugging Suite for Roblox</title>
+  <meta name="description" content="Sp3arParvus is a performance-optimized, client-sided Lua debugging suite for Roblox developers. Featuring camera tracking, visual analytics, player management, and advanced dev utilities." />
+  <meta name="keywords" content="Roblox, Lua, debugging, developer tool, camera tracking, ESP, humanoid editor, game dev" />
+  <meta name="author" content="JakeHukari" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Sp3arParvus — Lua Debugging Suite" />
+  <meta property="og:description" content="Advanced developer & debugging suite for Lua games. Inspect environments, test interactions, and monitor performance in real-time." />
+  <meta property="og:type" content="website" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Press+Start+2P&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            pink: {
+              400: '#fc95af',
+              500: '#f97096',
+              600: '#e84d7c',
+            },
+            dark: {
+              50:  '#2a2a2a',
+              100: '#1e1e1e',
+              200: '#161616',
+              300: '#111111',
+              400: '#0d0d0d',
+            }
+          },
+          fontFamily: {
+            sans:  ['Inter', 'sans-serif'],
+            mono:  ['JetBrains Mono', 'monospace'],
+            pixel: ['"Press Start 2P"', 'cursive'],
+          },
+          animation: {
+            'fade-in-up': 'fadeInUp 0.6s ease forwards',
+            'fade-in':    'fadeIn 0.5s ease forwards',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
+            'float':      'float 6s ease-in-out infinite',
+            'glow':       'glow 2s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            fadeInUp:  { '0%': { opacity: '0', transform: 'translateY(24px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            fadeIn:    { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+            float:     { '0%,100%': { transform: 'translateY(0px)' }, '50%': { transform: 'translateY(-12px)' } },
+            glow:      { '0%': { 'box-shadow': '0 0 5px #fc95af44' }, '100%': { 'box-shadow': '0 0 24px #fc95af88, 0 0 48px #fc95af33' } },
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ─── Base ─── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background-color: #111111;
+      color: #e8e8e8;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ─── Custom Scrollbar ─── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #fc95af55; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #fc95af99; }
+
+    /* ─── Selection ─── */
+    ::selection { background: #fc95af33; color: #fc95af; }
+
+    /* ─── Noise texture overlay ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* ─── Gradient grid bg ─── */
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(252, 149, 175, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(252, 149, 175, 0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ─── Glow effects ─── */
+    .glow-pink { text-shadow: 0 0 20px #fc95af88, 0 0 40px #fc95af44; }
+    .glow-box  { box-shadow: 0 0 0 1px #fc95af22, 0 0 30px #fc95af11; }
+    .glow-box:hover { box-shadow: 0 0 0 1px #fc95af55, 0 0 40px #fc95af22; }
+
+    /* ─── Nav ─── */
+    #navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      transition: background 0.3s, border-color 0.3s, backdrop-filter 0.3s;
+    }
+    #navbar.scrolled {
+      background: rgba(17,17,17,0.85);
+      border-bottom: 1px solid rgba(252,149,175,0.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .nav-link {
+      position: relative;
+      color: #888;
+      transition: color 0.2s;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 500;
+      padding: 4px 0;
+    }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: -2px; left: 0; right: 0;
+      height: 1px;
+      background: #fc95af;
+      transform: scaleX(0);
+      transition: transform 0.25s ease;
+    }
+    .nav-link:hover, .nav-link.active { color: #fc95af; }
+    .nav-link:hover::after, .nav-link.active::after { transform: scaleX(1); }
+
+    /* ─── Hero gradient blob ─── */
+    .hero-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      animation: float 8s ease-in-out infinite;
+    }
+
+    /* ─── Pixel Badge ─── */
+    .pixel-badge {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.5rem;
+      letter-spacing: 0.1em;
+      padding: 5px 10px;
+      border: 2px solid #fc95af;
+      background: #fc95af11;
+      color: #fc95af;
+      display: inline-block;
+    }
+
+    /* ─── Code block ─── */
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid #fc95af22;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      position: relative;
+      overflow: hidden;
+    }
+    .code-block::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #fc95af66, transparent);
+    }
+
+    /* ─── Feature cards ─── */
+    .feature-card {
+      background: #161616;
+      border: 1px solid #ffffff0a;
+      border-radius: 12px;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #fc95af08 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: #fc95af33;
+      box-shadow: 0 8px 32px #fc95af0d;
+    }
+    .feature-card:hover::before { opacity: 1; }
+
+    /* ─── Showcase Tabs ─── */
+    .tab-btn {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 8px 16px;
+      border-radius: 6px;
+      color: #666;
+      transition: color 0.2s, background 0.2s;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: #ccc; background: #ffffff08; }
+    .tab-btn.active { color: #fc95af; background: #fc95af14; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ─── Screenshot frame ─── */
+    .screenshot-frame {
+      border: 1px solid #fc95af22;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0d0d0d;
+      position: relative;
+    }
+    .screenshot-frame::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 28px;
+      background: #161616;
+      border-bottom: 1px solid #fc95af18;
+      z-index: 1;
+    }
+    .screenshot-frame::after {
+      content: '● ● ●';
+      position: absolute;
+      top: 7px; left: 14px;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: #fc95af55;
+      z-index: 2;
+    }
+    .screenshot-frame img {
+      width: 100%;
+      display: block;
+      margin-top: 28px;
+    }
+
+    /* ─── Kbd shortcuts ─── */
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-bottom: 2px solid #333;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: #ccc;
+      white-space: nowrap;
+    }
+
+    /* ─── Shortcut rows ─── */
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid #ffffff06;
+      transition: background 0.15s;
+    }
+    .shortcut-row:hover { background: #ffffff05; }
+    .shortcut-row:last-child { border-bottom: none; }
+
+    /* ─── Explorer sidebar ─── */
+    .explorer-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      color: #888;
+      transition: color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .explorer-item:hover { color: #ccc; background: #ffffff08; }
+    .explorer-item.active { color: #fc95af; background: #fc95af12; }
+    .explorer-item .dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ─── Reveal animation ─── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ─── Stat cards ─── */
+    .stat-val {
+      font-size: 2.5rem;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: #fc95af;
+    }
+
+    /* ─── Mobile menu ─── */
+    #mobile-menu { display: none; }
+    #mobile-menu.open { display: flex; }
+
+    /* ─── Divider ─── */
+    .pink-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #fc95af44 40%, #fc95af44 60%, transparent);
+    }
+
+    /* ─── Copy button ─── */
+    .copy-btn {
+      position: absolute;
+      top: 50%; right: 12px;
+      transform: translateY(-50%);
+      background: #fc95af18;
+      border: 1px solid #fc95af33;
+      color: #fc95af;
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .copy-btn:hover { background: #fc95af30; }
+
+    /* ─── Tip card ─── */
+    .tip-card {
+      background: #161616;
+      border-left: 3px solid #fc95af;
+      border-radius: 0 8px 8px 0;
+      padding: 16px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .tip-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #fc95af06, transparent);
+    }
+
+    /* ─── Step indicator ─── */
+    .step-num {
+      width: 36px; height: 36px;
+      border: 2px solid #fc95af;
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.6rem;
+      color: #fc95af;
+      flex-shrink: 0;
+    }
+
+    /* ─── Footer ─── */
+    footer a { color: #555; transition: color 0.2s; }
+    footer a:hover { color: #fc95af; }
+
+    /* ─── Pixel art logo ─── */
+    .pixel-logo {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.85rem;
+      color: #fc95af;
+      letter-spacing: 0.05em;
+    }
+
+    /* ─── Badge pill ─── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: #fc95af16;
+      color: #fc95af;
+      border: 1px solid #fc95af33;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 768px) {
+      .stat-val { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body class="relative">
+
+<!-- ══════════════════ NAVBAR ══════════════════ -->
+<nav id="navbar" class="px-6 py-4">
+  <div class="max-w-6xl mx-auto flex items-center justify-between">
+    <!-- Logo -->
+    <a href="#hero" class="pixel-logo flex items-center gap-3" aria-label="Sp3arParvus Home">
+      <span class="text-white/80 text-xs font-pixel tracking-widest">SP3AR</span>
+      <span style="color:#fc95af">PARVUS</span>
+    </a>
+
+    <!-- Desktop Nav -->
+    <div class="hidden md:flex items-center gap-8" role="navigation" aria-label="Main navigation">
+      <a href="#features"  class="nav-link" id="nav-features">Features</a>
+      <a href="#showcase"  class="nav-link" id="nav-showcase">Showcase</a>
+      <a href="#workflow"  class="nav-link" id="nav-workflow">Workflow</a>
+      <a href="#shortcuts" class="nav-link" id="nav-shortcuts">Shortcuts</a>
+      <a href="#community" class="nav-link" id="nav-community">Community</a>
+    </div>
+
+    <!-- CTA + Hamburger -->
+    <div class="flex items-center gap-3">
+      <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener"
+         class="hidden md:flex items-center gap-2 px-4 py-2 rounded-md border border-pink-400/30 text-pink-400 text-sm font-semibold hover:bg-pink-400/10 transition-all duration-200">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <!-- Hamburger -->
+      <button id="hamburger" class="md:hidden p-2 text-gray-400 hover:text-pink-400 transition-colors" aria-label="Toggle menu" aria-expanded="false">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="flex-col gap-1 px-4 pt-3 pb-4 md:hidden border-t border-white/5 mt-3">
+    <a href="#features"  class="block py-2 px-3 text-sm text-gray-400 hover:text-pink-400 rounded transition-colors">Features</a>
+    <a href="#showcase"  class="block py-2 px-3 text-sm text-gray-400 hover:text-pink-400 rounded transition-colors">Showcase</a>
+    <a href="#workflow"  class="block py-2 px-3 text-sm text-gray-400 hover:text-pink-400 rounded transition-colors">Workflow</a>
+    <a href="#shortcuts" class="block py-2 px-3 text-sm text-gray-400 hover:text-pink-400 rounded transition-colors">Shortcuts</a>
+    <a href="#community" class="block py-2 px-3 text-sm text-gray-400 hover:text-pink-400 rounded transition-colors">Community</a>
+    <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener"
+       class="block mt-2 py-2 px-3 text-sm font-semibold text-pink-400 border border-pink-400/30 rounded hover:bg-pink-400/10 transition-colors text-center">View on GitHub</a>
+  </div>
+</nav>
+
+
+<!-- ══════════════════ HERO ══════════════════ -->
+<section id="hero" class="relative min-h-screen flex items-center grid-bg overflow-hidden">
+  <!-- Blobs -->
+  <div class="hero-blob w-96 h-96 opacity-20" style="background:radial-gradient(circle,#fc95af,transparent);top:-10%;left:-5%;animation-delay:0s;"></div>
+  <div class="hero-blob w-64 h-64 opacity-10" style="background:radial-gradient(circle,#f97096,transparent);bottom:10%;right:5%;animation-delay:-3s;"></div>
+  <div class="hero-blob w-48 h-48 opacity-8" style="background:radial-gradient(circle,#fc95af,transparent);top:50%;left:50%;animation-delay:-5s;"></div>
+
+  <div class="relative z-10 max-w-6xl mx-auto px-6 py-32 md:py-40 text-center w-full">
+
+    <!-- Version badge -->
+    <div class="inline-flex items-center gap-2 mb-8 pixel-badge reveal" style="transition-delay:0.05s">
+      <span class="w-2 h-2 rounded-sm bg-pink-400 animate-pulse-slow inline-block"></span>
+      v4.2.5 — ACTIVE
+    </div>
+
+    <!-- Headline -->
+    <h1 class="text-5xl md:text-7xl lg:text-8xl font-black leading-none tracking-tight mb-6 reveal" style="transition-delay:0.1s">
+      <span class="block text-white">Debug Faster.</span>
+      <span class="block glow-pink" style="color:#fc95af">Build Smarter.</span>
+    </h1>
+
+    <!-- Subtext -->
+    <p class="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed reveal" style="transition-delay:0.2s">
+      Sp3arParvus is a performance-optimized, client-sided Lua debugging suite for Roblox developers.
+      Inspect environments, test interactions, and monitor performance — all in real-time.
+    </p>
+
+    <!-- CTAs -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 reveal" style="transition-delay:0.3s">
+      <button id="copy-loader" onclick="copyLoader()"
+        class="group flex items-center gap-3 px-7 py-4 rounded-lg font-bold text-sm tracking-wide transition-all duration-200"
+        style="background:#fc95af;color:#111;box-shadow:0 0 0 0 #fc95af44"
+        onmouseover="this.style.boxShadow='0 0 20px #fc95af55';this.style.transform='translateY(-2px)'"
+        onmouseout="this.style.boxShadow='0 0 0 0 #fc95af44';this.style.transform='translateY(0)'">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        <span id="copy-text">Copy Loader Script</span>
+      </button>
+
+      <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener"
+         class="flex items-center gap-2 px-7 py-4 rounded-lg border border-white/10 text-gray-300 text-sm font-semibold hover:border-pink-400/40 hover:text-pink-400 transition-all duration-200">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <!-- Loader code snippet -->
+    <div class="max-w-2xl mx-auto code-block py-4 px-5 reveal" style="transition-delay:0.4s">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="w-2.5 h-2.5 rounded-sm" style="background:#fc95af;opacity:0.6"></span>
+        <span class="text-xs text-gray-600 font-mono">Execute in your Roblox executor</span>
+      </div>
+      <code class="text-pink-400 font-mono text-xs sm:text-sm break-all leading-relaxed">
+        loadstring(game:HttpGet(<span class="text-gray-400">"https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua"</span>, <span class="text-pink-400">true</span>))()
+      </code>
+    </div>
+
+    <!-- Scroll hint -->
+    <div class="mt-20 flex justify-center animate-bounce">
+      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════ STATS ══════════════════ -->
+<section class="border-y border-white/5 py-16 bg-dark-200">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+      <div class="reveal">
+        <div class="stat-val" data-count="30">0</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Features</div>
+      </div>
+      <div class="reveal" style="transition-delay:0.1s">
+        <div class="stat-val" data-count="20">0</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Shortcut Keys</div>
+      </div>
+      <div class="reveal" style="transition-delay:0.2s">
+        <div class="stat-val" data-count="6">0</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Feature Tabs</div>
+      </div>
+      <div class="reveal" style="transition-delay:0.3s">
+        <div class="stat-val" style="font-size:2.5rem">MIT</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Open Source</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════ FEATURES ══════════════════ -->
+<section id="features" class="py-24 md:py-32">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Section Header -->
+    <div class="text-center mb-16 reveal">
+      <div class="pixel-badge mb-4">FEATURE SET</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
+        Everything a Developer Needs
+      </h2>
+      <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
+        A complete debugging and analytics ecosystem built directly into a clean, lightweight Lua script.
+      </p>
+    </div>
+
+    <!-- Feature Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+      <!-- Tracking -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.05s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">Camera Tracking Assistant</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Smoothing-based viewport tracking to automatically focus the camera on nearby targets, simulating real player focus dynamics.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">Attraction Strength</span>
+          <span class="badge">FOV Radius</span>
+          <span class="badge">Dampening</span>
+        </div>
+      </div>
+
+      <!-- Visuals -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.1s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">Visuals &amp; Analytics</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Full hitbox rendering, player tags with distance sorting, health HUD, equipped item viewer, and world lighting modifiers.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">ESP</span>
+          <span class="badge">Health HUD</span>
+          <span class="badge">Fullbright</span>
+        </div>
+      </div>
+
+      <!-- Humanoid -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.15s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">Humanoid Editor</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Override your LocalPlayer's humanoid properties — WalkSpeed, JumpPower, MaxSlopeAngle — to test movement edge cases instantly.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">WalkSpeed</span>
+          <span class="badge">JumpPower</span>
+          <span class="badge">MaxSlope</span>
+        </div>
+      </div>
+
+      <!-- World Humanoids -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.2s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">World Humanoid Editor</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Edit properties of any non-local Humanoid or NPC to test AI behavior, movement limits, and replication boundaries in real-time.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">NPC Control</span>
+          <span class="badge">AI Testing</span>
+        </div>
+      </div>
+
+      <!-- Player Page -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.25s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">PlayerPage</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Comprehensive player management: whitelist/blacklist, data explorer, team info, settings per player, and spectating for replication testing.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">Whitelist</span>
+          <span class="badge">Spectate</span>
+          <span class="badge">Data Explorer</span>
+        </div>
+      </div>
+
+      <!-- Dev Utilities -->
+      <div class="feature-card p-6 reveal" style="transition-delay:0.3s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:#fc95af15;border:1px solid #fc95af33">
+          <svg class="w-5 h-5" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <h3 class="text-white font-bold text-lg mb-2">Developer Utilities</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">Br3ak3r collision debugger, H1ghL1ghter path finder, D3v Tool HUD, Free-cam, Waypoint system, Anti-AFK, Q-Teleport, and more.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="badge">Br3ak3r</span>
+          <span class="badge">Free-cam</span>
+          <span class="badge">Waypoints</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════ SHOWCASE ══════════════════ -->
+<section id="showcase" class="py-24 md:py-32 bg-dark-200 border-y border-white/5">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-16 reveal">
+      <div class="pixel-badge mb-4">UI SHOWCASE</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
+        See It in Action
+      </h2>
+      <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
+        A clean, dark-mode interface with instant toggles, numeric controls, and a tab-driven workspace explorer.
+      </p>
+    </div>
+
+    <!-- Two-column layout: explorer + screenshot -->
+    <div class="flex flex-col lg:flex-row gap-6 reveal">
+
+      <!-- Explorer Sidebar -->
+      <div class="lg:w-56 flex-shrink-0">
+        <div class="bg-dark-100 border border-white/5 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-white/5 flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+            <span class="text-gray-600 text-xs font-mono">Sp3arParvus</span>
+          </div>
+          <div class="py-2" id="explorer-nav">
+            <div class="explorer-item active" data-tab="tracking" onclick="switchTab('tracking', this)">
+              <span class="dot" style="background:#fc95af"></span>
+              Tracking
+            </div>
+            <div class="explorer-item" data-tab="visuals" onclick="switchTab('visuals', this)">
+              <span class="dot" style="background:#a78bfa"></span>
+              Visuals
+            </div>
+            <div class="explorer-item" data-tab="humanoid" onclick="switchTab('humanoid', this)">
+              <span class="dot" style="background:#34d399"></span>
+              Humanoid
+            </div>
+            <div class="explorer-item" data-tab="world" onclick="switchTab('world', this)">
+              <span class="dot" style="background:#fbbf24"></span>
+              WorldHumanoids
+            </div>
+            <div class="explorer-item" data-tab="playerpage" onclick="switchTab('playerpage', this)">
+              <span class="dot" style="background:#60a5fa"></span>
+              PlayerPage
+            </div>
+            <div class="explorer-item" data-tab="devtools" onclick="switchTab('devtools', this)">
+              <span class="dot" style="background:#f87171"></span>
+              Dev Tools
+            </div>
+          </div>
+        </div>
+
+        <!-- Safe mode tip -->
+        <div class="mt-4 tip-card">
+          <p class="relative text-xs text-gray-400 leading-relaxed">
+            <span class="font-bold text-pink-400">SAFE_MODE</span> flag available at the top of the script. Set to <code class="font-mono text-pink-400">true</code> to disable high-risk features during routine testing.
+          </p>
+        </div>
+      </div>
+
+      <!-- Screenshot Panel -->
+      <div class="flex-1 min-w-0">
+        <!-- Tab Buttons (mobile/overflow) -->
+        <div class="flex gap-2 overflow-x-auto pb-2 mb-4 lg:hidden" id="tab-buttons-mobile">
+          <button class="tab-btn active" data-tab="tracking" onclick="switchTab('tracking', this)">Tracking</button>
+          <button class="tab-btn" data-tab="visuals" onclick="switchTab('visuals', this)">Visuals</button>
+          <button class="tab-btn" data-tab="humanoid" onclick="switchTab('humanoid', this)">Humanoid</button>
+          <button class="tab-btn" data-tab="world" onclick="switchTab('world', this)">WorldHumanoids</button>
+          <button class="tab-btn" data-tab="playerpage" onclick="switchTab('playerpage', this)">PlayerPage</button>
+          <button class="tab-btn" data-tab="devtools" onclick="switchTab('devtools', this)">DevTools</button>
+        </div>
+
+        <!-- Tab Panels -->
+        <div id="tab-panels">
+
+          <!-- Tracking -->
+          <div class="tab-panel active" id="panel-tracking">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/Tracking.png" alt="Tracking tab — Camera Tracking Assistant controls" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-pink-400 font-bold text-sm mb-1">Attraction Strength</div>
+                <div class="text-gray-500 text-xs">Numeric control for how strongly the camera is pulled toward targets.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-pink-400 font-bold text-sm mb-1">FOV Radius</div>
+                <div class="text-gray-500 text-xs">Sets the field-of-view cone used for target detection.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-pink-400 font-bold text-sm mb-1">Visibility Check</div>
+                <div class="text-gray-500 text-xs">Raycast-based LOS validation before locking onto targets.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visuals -->
+          <div class="tab-panel" id="panel-visuals">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/Visuals.png" alt="Visuals tab — ESP and HUD controls" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-purple-400 font-bold text-sm mb-1">Distance Colors</div>
+                <div class="text-gray-500 text-xs">Pink → Red → Yellow → Green proximity-based color coding.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-purple-400 font-bold text-sm mb-1">Health HUD</div>
+                <div class="text-gray-500 text-xs">Real-time health bars and numerical display on player nametags.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-purple-400 font-bold text-sm mb-1">Gh0st Mode</div>
+                <div class="text-gray-500 text-xs">Cleans obstructive UI for a distraction-free debug session.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Humanoid -->
+          <div class="tab-panel" id="panel-humanoid">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/Humanoid.png" alt="Humanoid editor controls" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-green-400 font-bold text-sm mb-1">WalkSpeed Override</div>
+                <div class="text-gray-500 text-xs">Instantly set LocalPlayer movement speed for edge-case testing.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-green-400 font-bold text-sm mb-1">JumpPower</div>
+                <div class="text-gray-500 text-xs">Modify jump force to validate platforming mechanics.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-green-400 font-bold text-sm mb-1">MaxSlopeAngle</div>
+                <div class="text-gray-500 text-xs">Test terrain traversal limits and climbable surface thresholds.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- World Humanoids -->
+          <div class="tab-panel" id="panel-world">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/WorldHumanoids.png" alt="World Humanoids editor" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-yellow-400 font-bold text-sm mb-1">NPC Properties</div>
+                <div class="text-gray-500 text-xs">Edit any non-local Humanoid's stats in real-time.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-yellow-400 font-bold text-sm mb-1">AI Behavior Test</div>
+                <div class="text-gray-500 text-xs">Validate AI pathfinding and response under different conditions.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-yellow-400 font-bold text-sm mb-1">Replication Check</div>
+                <div class="text-gray-500 text-xs">Observe how changes replicate to other connected clients.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Player Page -->
+          <div class="tab-panel" id="panel-playerpage">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+              <div class="screenshot-frame col-span-2 sm:col-span-2">
+                <img src="UI-Images/PlayerPage/PlayerPage-Main.png" alt="PlayerPage main view" loading="lazy" />
+              </div>
+              <div class="flex flex-col gap-3">
+                <div class="screenshot-frame flex-1">
+                  <img src="UI-Images/PlayerPage/PlayerPage-Settings.png" alt="PlayerPage settings" loading="lazy" />
+                </div>
+                <div class="screenshot-frame flex-1">
+                  <img src="UI-Images/PlayerPage/PlayerPage-Teams.png" alt="PlayerPage teams" loading="lazy" />
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-blue-400 font-bold text-sm mb-1">Data Explorer</div>
+                <div class="text-gray-500 text-xs">Deep-dive into any player's replicated data and instance properties.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-blue-400 font-bold text-sm mb-1">Whitelist / Blacklist</div>
+                <div class="text-gray-500 text-xs">Manage player-specific rules for moderation and replication testing.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-blue-400 font-bold text-sm mb-1">Spectate Mode</div>
+                <div class="text-gray-500 text-xs">Lock camera to any player to observe their experience directly.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dev Tools -->
+          <div class="tab-panel" id="panel-devtools">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/DevTools.png" alt="Developer tools panel" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-red-400 font-bold text-sm mb-1">Br3ak3r</div>
+                <div class="text-gray-500 text-xs">Isolate map geometry, remove obstacles, debug collision layers.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-red-400 font-bold text-sm mb-1">H1ghL1ghter</div>
+                <div class="text-gray-500 text-xs">Highlight parts and retrieve their full workspace paths instantly.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-red-400 font-bold text-sm mb-1">D3v Tool HUD</div>
+                <div class="text-gray-500 text-xs">Real-time World Time, LPC, and Mouse Coordinates overlay.</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /tab-panels -->
+      </div><!-- /screenshot panel -->
+    </div><!-- /flex row -->
+
+    <!-- Additional PlayerPage screenshots row -->
+    <div class="mt-8 reveal">
+      <p class="text-gray-600 text-xs font-mono mb-3 uppercase tracking-widest">PlayerPage — Data Explorer Views</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="screenshot-frame">
+          <img src="UI-Images/PlayerPage/PlayerPage-DataExplorer-1.png" alt="Data Explorer view 1" loading="lazy" />
+        </div>
+        <div class="screenshot-frame">
+          <img src="UI-Images/PlayerPage/PlayerPage-DataExplorer-2.png" alt="Data Explorer view 2" loading="lazy" />
+        </div>
+        <div class="screenshot-frame">
+          <img src="UI-Images/PlayerPage/PlayerPage-DataExplorer-3.png" alt="Data Explorer view 3" loading="lazy" />
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════ WORKFLOW ══════════════════ -->
+<section id="workflow" class="py-24 md:py-32">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-16 reveal">
+      <div class="pixel-badge mb-4">DEVELOPER WORKFLOW</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
+        Speed Up Your Debug Loop
+      </h2>
+      <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
+        Pro tips and power-user strategies for getting the most out of Sp3arParvus in live environments.
+      </p>
+    </div>
+
+    <!-- Getting Started Steps -->
+    <div class="mb-16">
+      <h3 class="text-white font-bold text-xl mb-6 reveal">Getting Started in 3 Steps</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+        <div class="feature-card p-6 reveal" style="transition-delay:0.05s">
+          <div class="step-num mb-4">01</div>
+          <h4 class="text-white font-semibold text-base mb-2">Copy the Loader</h4>
+          <p class="text-gray-500 text-sm leading-relaxed">Grab the single-line <code class="text-pink-400 font-mono text-xs">loadstring</code> from above. No dependencies, no installation — just paste and execute.</p>
+        </div>
+
+        <div class="feature-card p-6 reveal" style="transition-delay:0.1s">
+          <div class="step-num mb-4">02</div>
+          <h4 class="text-white font-semibold text-base mb-2">Execute &amp; Configure</h4>
+          <p class="text-gray-500 text-sm leading-relaxed">Run the script in your Roblox testing environment. The UI loads instantly. Toggle <code class="text-pink-400 font-mono text-xs">CapsLock</code> to show/hide the menu.</p>
+        </div>
+
+        <div class="feature-card p-6 reveal" style="transition-delay:0.15s">
+          <div class="step-num mb-4">03</div>
+          <h4 class="text-white font-semibold text-base mb-2">Navigate with Shortcuts</h4>
+          <p class="text-gray-500 text-sm leading-relaxed">Every feature has a dedicated keybind. Use <code class="text-pink-400 font-mono text-xs">Ctrl+K</code> for PlayerPage, <code class="text-pink-400 font-mono text-xs">Ctrl+P</code> for Free-cam, and more.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Pro Tips -->
+    <div class="mb-16 reveal">
+      <h3 class="text-white font-bold text-xl mb-6">Pro Tips for Live Environments</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <div class="tip-card reveal" style="transition-delay:0.05s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">💡</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Enable SAFE_MODE during routine testing</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Set <code class="text-pink-400 font-mono">SAFE_MODE = true</code> at the top of the script to disable high-risk input simulation features and reduce false-positive anti-cheat triggers.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card reveal" style="transition-delay:0.1s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">🎯</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Use Q-Teleport for rapid map traversal</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Press <code class="text-pink-400 font-mono">Ctrl+Q</code> to teleport instantly to your mouse cursor position. Pair with Free-cam (<code class="text-pink-400 font-mono">Ctrl+P</code>) to scout large maps in seconds.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card reveal" style="transition-delay:0.15s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">🔍</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Combine H1ghL1ghter with the Data Explorer</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Highlight a part with <code class="text-pink-400 font-mono">Ctrl+Shift+LClick</code> to get its workspace path, then use the PlayerPage Data Explorer to drill into its properties without leaving the game.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card reveal" style="transition-delay:0.2s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">⚡</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Use Waypoints as debug checkpoints</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Create waypoints at crash-prone locations with <code class="text-pink-400 font-mono">Ctrl+MMB</code>. Teleport back instantly with <code class="text-pink-400 font-mono">Ctrl+Y</code> to reproduce bugs consistently.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card reveal" style="transition-delay:0.25s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">🌐</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Test under extreme lighting with one key</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Toggle Fullbright (<code class="text-pink-400 font-mono">Ctrl+F</code>) or FullDark (<code class="text-pink-400 font-mono">Ctrl+N</code>) to instantly validate UI visibility and game logic under extreme conditions.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card reveal" style="transition-delay:0.3s">
+          <div class="relative flex gap-3">
+            <span class="text-pink-400 text-lg flex-shrink-0">🛡️</span>
+            <div>
+              <p class="text-white font-semibold text-sm mb-1">Anti-AFK keeps sessions alive</p>
+              <p class="text-gray-500 text-xs leading-relaxed">Enable the built-in Anti-AFK mechanism to prevent idle disconnections during long observation sessions, replication studies, or performance profiling runs.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Performance Monitor callout -->
+    <div class="feature-card p-8 flex flex-col md:flex-row items-start md:items-center gap-6 reveal">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#fc95af12;border:1px solid #fc95af33">
+        <svg class="w-6 h-6" style="color:#fc95af" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+      </div>
+      <div class="flex-1">
+        <h4 class="text-white font-bold text-lg mb-2">Built-in Performance Monitor</h4>
+        <p class="text-gray-500 text-sm leading-relaxed">Real-time FPS, ping, memory usage, and custom object counts (Broken/Highlighted instances) are always available in the Performance Monitor panel. No external profiler needed.</p>
+      </div>
+      <div class="flex items-center gap-4 flex-shrink-0">
+        <div class="text-center">
+          <div class="text-pink-400 font-black text-2xl font-mono">FPS</div>
+          <div class="text-gray-600 text-xs">Live</div>
+        </div>
+        <div class="text-center">
+          <div class="text-pink-400 font-black text-2xl font-mono">MS</div>
+          <div class="text-gray-600 text-xs">Ping</div>
+        </div>
+        <div class="text-center">
+          <div class="text-pink-400 font-black text-2xl font-mono">MB</div>
+          <div class="text-gray-600 text-xs">Memory</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════ SHORTCUTS ══════════════════ -->
+<section id="shortcuts" class="py-24 md:py-32 bg-dark-200 border-y border-white/5">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-16 reveal">
+      <div class="pixel-badge mb-4">SHORTCUT REFERENCE</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
+        Every Key, Mapped
+      </h2>
+      <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
+        Sp3arParvus is built for keyboard-first workflows. Memorize these and your debug speed will 10×.
+      </p>
+    </div>
+
+    <!-- Shortcut screenshot -->
+    <div class="max-w-2xl mx-auto mb-12 reveal">
+      <div class="screenshot-frame">
+        <img src="UI-Images/Shortcuts.png" alt="Sp3arParvus shortcuts reference" loading="lazy" />
+      </div>
+    </div>
+
+    <!-- Shortcut groups -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- UI & Config -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.05s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#fc95af"></span>
+          <span class="text-white font-semibold text-sm">UI &amp; Configuration</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">CapsLock</kbd>
+            <span class="text-gray-400 text-sm flex-1">Toggle menu visibility</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">-</kbd>
+            <span class="text-gray-400 text-sm flex-1">Minimize / Maximize menu</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">G</kbd>
+            <span class="text-gray-400 text-sm flex-1">Gh0st Mode</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">R</kbd>
+            <span class="text-gray-400 text-sm flex-1">Rejoin server</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">R</kbd>
+            <span class="text-gray-400 text-sm flex-1">Complete reload</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">U</kbd>
+            <span class="text-gray-400 text-sm flex-1">Unload Sp3arParvus</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interaction & Testing -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.1s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#a78bfa"></span>
+          <span class="text-white font-semibold text-sm">Interaction &amp; Testing</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">~</kbd>
+            <span class="text-gray-400 text-sm flex-1">Toggle Camera Tracking</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">RMB</kbd>
+            <span class="text-gray-400 text-sm flex-1">Hold to lock-on (when Always Active is OFF)</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Q</kbd>
+            <span class="text-gray-400 text-sm flex-1">Q-Teleport to mouse position</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Y</kbd>
+            <span class="text-gray-400 text-sm flex-1">Teleport to last waypoint</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">H</kbd>
+            <span class="text-gray-400 text-sm flex-1">Toggle Full-Body Camera Tracking</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">↑↓←→</kbd>
+            <span class="text-gray-400 text-sm flex-1">Position-Force direction</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visuals -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.15s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#34d399"></span>
+          <span class="text-white font-semibold text-sm">Visuals &amp; Analytics</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">E</kbd>
+            <span class="text-gray-400 text-sm flex-1">Any-Item-ESP</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">F</kbd>
+            <span class="text-gray-400 text-sm flex-1">Fullbright</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">N</kbd>
+            <span class="text-gray-400 text-sm flex-1">FullDark</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">P</kbd>
+            <span class="text-gray-400 text-sm flex-1">Free-cam toggle</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dev Utilities -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.2s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#f87171"></span>
+          <span class="text-white font-semibold text-sm">Developer Utilities</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">K</kbd>
+            <span class="text-gray-400 text-sm flex-1">PlayerPage</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">J</kbd>
+            <span class="text-gray-400 text-sm flex-1">Item Panel</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">.</kbd>
+            <span class="text-gray-400 text-sm flex-1">D3v Tool HUD</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
+            <span class="text-gray-400 text-sm flex-1">Br3ak3r — break object</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Z</kbd>
+            <span class="text-gray-400 text-sm flex-1">Undo last break</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
+            <span class="text-gray-400 text-sm flex-1">H1ghL1ghter — highlight part</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+  </div>
+</section>
+
+
+<!-- ══════════════════ COMMUNITY ══════════════════ -->
+<section id="community" class="py-24 md:py-32">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <div class="text-center mb-16 reveal">
+      <div class="pixel-badge mb-4">COMMUNITY</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
+        Join the Developer Community
+      </h2>
+      <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
+        Contribute, report bugs, request features, and discuss Lua development with other builders.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+      <!-- Discord -->
+      <a href="https://discord.gg/KJuxMnBFqB" target="_blank" rel="noopener"
+         class="feature-card p-6 flex flex-col gap-4 reveal no-underline group" style="transition-delay:0.05s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#5865F218;border:1px solid #5865F233">
+          <svg class="w-5 h-5" style="color:#5865F2" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/></svg>
+        </div>
+        <div>
+          <div class="text-white font-bold text-base mb-1 group-hover:text-pink-400 transition-colors">Discord Server</div>
+          <p class="text-gray-500 text-sm">Real-time help, suggestions, and dev discussion.</p>
+        </div>
+        <div class="mt-auto text-gray-600 text-xs flex items-center gap-1">
+          discord.gg/KJuxMnBFqB
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        </div>
+      </a>
+
+      <!-- GitHub -->
+      <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener"
+         class="feature-card p-6 flex flex-col gap-4 reveal no-underline group" style="transition-delay:0.1s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#ffffff10;border:1px solid #ffffff18">
+          <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </div>
+        <div>
+          <div class="text-white font-bold text-base mb-1 group-hover:text-pink-400 transition-colors">GitHub Repository</div>
+          <p class="text-gray-500 text-sm">Star, fork, and contribute to the open-source codebase.</p>
+        </div>
+        <div class="mt-auto text-gray-600 text-xs flex items-center gap-1">
+          JakeHukari/Sp3arParvus
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        </div>
+      </a>
+
+      <!-- Bug Report -->
+      <a href="https://github.com/JakeHukari/Sp3arParvus/issues/new?template=bug_report.md" target="_blank" rel="noopener"
+         class="feature-card p-6 flex flex-col gap-4 reveal no-underline group" style="transition-delay:0.15s">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#f8717118;border:1px solid #f8717133">
+          <svg class="w-5 h-5" style="color:#f87171" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-white font-bold text-base mb-1 group-hover:text-pink-400 transition-colors">Report a Bug</div>
+          <p class="text-gray-500 text-sm">Found an issue? Use the structured bug report template.</p>
+        </div>
+        <div class="mt-auto text-gray-600 text-xs flex items-center gap-1">
+          Open an Issue
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        </div>
+      </a>
+
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="mt-12 p-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5 reveal">
+      <div class="flex gap-3">
+        <svg class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div>
+          <p class="text-yellow-500 font-semibold text-sm mb-1">Educational &amp; Development Purposes Only</p>
+          <p class="text-gray-500 text-xs leading-relaxed">Sp3arParvus is strictly intended for game developers, QA testers, and researchers to understand Lua environment interactions, test anti-cheat measures, and debug their own games. Misuse of this tool on games where you lack explicit permission may violate Terms of Service.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════ FOOTER ══════════════════ -->
+<footer class="border-t border-white/5 py-12">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="text-center md:text-left">
+        <div class="pixel-logo mb-2">SP3ARPARVUS</div>
+        <p class="text-gray-600 text-xs">Advanced Lua Debugging Suite · v4.2.5</p>
+      </div>
+      <div class="flex items-center gap-6 text-sm">
+        <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://discord.gg/KJuxMnBFqB" target="_blank" rel="noopener">Discord</a>
+        <a href="https://github.com/JakeHukari/Sp3arParvus/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        <a href="https://github.com/JakeHukari" target="_blank" rel="noopener">@JakeHukari</a>
+      </div>
+    </div>
+    <div class="pink-divider my-8"></div>
+    <div class="flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+      <p>Made by <a href="https://github.com/JakeHukari" class="hover:text-pink-400 transition-colors">JakeHukari</a> · Special thanks to <a href="https://github.com/AlexR32" class="hover:text-pink-400 transition-colors">@AlexR32</a> (creator of Parvus)</p>
+      <p>Built with ♥ for the Roblox developer community</p>
+    </div>
+  </div>
+</footer>
+
+
+<!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
+<script>
+// ── Navbar scroll effect ──
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 40);
+}, { passive: true });
+
+// ── Mobile hamburger ──
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+hamburger.addEventListener('click', () => {
+  const isOpen = mobileMenu.classList.toggle('open');
+  hamburger.setAttribute('aria-expanded', isOpen.toString());
+});
+// Close on mobile link click
+mobileMenu.querySelectorAll('a').forEach(a => {
+  a.addEventListener('click', () => mobileMenu.classList.remove('open'));
+});
+
+// ── Scroll-spy ──
+const sections = ['hero','features','showcase','workflow','shortcuts','community'];
+const navLinks = {};
+sections.forEach(id => {
+  const el = document.getElementById('nav-' + id);
+  if (el) navLinks[id] = el;
+});
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      Object.values(navLinks).forEach(l => l && l.classList.remove('active'));
+      const link = navLinks[entry.target.id];
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.3, rootMargin: '-60px 0px 0px 0px' });
+
+sections.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) observer.observe(el);
+});
+
+// ── Reveal on scroll ──
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ── Count-up animation ──
+function animateCount(el) {
+  const target = parseInt(el.dataset.count);
+  if (!target) return;
+  let start = 0;
+  const duration = 1200;
+  const step = (timestamp) => {
+    if (!step.startTime) step.startTime = timestamp;
+    const progress = Math.min((timestamp - step.startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.floor(eased * target) + (progress < 1 ? '' : '+');
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const statObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      animateCount(entry.target);
+      statObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.5 });
+document.querySelectorAll('[data-count]').forEach(el => statObserver.observe(el));
+
+// ── Tab switcher ──
+function switchTab(tabName, clickedEl) {
+  // Update all explorer items
+  document.querySelectorAll('.explorer-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.tab === tabName);
+  });
+  // Update mobile tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  // Show/hide panels
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === 'panel-' + tabName);
+  });
+}
+
+// ── Copy loader script ──
+function copyLoader() {
+  const script = `loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()`;
+  navigator.clipboard.writeText(script).then(() => {
+    const btn = document.getElementById('copy-loader');
+    const txt = document.getElementById('copy-text');
+    txt.textContent = '✓ Copied!';
+    btn.style.background = '#22c55e';
+    btn.style.color = '#fff';
+    setTimeout(() => {
+      txt.textContent = 'Copy Loader Script';
+      btn.style.background = '#fc95af';
+      btn.style.color = '#111';
+    }, 2200);
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = script;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const txt = document.getElementById('copy-text');
+    txt.textContent = '✓ Copied!';
+    setTimeout(() => { txt.textContent = 'Copy Loader Script'; }, 2200);
+  });
+}
+
+// ── Smooth reveal trigger for already-visible elements on load ──
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.reveal').forEach(el => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight) el.classList.add('visible');
+  });
+});
+</script>
+
+</body>
+</html>
