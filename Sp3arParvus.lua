@@ -1,12 +1,11 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
--- ║            Sp3arParvus — Developer Tool WITH EXPAND UI           ║
+-- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
 -- ║  Version: 4.2.5                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
 local VERSION = "4.2.5" -- Shortcuts Page Update, Performance Update, and Closest-Player-Panel Settings Update
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
-local FULL_EXPAND_UI = false -- ←FullExpandUI Flag, Change 'false' to 'true' before executing to automatically expand all scroll-able pages to their maximum length (negating scrollbars for screenshots)
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
 MAX_INIT_WAIT = 30
@@ -2316,20 +2315,18 @@ function UI.CreateWindow(title)
     MainFrame.BackgroundColor3 = UI_THEME.Background
     MainFrame.BorderSizePixel = 0
     MainFrame.Visible = UIState.Visible
-    MainFrame.ClipsDescendants = not FULL_EXPAND_UI
+    MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
 
     local mainConstraint = Instance.new("UISizeConstraint")
     mainConstraint.MinSize = Vector2.new(420, 280)
-    mainConstraint.MaxSize = FULL_EXPAND_UI and Vector2.new(650, 99999) or Vector2.new(650, 450)
+    mainConstraint.MaxSize = Vector2.new(650, 450)
     mainConstraint.Parent = MainFrame
 
-    if not FULL_EXPAND_UI then
-        local aspect = Instance.new("UIAspectRatioConstraint")
-        aspect.AspectRatio = 1.5
-        aspect.DominantAxis = Enum.DominantAxis.Width
-        aspect.Parent = MainFrame
-    end
+    local aspect = Instance.new("UIAspectRatioConstraint")
+    aspect.AspectRatio = 1.5
+    aspect.DominantAxis = Enum.DominantAxis.Width
+    aspect.Parent = MainFrame
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -2452,7 +2449,7 @@ function UI.CreateWindow(title)
     ContentArea.Size = UDim2.new(0.72, 0, 1, -20) -- Responsive width
     ContentArea.Position = UDim2.new(0.28, 0, 0, 10)
     ContentArea.BackgroundTransparency = 1
-    ContentArea.ClipsDescendants = not FULL_EXPAND_UI
+    ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
     
     UIState.MainFrame = MainFrame
@@ -2660,24 +2657,6 @@ function UI.CreateWindow(title)
     return UI
 end
 
--- Helper function to resize window to fit page layout when FULL_EXPAND_UI is enabled
-local function resizeWindowToFit(pageLayout)
-    if not FULL_EXPAND_UI or not UIState.MainFrame then return end
-    
-    local page = pageLayout.Parent
-    if page and page:IsA("ScrollingFrame") then
-        page.ScrollBarThickness = 0
-    end
-    
-    local contentHeight = pageLayout.AbsoluteContentSize.Y
-    local targetHeight = contentHeight + 20
-    
-    -- Ensure a minimum height so it doesn't shrink too small
-    targetHeight = math.max(280, targetHeight)
-    
-    UIState.MainFrame.Size = UDim2.new(UIState.MainFrame.Size.X.Scale, UIState.MainFrame.Size.X.Offset, 0, targetHeight)
-end
-
 function UI.CreateTab(name, icon)
     local TabButton = Instance.new("TextButton")
     TabButton.Name = name .. "Tab"
@@ -2713,7 +2692,7 @@ function UI.CreateTab(name, icon)
     Page.Size = UDim2.new(1, 0, 1, 0)
     Page.BackgroundTransparency = 1
     Page.BorderSizePixel = 0
-    Page.ScrollBarThickness = FULL_EXPAND_UI and 0 or 2
+    Page.ScrollBarThickness = 2
     Page.Visible = false
     Page.Parent = UIState.ContentArea
     
@@ -2725,9 +2704,6 @@ function UI.CreateTab(name, icon)
     
     TrackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         Page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI and Page.Visible then
-            resizeWindowToFit(layout)
-        end
     end))
     
     local padding = Instance.new("UIPadding")
@@ -2747,9 +2723,6 @@ function UI.CreateTab(name, icon)
         TweenService:Create(Indicator, TWEENS.MEDIUM, {BackgroundTransparency = 0}):Play()
         Page.Visible = true
         UIState.CurrentTab = name
-        if FULL_EXPAND_UI then
-            resizeWindowToFit(layout)
-        end
     end
 
     -- MEMORY LEAK FIX: Track tab button connection
@@ -4986,14 +4959,6 @@ function InitializePlayerPage(page)
 
     TrackConnection(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         listContent.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI then
-            listContent.ScrollBarThickness = 0
-            listContent.Size = UDim2.new(1, -10, 0, listLayout.AbsoluteContentSize.Y)
-            ListFrame.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y + 85)
-            if listContent.Parent and listContent.Parent.Parent then
-                listContent.Parent.Parent.Size = UDim2.new(1, 0, 0, listLayout.AbsoluteContentSize.Y + 120)
-            end
-        end
     end))
 
     -- Details View
@@ -5084,19 +5049,6 @@ function InitializePlayerPage(page)
     
     TrackConnection(detailsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         detailsContent.CanvasSize = UDim2.new(0, 0, 0, detailsLayout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI then
-            detailsContent.ScrollBarThickness = 0
-            detailsContent.Size = UDim2.new(1, -10, 0, detailsLayout.AbsoluteContentSize.Y)
-            local propFrame = AdvancedPlayerPanelUI.PropertyFrame
-            local propFrameHeight = (propFrame and propFrame.Visible) and propFrame.Size.Y.Offset or 0
-            DetailsFrame.Size = UDim2.new(1, 0, 0, 46 + detailsLayout.AbsoluteContentSize.Y + propFrameHeight + 10)
-            if propFrame and propFrame.Visible then
-                propFrame.Position = UDim2.fromOffset(5, 46 + detailsLayout.AbsoluteContentSize.Y + 5)
-            end
-            if detailsContent.Parent and detailsContent.Parent.Parent then
-                detailsContent.Parent.Parent.Size = UDim2.new(1, 0, 0, DetailsFrame.Size.Y.Offset + 35)
-            end
-        end
     end))
 
     local detailsPadding = Instance.new("UIPadding")
@@ -5121,19 +5073,6 @@ function InitializePlayerPage(page)
     expLayout.Parent = explorerContent
     TrackConnection(expLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         explorerContent.CanvasSize = UDim2.new(0, 0, 0, expLayout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI then
-            explorerContent.ScrollBarThickness = 0
-            explorerContent.Size = UDim2.new(1, -10, 0, expLayout.AbsoluteContentSize.Y)
-            local propFrame = AdvancedPlayerPanelUI.PropertyFrame
-            local propFrameHeight = (propFrame and propFrame.Visible) and propFrame.Size.Y.Offset or 0
-            DetailsFrame.Size = UDim2.new(1, 0, 0, 46 + expLayout.AbsoluteContentSize.Y + propFrameHeight + 10)
-            if propFrame and propFrame.Visible then
-                propFrame.Position = UDim2.fromOffset(5, 46 + expLayout.AbsoluteContentSize.Y + 5)
-            end
-            if explorerContent.Parent and explorerContent.Parent.Parent then
-                explorerContent.Parent.Parent.Size = UDim2.new(1, 0, 0, DetailsFrame.Size.Y.Offset + 35)
-            end
-        end
     end))
 
     local propertyFrame = Instance.new("Frame")
@@ -5195,27 +5134,6 @@ function InitializePlayerPage(page)
     pLayout.Parent = propertyContent
     TrackConnection(pLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         propertyContent.CanvasSize = UDim2.new(0, 0, 0, pLayout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI then
-            propertyContent.ScrollBarThickness = 0
-            propertyContent.Size = UDim2.new(1, -10, 0, pLayout.AbsoluteContentSize.Y)
-            propertyFrame.Size = UDim2.new(1, -10, 0, pLayout.AbsoluteContentSize.Y + 30)
-            -- Force parent updates
-            if detailsContent.Visible then
-                detailsContent.Size = UDim2.new(1, -10, 0, detailsLayout.AbsoluteContentSize.Y)
-                DetailsFrame.Size = UDim2.new(1, 0, 0, 46 + detailsLayout.AbsoluteContentSize.Y + propertyFrame.Size.Y.Offset + 10)
-                propertyFrame.Position = UDim2.fromOffset(5, 46 + detailsLayout.AbsoluteContentSize.Y + 5)
-                if DetailsFrame.Parent then
-                    DetailsFrame.Parent.Size = UDim2.new(1, 0, 0, DetailsFrame.Size.Y.Offset + 35)
-                end
-            elseif explorerContent.Visible then
-                explorerContent.Size = UDim2.new(1, -10, 0, expLayout.AbsoluteContentSize.Y)
-                DetailsFrame.Size = UDim2.new(1, 0, 0, 46 + expLayout.AbsoluteContentSize.Y + propertyFrame.Size.Y.Offset + 10)
-                propertyFrame.Position = UDim2.fromOffset(5, 46 + expLayout.AbsoluteContentSize.Y + 5)
-                if DetailsFrame.Parent then
-                    DetailsFrame.Parent.Size = UDim2.new(1, 0, 0, DetailsFrame.Size.Y.Offset + 35)
-                end
-            end
-        end
     end))
 
     AdvancedPlayerPanelUI.PropertyFrame = propertyFrame
@@ -5249,14 +5167,6 @@ function InitializePlayerPage(page)
 
     TrackConnection(teamLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         teamContent.CanvasSize = UDim2.new(0, 0, 0, teamLayout.AbsoluteContentSize.Y)
-        if FULL_EXPAND_UI then
-            teamContent.ScrollBarThickness = 0
-            teamContent.Size = UDim2.new(1, -10, 0, teamLayout.AbsoluteContentSize.Y)
-            TeamFrame.Size = UDim2.new(1, 0, 0, teamLayout.AbsoluteContentSize.Y + 46)
-            if teamContent.Parent and teamContent.Parent.Parent then
-                teamContent.Parent.Parent.Size = UDim2.new(1, 0, 0, teamLayout.AbsoluteContentSize.Y + 81)
-            end
-        end
     end))
 
     AdvancedPlayerPanelUI.ListFrame = ListFrame
@@ -5294,14 +5204,6 @@ function InitializePlayerPage(page)
 
     TrackConnection(settingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         settingsContent.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 20)
-        if FULL_EXPAND_UI then
-            settingsContent.ScrollBarThickness = 0
-            settingsContent.Size = UDim2.new(1, -10, 0, settingsLayout.AbsoluteContentSize.Y + 20)
-            SettingsFrame.Size = UDim2.new(1, 0, 0, settingsLayout.AbsoluteContentSize.Y + 30)
-            if settingsContent.Parent and settingsContent.Parent.Parent then
-                settingsContent.Parent.Parent.Size = UDim2.new(1, 0, 0, settingsLayout.AbsoluteContentSize.Y + 65)
-            end
-        end
     end))
 
     UI.CreateSection(settingsContent, "Targeting Rules for blacklisted (☠️) players")
