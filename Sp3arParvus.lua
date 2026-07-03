@@ -130,6 +130,7 @@ local Flags = {
     ["ESP/PlayerOutlines"] = true,
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
+    ["Visuals/UIScale"] = 1,
     ["LocalUI/PerformancePanel"] = true,
     ["LocalUI/LocalHealthIndicator"] = true,
     ["LocalUI/ClosestPlayerTracker"] = true,
@@ -2302,6 +2303,17 @@ function UI.Notify(title, text, duration)
     end)
 end
 
+local function ApplyUIScale(frame, scale)
+    if not frame then return end
+    local uiScale = frame:FindFirstChild("MenuScale")
+    if not uiScale then
+        uiScale = Instance.new("UIScale")
+        uiScale.Name = "MenuScale"
+        uiScale.Parent = frame
+    end
+    uiScale.Scale = scale
+end
+
 function UI.CreateWindow(title)
     -- Destroy old instances
     EnsureScreenGui()
@@ -2317,6 +2329,8 @@ function UI.CreateWindow(title)
     MainFrame.Visible = UIState.Visible
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
+
+    ApplyUIScale(MainFrame, Flags["Visuals/UIScale"] or 1)
 
     local mainConstraint = Instance.new("UISizeConstraint")
     mainConstraint.MinSize = Vector2.new(420, 280)
@@ -2597,8 +2611,8 @@ function UI.CreateWindow(title)
             -- Responsive Minimize: Use relative Scale for position (Top-Right)
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
-                Position = UDim2.new(1, -minimizedWidth, 0, 30),
-                AnchorPoint = Vector2.new(0, 0)
+                Position = UDim2.new(1, 0, 0, 30),
+                AnchorPoint = Vector2.new(1, 0)
             }):Play()
             ContentArea.Visible = false
             Sidebar.Visible = false
@@ -4286,6 +4300,8 @@ function CreateItemPanel()
     MainFrame.ClipsDescendants = true
     EnsureScreenGui()
     MainFrame.Parent = ScreenGui
+
+    ApplyUIScale(MainFrame, Flags["Visuals/UIScale"] or 1)
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -9895,6 +9911,10 @@ UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlaye
 end)
 UI.CreateNumericInput(VisualsTab, "Screen UI Opacity", "LocalUI/ScreenUIOpacity", Flags["LocalUI/ScreenUIOpacity"], 0, 100, 5, "%", function(val)
     UpdateScreenUIOpacity()
+end)
+UI.CreateNumericInput(VisualsTab, "UI Scale", "Visuals/UIScale", Flags["Visuals/UIScale"], 0.1, 2.0, 0.10, "", function(val)
+    ApplyUIScale(UIState.MainFrame, val)
+    ApplyUIScale(ItemPanelUI.MainFrame, val)
 end)
 
 UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
