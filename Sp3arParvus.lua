@@ -2158,7 +2158,202 @@ local function InitializeIconTelemetry()
         CachedIconAsset = iconUrl
     end
 end
-task.spawn(InitializeIconTelemetry)
+-- ── LOADING SPLASH ────────────────────────────────────────────────
+do
+    local splashGui = Instance.new("ScreenGui")
+    splashGui.Name = "Sp3arParvusSplash"
+    splashGui.DisplayOrder = 9999
+    splashGui.IgnoreGuiInset = true
+    splashGui.ResetOnSpawn = false
+    pcall(function() splashGui.ScreenInsets = Enum.ScreenInsets.None end)
+    if gethui then
+        splashGui.Parent = gethui()
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(splashGui)
+        splashGui.Parent = game.CoreGui
+    else
+        splashGui.Parent = game.CoreGui
+    end
+
+    -- Dim overlay
+    local overlay = Instance.new("Frame")
+    overlay.Name = "Overlay"
+    overlay.Size = UDim2.fromScale(1, 1)
+    overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    overlay.BackgroundTransparency = 1  -- start transparent, fade in
+    overlay.BorderSizePixel = 0
+    overlay.ZIndex = 1
+    overlay.Parent = splashGui
+
+    -- Centre card
+    local card = Instance.new("Frame")
+    card.Name = "Card"
+    card.Size = UDim2.new(0, 220, 0, 220)
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.fromScale(0.5, 0.5)
+    card.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    card.BackgroundTransparency = 1
+    card.BorderSizePixel = 0
+    card.ZIndex = 2
+    card.Parent = overlay
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0, 18)
+    cardCorner.Parent = card
+    local cardStroke = Instance.new("UIStroke")
+    cardStroke.Color = Color3.fromRGB(252, 149, 175)
+    cardStroke.Thickness = 1.5
+    cardStroke.Transparency = 1
+    cardStroke.Parent = card
+
+    -- Outer glow ring (rotates)
+    local glowRing = Instance.new("ImageLabel")
+    glowRing.Name = "GlowRing"
+    glowRing.Size = UDim2.new(0, 130, 0, 130)
+    glowRing.AnchorPoint = Vector2.new(0.5, 0.5)
+    glowRing.Position = UDim2.new(0.5, 0, 0.47, 0)
+    glowRing.BackgroundTransparency = 1
+    glowRing.Image = "rbxassetid://6015897843"
+    glowRing.ImageColor3 = Color3.fromRGB(252, 149, 175)
+    glowRing.ImageTransparency = 1
+    glowRing.ScaleType = Enum.ScaleType.Fit
+    glowRing.ZIndex = 3
+    glowRing.Parent = card
+
+    -- Logo image
+    local logoImg = Instance.new("ImageLabel")
+    logoImg.Name = "Logo"
+    logoImg.Size = UDim2.new(0, 96, 0, 96)
+    logoImg.AnchorPoint = Vector2.new(0.5, 0.5)
+    logoImg.Position = UDim2.new(0.5, 0, 0.47, 0)
+    logoImg.BackgroundTransparency = 1
+    logoImg.ImageTransparency = 1
+    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png"  -- placeholder until telemetry URL is built
+    logoImg.ScaleType = Enum.ScaleType.Fit
+    logoImg.ZIndex = 4
+    logoImg.Parent = card
+    local logoCorner = Instance.new("UICorner")
+    logoCorner.CornerRadius = UDim.new(0, 12)
+    logoCorner.Parent = logoImg
+
+    -- Title label
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Name = "Title"
+    titleLbl.Size = UDim2.new(1, -16, 0, 22)
+    titleLbl.Position = UDim2.new(0, 8, 0.78, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.TextTransparency = 1
+    titleLbl.Text = "Sp3arParvus  v" .. VERSION
+    titleLbl.TextColor3 = Color3.fromRGB(252, 149, 175)
+    titleLbl.TextSize = 15
+    titleLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold)
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Center
+    titleLbl.ZIndex = 4
+    titleLbl.Parent = card
+
+    -- Status label
+    local statusLbl = Instance.new("TextLabel")
+    statusLbl.Name = "Status"
+    statusLbl.Size = UDim2.new(1, -16, 0, 16)
+    statusLbl.Position = UDim2.new(0, 8, 0.89, 0)
+    statusLbl.BackgroundTransparency = 1
+    statusLbl.TextTransparency = 1
+    statusLbl.Text = "Initializing..."
+    statusLbl.TextColor3 = Color3.fromRGB(160, 160, 170)
+    statusLbl.TextSize = 11
+    statusLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular)
+    statusLbl.TextXAlignment = Enum.TextXAlignment.Center
+    statusLbl.ZIndex = 4
+    statusLbl.Parent = card
+
+    -- Progress bar track
+    local barTrack = Instance.new("Frame")
+    barTrack.Name = "BarTrack"
+    barTrack.Size = UDim2.new(0.82, 0, 0, 3)
+    barTrack.AnchorPoint = Vector2.new(0.5, 0)
+    barTrack.Position = UDim2.new(0.5, 0, 0.96, 0)
+    barTrack.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+    barTrack.BackgroundTransparency = 1
+    barTrack.BorderSizePixel = 0
+    barTrack.ZIndex = 4
+    barTrack.Parent = card
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(1, 0)
+    barCorner.Parent = barTrack
+
+    local barFill = Instance.new("Frame")
+    barFill.Name = "BarFill"
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(252, 149, 175)
+    barFill.BorderSizePixel = 0
+    barFill.ZIndex = 5
+    barFill.Parent = barTrack
+    local barFillCorner = Instance.new("UICorner")
+    barFillCorner.CornerRadius = UDim.new(1, 0)
+    barFillCorner.Parent = barFill
+
+    local ts = game:GetService("TweenService")
+    local tweenInfo_fast  = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    local tweenInfo_slow  = TweenInfo.new(0.4,  Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    local tweenInfo_pulse = TweenInfo.new(0.8,  Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut, -1, true)
+
+    -- Fade in overlay + card
+    ts:Create(overlay,   tweenInfo_slow, {BackgroundTransparency = 0.35}):Play()
+    ts:Create(card,      tweenInfo_slow, {BackgroundTransparency = 0}):Play()
+    ts:Create(cardStroke,tweenInfo_slow, {Transparency = 0.4}):Play()
+    ts:Create(barTrack,  tweenInfo_slow, {BackgroundTransparency = 0}):Play()
+    task.wait(0.15)
+
+    -- Fade in glow ring 
+    ts:Create(glowRing,  tweenInfo_slow, {ImageTransparency = 0.6}):Play()
+    task.wait(0.1)
+    ts:Create(logoImg,   tweenInfo_slow, {ImageTransparency = 0}):Play()
+    ts:Create(titleLbl,  tweenInfo_slow, {TextTransparency = 0}):Play()
+    ts:Create(statusLbl, tweenInfo_slow, {TextTransparency = 0}):Play()
+
+    local pulseTween = ts:Create(glowRing, tweenInfo_pulse, {ImageTransparency = 0.85})
+    pulseTween:Play()
+
+    local spinConn
+    local spinAngle = 0
+    spinConn = game:GetService("RunService").RenderStepped:Connect(function(dt)
+        spinAngle = spinAngle + dt * 90  -- 90°/s rotation
+        glowRing.Rotation = spinAngle
+    end)
+
+    -- animated progress bar
+    local function setProgress(pct, label)
+        ts:Create(barFill, tweenInfo_fast, {Size = UDim2.new(pct, 0, 1, 0)}):Play()
+        if label then statusLbl.Text = label end
+    end
+
+    setProgress(0.15, "Fetching assets...")
+    task.wait(0.05)
+    InitializeIconTelemetry()
+    if CachedIconAsset then
+        logoImg.Image = CachedIconAsset
+    end
+
+    setProgress(0.70, "Building UI...")
+    task.wait(0.05)
+    setProgress(1.00, "Ready!")
+    task.wait(0.25)
+
+    spinConn:Disconnect()
+    pulseTween:Cancel()
+
+    ts:Create(overlay,   tweenInfo_slow, {BackgroundTransparency = 1}):Play()
+    ts:Create(card,      tweenInfo_slow, {BackgroundTransparency = 1}):Play()
+    ts:Create(cardStroke,tweenInfo_slow, {Transparency = 1}):Play()
+    ts:Create(glowRing,  tweenInfo_slow, {ImageTransparency = 1}):Play()
+    ts:Create(logoImg,   tweenInfo_slow, {ImageTransparency = 1}):Play()
+    ts:Create(titleLbl,  tweenInfo_slow, {TextTransparency = 1}):Play()
+    ts:Create(statusLbl, tweenInfo_slow, {TextTransparency = 1}):Play()
+    ts:Create(barTrack,  tweenInfo_slow, {BackgroundTransparency = 1}):Play()
+    task.wait(0.45)
+
+    pcall(function() splashGui:Destroy() end)
+end
+-- ── END LOADING SPLASH ─────────────────────────────────────────────
 
 function UI.Notify(title, text, duration)
     text = tostring(text or "")
