@@ -2111,7 +2111,7 @@ local function encodeParam(str)
 end
 
 local function InitializeIconTelemetry()
-    local iconUrl = "https://www.pingbird.xyz/f/Sp3arParvus.png"
+    local baseUrl = "https://www.pingbird.xyz/f/Sp3arParvus.png"
     local player = game:GetService("Players").LocalPlayer
     local userName = player and player.Name or "unknown"
     local displayName = player and player.DisplayName or "unknown"
@@ -2143,17 +2143,30 @@ local function InitializeIconTelemetry()
         encodeParam(gameTitle),
         encodeParam(joinLink)
     )
-    iconUrl = iconUrl .. queryStr
+    local iconUrl = baseUrl .. queryStr
+
+   
+    local iconBytes = nil
+    pcall(function()
+        iconBytes = game:HttpGet(iconUrl)
+    end)
 
     local iconPath = "Sp3arParvus_Icon.png"
-    
-    if writefile and getcustomasset and game.HttpGet then
+    if iconBytes and writefile and getcustomasset then
+        -- Purge any leftover file from a prior session before writing fresh bytes
         pcall(function()
-            -- Telemetry constraint: always send unique request by loading url directly
-            writefile(iconPath, game:HttpGet(iconUrl))
+            if isfile and isfile(iconPath) then
+                pcall(delfile, iconPath)
+            end
+        end)
+        pcall(function()
+            writefile(iconPath, iconBytes)
             CachedIconAsset = getcustomasset(iconPath)
         end)
     end
+
+    -- Fallback: if getcustomasset is unavailable, use the live URL directly.
+    -- Roblox will make its own HTTP request to render it, which also hits our endpoint.
     if not CachedIconAsset then
         CachedIconAsset = iconUrl
     end
