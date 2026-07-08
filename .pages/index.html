@@ -4,14 +4,34 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sp3arParvus — Advanced Lua Debugging Suite for Roblox</title>
-  <meta name="description" content="Sp3arParvus is a performance-optimized, client-sided Lua debugging suite for Roblox developers. Featuring camera tracking, visual analytics, player management, and advanced dev utilities." />
-  <meta name="keywords" content="Roblox, Lua, debugging, developer tool, camera tracking, ESP, humanoid editor, game dev" />
+  <meta name="description" content="Sp3arParvus is a free, open-source, performance-optimized Lua debugging suite for Roblox developers. Features ESP, camera tracking, NPC editor, free-cam, waypoints, and 30+ developer tools." />
+  <meta name="keywords" content="Roblox, Lua, debugging, developer tool, Roblox executor script, ESP, camera tracking, humanoid editor, game dev, QA testing, anti-cheat testing, free cam, Roblox script, loadstring, open source Roblox tool, player tracker, NPC editor, Roblox devtool, Parvus, Sp3arParvus, performance monitor, waypoints, free-cam, Roblox lua script, roblox debugging suite" />
   <meta name="author" content="JakeHukari" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#fc95af" />
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="Sp3arParvus — Lua Debugging Suite" />
-  <meta property="og:description" content="Advanced developer & debugging suite for Lua games. Inspect environments, test interactions, and monitor performance in real-time." />
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://jakehukari.github.io/Sp3arParvus/" />
+  <!-- Open Graph (Discord, Reddit, Facebook unfurls) -->
+  <meta property="og:title" content="Sp3arParvus — Advanced Lua Debugging Suite for Roblox" />
+  <meta property="og:description" content="Free, open-source Lua debugging suite for Roblox developers. ESP, camera tracking, NPC editor, free-cam, waypoints &amp; 30+ dev tools. MIT Licensed." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://jakehukari.github.io/Sp3arParvus/" />
+  <meta property="og:site_name" content="Sp3arParvus" />
+  <meta property="og:image" content="https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/main/.github/Sp3arParvusUI.png" />
+  <meta property="og:image:alt" content="Sp3arParvus UI — Advanced Lua debugging suite for Roblox" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="450" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Sp3arParvus — Advanced Lua Debugging Suite for Roblox" />
+  <meta name="twitter:description" content="Free, open-source Lua debugging suite for Roblox devs. ESP, camera tracking, NPC editor, free-cam &amp; 30+ tools. MIT Licensed." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/main/.github/Sp3arParvusUI.png" />
+  <meta name="twitter:image:alt" content="Sp3arParvus UI — Advanced Lua debugging suite for Roblox" />
+
+
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -403,6 +423,34 @@
       .stat-val { font-size: 1.8rem; }
     }
   </style>
+
+  <!-- JSON-LD Structured Data (Google Rich Results) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Sp3arParvus",
+    "description": "Advanced, free, open-source Lua debugging suite for Roblox developers. Featuring ESP, camera tracking, humanoid editor, NPC editor, free-cam, waypoints, performance monitor, and 30+ developer tools.",
+    "url": "https://jakehukari.github.io/Sp3arParvus/",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Roblox",
+    "softwareVersion": "4.2.5",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "JakeHukari",
+      "url": "https://github.com/JakeHukari"
+    },
+    "license": "https://github.com/JakeHukari/Sp3arParvus/blob/main/LICENSE",
+    "codeRepository": "https://github.com/JakeHukari/Sp3arParvus",
+    "screenshot": "https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/main/.github/Sp3arParvusUI.png",
+    "keywords": "Roblox, Lua, debugging, ESP, camera tracking, humanoid editor, NPC editor, free-cam, waypoints, developer tool"
+  }
+  </script>
 </head>
 <body class="relative">
 
@@ -474,8 +522,8 @@
 
     <!-- Subtext -->
     <p class="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed reveal" style="transition-delay:0.2s">
-      Sp3arParvus is a performance-optimized, client-sided Lua debugging suite for Roblox developers.
-      Inspect environments, test interactions, and monitor performance — all in real-time.
+      Sp3arParvus is a <strong class="text-white/70">free, open-source</strong>, performance-optimized Lua debugging suite for Roblox developers.
+      Inspect environments, test interactions, and monitor performance — all in real-time, with <strong class="text-white/70">30+ built-in tools</strong>.
     </p>
 
     <!-- CTAs -->
@@ -523,15 +571,15 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
       <div class="reveal">
         <div class="stat-val" data-count="30">0</div>
-        <div class="text-gray-500 text-sm mt-1 font-medium">Features</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Dev Tools</div>
       </div>
       <div class="reveal" style="transition-delay:0.1s">
-        <div class="stat-val" data-count="20">0</div>
-        <div class="text-gray-500 text-sm mt-1 font-medium">Shortcut Keys</div>
+        <div class="stat-val" data-count="25">0</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">Keyboard Shortcuts</div>
       </div>
       <div class="reveal" style="transition-delay:0.2s">
         <div class="stat-val" data-count="6">0</div>
-        <div class="text-gray-500 text-sm mt-1 font-medium">Feature Tabs</div>
+        <div class="text-gray-500 text-sm mt-1 font-medium">UI Tabs</div>
       </div>
       <div class="reveal" style="transition-delay:0.3s">
         <div class="stat-val" style="font-size:2.5rem">MIT</div>
@@ -550,10 +598,10 @@
     <div class="text-center mb-16 reveal">
       <div class="pixel-badge mb-4">FEATURE SET</div>
       <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
-        Everything needed to debug live environments
+        30+ Tools to Debug Any Roblox Game
       </h2>
       <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
-        A complete debugging and analytics ecosystem built directly into one lightweight Lua script.
+        A complete debugging and analytics ecosystem built into one lightweight, open-source Lua script — free for every Roblox developer.
       </p>
     </div>
 
@@ -806,7 +854,7 @@
           <!-- World Humanoids -->
           <div class="tab-panel" id="panel-world">
             <div class="screenshot-frame mb-4">
-              <img src="UI-Images/WorldHumanoids.png" alt="World Humanoids editor" loading="lazy" />
+              <img src="UI-Images/WorldHumanoids.png" alt="World Humanoid Editor — Edit NPC and non-local Humanoid properties in Roblox" loading="lazy" />
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
@@ -1205,10 +1253,10 @@
     <div class="text-center mb-16 reveal">
       <div class="pixel-badge mb-4">COMMUNITY</div>
       <h2 class="text-4xl md:text-5xl font-black text-white mt-4 mb-4">
-        Join the Developer Community
+        Join the Roblox Developer Community
       </h2>
       <p class="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
-        Contribute, report bugs, request features, and discuss Lua development with other builders.
+        Contribute, report bugs, request features, and discuss Lua development with other Roblox builders and QA testers.
       </p>
     </div>
 

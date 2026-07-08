@@ -18,3 +18,5 @@ A clear and concise description of any alternative solutions or features you've 
 
 **Additional context**
 Add any other context or screenshots about the feature request here.
+
+> 💬 **Want to discuss this first?** Join our [Discord Server](https://discord.gg/KJuxMnBFqB) and post in `#suggestions` for community feedback before filing!

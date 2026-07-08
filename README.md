@@ -9,12 +9,13 @@
   <img src="https://img.shields.io/github/stars/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Stars">
   <img src="https://img.shields.io/github/forks/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Forks">
   <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="License">
+  <img src="https://img.shields.io/badge/version-4.2.5-fc95af?style=for-the-badge" alt="Version 4.2.5">
   <a href="https://discord.gg/KJuxMnBFqB"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&color=fc95af" alt="Discord"></a>
 </p>
 
 ## Overview
 
-Sp3arParvus is a comprehensive Lua-based debugging suite designed for Roblox developers. It empowers creators to inspect game environments, test interaction limits, monitor performance, and validate network boundaries in real-time. With a minimal performance footprint, Sp3arParvus provides an intuitive UI to manage game states safely without interrupting development.
+Sp3arParvus is a **free, open-source**, comprehensive Lua debugging suite designed for Roblox developers and QA testers. It empowers creators to inspect game environments, test interaction limits, monitor performance, and validate network boundaries in real-time. With a minimal performance footprint and an MIT license, Sp3arParvus provides an intuitive UI to manage game states safely without interrupting development. Whether you need ESP-style player visualization, humanoid/NPC editing, collision debugging, or a free-cam for map traversal- its all included in one loadstring.
 
 ### UI Demo
 
@@ -131,6 +132,11 @@ Any contributions are welcome! If you have ideas for new features, found any bug
 ## Disclaimer
 
 **For educational and development purposes only.** Sp3arParvus is strictly intended for game developers, QA testers, and researchers to understand Lua environment interactions, test anti-cheat measures, and debug their own games. Misuse of this tool on games where you lack explicit permission may violate Terms of Service.
+
+## Related Projects
+
+- **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)** — Standalone ESP module integrated into Sp3arParvus for visual tracking of any workspace instance.
+- **[Parvus](https://github.com/AlexR32/Parvus)** — The aim logic behind Sp3arParvus was inspired by the Parvus project by [@AlexR32](https://github.com/AlexR32).
 
 ---
 

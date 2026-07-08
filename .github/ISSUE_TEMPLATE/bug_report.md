@@ -23,8 +23,11 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots or videos to help explain your problem.
 
 **Environment (please complete the following information):**
+ - Sp3arParvus Version: [e.g. v4.2.5]
  - Executor: [e.g. [Solara](https://getsolara.dev/), Wave, Delta]
  - Game Link or PlaceID: [URL to the game or the "placeid=1234567890" string]
 
 **Additional context**
 Add any other context about the problem here.
+
+> 💬 **Need faster help?** Join our [Discord Server](https://discord.gg/KJuxMnBFqB) for real-time support.
