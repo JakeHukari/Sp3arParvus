@@ -17,8 +17,8 @@ print("[Sp3arParvus] Waiting for LocalPlayer...")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
-    repeat 
-        task.wait(0.1) 
+    repeat
+        task.wait(0.1)
         LocalPlayer = Players.LocalPlayer
     until LocalPlayer or (tick() - initStartTime > MAX_INIT_WAIT)
 end
@@ -27,15 +27,13 @@ if not LocalPlayer then
 end
 print("[Sp3arParvus] LocalPlayer ready: " .. LocalPlayer.Name)
 
--- Character check: non-blocking — the tool must load even in UI-only games
--- or when the player is in a spawn/loading menu with no character yet.
 print("[Sp3arParvus] Checking for Character (non-blocking)...")
 local character = LocalPlayer.Character
 if character then
-    -- Already exists, wait briefly for it to be fully parented
+
     local charWaitStart = tick()
-    repeat 
-        task.wait(0.1) 
+    repeat
+        task.wait(0.1)
         character = LocalPlayer.Character
     until (character and character.Parent) or (tick() - charWaitStart > 3)
     if character and character.Parent then
@@ -44,39 +42,36 @@ if character then
         warn("[Sp3arParvus] Character exists but not yet parented, continuing anyway...")
     end
 else
-    -- No character yet (UI-only game, spawn menu, etc.) — skip blocking wait
+
     print("[Sp3arParvus] No character at load time — continuing without one. Humanoid will be detected when spawned.")
 end
 
--- Wait for Camera
 print("[Sp3arParvus] Waiting for Camera...")
 local Workspace = game:GetService("Workspace")
-repeat 
-    task.wait(0.1) 
+repeat
+    task.wait(0.1)
 until Workspace.CurrentCamera or (tick() - initStartTime > MAX_INIT_WAIT)
 if not Workspace.CurrentCamera then
     warn("[Sp3arParvus] Camera not found, continuing anyway...")
 end
 print("[Sp3arParvus] Camera ready!")
 
--- (critical for avoiding CameraSettings errors)
 print("[Sp3arParvus] Waiting for PlayerScripts to initialize...")
 local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
 if not playerScripts then
-    repeat 
-        task.wait(0.1) 
+    repeat
+        task.wait(0.1)
         playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
     until playerScripts or (tick() - initStartTime > MAX_INIT_WAIT)
 end
 if playerScripts then
-    task.wait(0.5) -- Brief delay so CameraSettings and other modules can setup
+    task.wait(0.5)
 end
 print("[Sp3arParvus] PlayerScripts ready!")
 
 task.wait(0.2)
 print(string.format("[Sp3arParvus] Initialization complete! (%.2fs)", tick() - initStartTime))
 
--- STATE MANAGEMENT
 local CharCache = {}
 local AimState = {
     Aim = false,
@@ -157,8 +152,6 @@ local Flags = {
     ["LocalUI/ScreenUIOpacity"] = 90
 }
 
--- SAFE_MODE overrides: force-disable high-risk input simulation features
--- These are applied at init so the UI reflects the correct starting state.
 if SAFE_MODE then
     Flags["Aim/AimLock"]        = false
     Flags["Aim/AlwaysEnabled"]  = false
@@ -203,7 +196,7 @@ local PROPERTY_CATEGORIES = {
 
 local AdvancedPlayerPanelState = {
     Visible = false,
-    CurrentView = "List", -- "List", "Details", or "Teams"
+    CurrentView = "List",
     SelectedPlayer = nil,
     Spectating = nil,
     ListTab = "All",
@@ -429,21 +422,18 @@ local ZoomState = {
     UserScrolled = false
 }
 
--- RESPAWN HANDLING
 local LocalCharReady = true
 function OnLocalCharacterAdded(newChar)
     LocalCharReady = false
     if Br3ak3rState then Br3ak3rState.FilterDirty = true end
-    -- Invalidate caches
+
     if CharCache then table.clear(CharCache) end
-    -- Reset HumanoidState so settings are re-captured from the new humanoid
+
     HumanoidState.captured = false
     HumanoidState.presetsApplied = false
-    
-    -- Pause specifically for camera/PlayerModule setup
-    task.wait(1.5) 
-    
-    -- Wait for root part AND humanoid, with a generous timeout
+
+    task.wait(1.5)
+
     local root = nil
     local humanoid = nil
     local attempts = 0
@@ -454,7 +444,6 @@ function OnLocalCharacterAdded(newChar)
         attempts = attempts + 1
     until (root and humanoid) or attempts > 25
 
-    -- If no humanoid yet (deferred spawn / UI state), watch for it via ChildAdded
     if not humanoid then
         local humConn
         humConn = newChar.ChildAdded:Connect(function(child)
@@ -467,17 +456,16 @@ function OnLocalCharacterAdded(newChar)
     else
         CaptureHumanoidSettings(humanoid)
     end
-    
+
     LocalCharReady = true
     print("[Sp3arParvus] Local character re-cached and ready.")
 end
--- Prevent duplicate
+
 globalEnv = getgenv and getgenv() or _G
 if rawget(globalEnv, "Sp3arParvus") then
     return warn("[Sp3arParvus] Already loaded! Use Shutdown button to cleanup first.")
 end
 
--- Init global
 globalEnv.Sp3arParvus = {
     Active = true,
     Version = VERSION,
@@ -485,9 +473,6 @@ globalEnv.Sp3arParvus = {
     Threads = {}
 }
 Sp3arParvus = globalEnv.Sp3arParvus
-
-
--- CONNECTION TRACKING (for proper cleanup)
 
 function TrackConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
@@ -537,9 +522,6 @@ end
 
 TrackConnection(LocalPlayer.CharacterAdded:Connect(OnLocalCharacterAdded))
 
--- ANTI-AFK (Prevents idle kick)
--- SERVICES (additional services not declared during init)
-
 local Services = {
     RunService = game:GetService("RunService"),
     UserInputService = game:GetService("UserInputService"),
@@ -553,23 +535,20 @@ local Services = {
     VirtualUser = game:GetService("VirtualUser"),
     TextService = game:GetService("TextService")
 }
-local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players, VirtualUser, TextService = 
+local RunService, UserInputService, Lighting, TeleportService, Stats, GuiService, TweenService, Workspace, Players, VirtualUser, TextService =
     Services.RunService, Services.UserInputService, Services.Lighting, Services.TeleportService, Services.Stats, Services.GuiService, Services.TweenService, Services.Workspace, Services.Players, Services.VirtualUser, Services.TextService
 
--- ANTI-AFK (Prevents idle kick)
 TrackConnection(LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end))
 
--- resolve
 function ResolveEnumItem(enumContainer, possibleNames)
     for _, name in ipairs(possibleNames) do
         local success, enumItem = pcall(function()
             return enumContainer[name]
         end)
 
-        -- Validate 
         if success and enumItem and typeof(enumItem) == "EnumItem" then
             return enumItem
         end
@@ -581,8 +560,7 @@ end
 local Camera = Services.Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- Performance Localization
-local Vector3new, Vector2new, CFramenew, UDim2new, Instancenew, RaycastParamsnew, Color3fromRGB, Color3new = 
+local Vector3new, Vector2new, CFramenew, UDim2new, Instancenew, RaycastParamsnew, Color3fromRGB, Color3new =
     Vector3.new, Vector2.new, CFrame.new, UDim2.new, Instance.new, RaycastParams.new, Color3.fromRGB, Color3.new
 local abs, floor, max, min, sqrt = math.abs, math.floor, math.max, math.min, math.sqrt
 local deg, atan2, rad, sin, cos = math.deg, math.atan2, math.rad, math.sin, math.cos
@@ -657,7 +635,6 @@ local function BoundedInsertionSort(array, count, compare)
     end
 end
 
--- Cached TweenInfo objects (prevents creating new objects on every tween)
 local TWEENS = {
     INSTANT = TweenInfo.new(0.05),
     FAST = TweenInfo.new(0.1),
@@ -667,7 +644,6 @@ local TWEENS = {
     DRAG = TweenInfo.new(0.05)
 }
 
--- Per-frame Viewport Point Caching
 local ViewportCache = {}
 local ViewportPool = {}
 TrackConnection(RunService.RenderStepped:Connect(function()
@@ -689,10 +665,8 @@ local function GetViewportPoint(worldPos)
     return screenPos, onScreen
 end
 
--- Cached players list (Event-based caching prevents allocation per frame)
 local cachedPlayersList = {}
 
--- Initialize cache immediately
 function InitPlayerCache()
     cachedPlayersList = Players:GetPlayers()
 end
@@ -718,14 +692,6 @@ function RemovePlayerFromCache(player)
         table.remove(cachedPlayersList, idx)
     end
 end
-
-
-
-
-
--- CONFIG
-
-
 
 local AIM_ACQUIRE_STABILIZE_FRAMES = 2
 local AIM_ORIGIN_JUMP_RATIO = 0.25
@@ -771,11 +737,9 @@ function GetCrosshairViewportPosition(mouseBehavior)
     return crosshairX, crosshairY, true
 end
 
--- Shared Target Cache (Defined here for scope visibility)
 local CachedTarget = nil
 local CachedTargetTime = 0
 
--- Known body parts for targeting
 local TARGET_GROUPS = {
     Head = {"Head"},
     Torso = {"Torso", "UpperTorso", "LowerTorso", "HumanoidRootPart"},
@@ -793,7 +757,6 @@ for _, group in pairs(TARGET_GROUPS) do
 end
 
 KnownBodyParts = ALL_BODY_PARTS
-
 
 local HUMANOID_PROPERTY_MAPPING = {
     ["Humanoid/Archivable"] = "Archivable",
@@ -830,7 +793,6 @@ local HUMANOID_ENFORCED_PROPERTIES = {
     ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle"
 }
 
-
 function TrackWorldHumConnection(connection)
     if connection and typeof(connection) == "RBXScriptConnection" then
         table.insert(WorldHumState.connections, connection)
@@ -852,14 +814,14 @@ end
 function CaptureHumanoidSettings(humanoid)
     if not humanoid or HumanoidState.captured then return end
     HumanoidState.presetsApplied = false
-    
+
     local properties = {
         "Archivable", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck",
         "AutoRotate", "PlatformStand", "Sit", "Jump", "AutoJumpEnabled",
         "JumpHeight", "JumpPower", "UseJumpPower", "AutomaticScalingEnabled",
         "Health", "MaxHealth", "HipHeight", "MaxSlopeAngle", "WalkSpeed"
     }
-    
+
     local flagMapping = {
         Archivable = "Humanoid/Archivable",
         BreakJointsOnDeath = "Humanoid/BreakJointsOnDeath",
@@ -885,7 +847,7 @@ function CaptureHumanoidSettings(humanoid)
         pcall(function()
             local val = humanoid[prop]
             HumanoidState.originalSettings[prop] = val
-            -- Sync initial flags with game defaults
+
             if flagMapping[prop] then
                 local flag = flagMapping[prop]
                 Flags[flag] = val
@@ -896,7 +858,7 @@ function CaptureHumanoidSettings(humanoid)
             end
         end)
     end
-    
+
     HumanoidState.captured = true
     print("[Sp3arParvus] Local Humanoid settings captured and synced.")
 end
@@ -904,14 +866,13 @@ end
 function ApplyHumanoidSettings()
     local character = LocalPlayer.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    
+
     if not humanoid then return end
-    
+
     if not HumanoidState.captured then
         CaptureHumanoidSettings(humanoid)
     end
 
-    -- Game-specific presets
     if not HumanoidState.presetsApplied and game.PlaceId == 2474168535 and DNS(LocalPlayer) then
         local presets = {
             ["Humanoid/JumpHeight"] = 8,
@@ -932,11 +893,11 @@ function ApplyHumanoidSettings()
         end
         HumanoidState.presetsApplied = true
     end
-    
+
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
         local isLocked = Flags[flag .. "/Locked"] == true
-        
+
         if isEnforced or isLocked then
             local val = Flags[flag]
             if val ~= nil then
@@ -953,9 +914,9 @@ function UpdateHumanoidUI()
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         if Flags[flag .. "/Locked"] then continue end
-        
+
         local success, val = pcall(SafeGetProp, humanoid, prop)
-        
+
         if success and val ~= nil and Flags[flag] ~= val then
             Flags[flag] = val
             local updater = UIState.Updaters[flag]
@@ -973,12 +934,12 @@ function GetNearbyHumanoids()
     local humanoids = {}
     local seen = {}
     local myChar = LocalPlayer.Character
-    
+
     _nearbyOverlapParams.FilterDescendantsInstances = myChar and {myChar} or {}
     if CachedFilterType and _nearbyOverlapParams.FilterType ~= CachedFilterType then
         _nearbyOverlapParams.FilterType = CachedFilterType
     end
-    
+
     local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, 500, _nearbyOverlapParams)
     for i = 1, #parts do
         local part = parts[i]
@@ -991,7 +952,7 @@ function GetNearbyHumanoids()
             end
         end
     end
-    
+
     return humanoids
 end
 
@@ -1007,7 +968,7 @@ function ApplyItemPanelSettings()
 end
 
 function ApplyWorldHumanoidSettings()
-    -- Game-specific WorldHumanoid presets
+
     if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
         local now = os.clock()
         if (now - lastWorldHumPresetScan) > 5.0 then
@@ -1041,7 +1002,7 @@ function ApplyWorldHumanoidSettings()
                 pcall(SafeSetProp, hum, prop, val)
             end
         else
-            -- Humanoid destroyed or gone, stop enforcing
+
             WorldHumState.lockedProperties[path] = nil
             WorldHumState.presetsApplied[path] = nil
         end
@@ -1051,14 +1012,14 @@ end
 function UpdateWorldHumanoidEditorUI()
     local hum = WorldHumState.selectedHum
     if not hum then return end
-    
-    if not hum.Parent then 
+
+    if not hum.Parent then
         WorldHumState.selectedHum = nil
         ClearWorldHumConnections()
         if WorldHumState.Page then
             ShowWorldHumList(WorldHumState.Page)
         end
-        return 
+        return
     end
 
     local path = GetUniquePath(hum)
@@ -1066,7 +1027,7 @@ function UpdateWorldHumanoidEditorUI()
 
     for prop, updater in pairs(WorldHumState.updaters) do
         if lockedProps[prop] ~= nil then continue end
-        
+
         local success, val = pcall(SafeGetProp, hum, prop)
         if success and val ~= nil then
             updater(val)
@@ -1074,7 +1035,6 @@ function UpdateWorldHumanoidEditorUI()
     end
 end
 
--- WAYPOINTS SYSTEM STATE
 ActiveWaypoints = {}
 WaypointCounter = 0
 WaypointColors = {
@@ -1089,12 +1049,8 @@ WaypointsPage = nil
 WaypointsUIList = nil
 WaypointConnections = {}
 
-
--- BR3AK3R SYSTEM (Ctrl+Click to hide objects, Ctrl+Z to undo)
-
 UNDO_LIMIT = 100
 RAYCAST_MAX_DISTANCE = 3000
-
 
 function GetFullPath(instance)
     local path = instance.Name
@@ -1133,10 +1089,10 @@ end
 function GetItemUniquePath(instance)
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local character = LocalPlayer.Character
-    
+
     local root = nil
     local rootName = ""
-    
+
     if backpack and instance:IsDescendantOf(backpack) then
         root = backpack
         rootName = "Backpack"
@@ -1144,9 +1100,9 @@ function GetItemUniquePath(instance)
         root = character
         rootName = "Character"
     end
-    
+
     if not root then return GetUniquePath(instance) end
-    
+
     local path = ""
     local current = instance
     while current and current ~= root do
@@ -1164,7 +1120,7 @@ function GetItemUniquePath(instance)
         path = name .. "[" .. index .. "]" .. (path == "" and "" or "\1" .. path)
         current = parent
     end
-    
+
     return rootName .. "\2" .. path
 end
 
@@ -1200,21 +1156,21 @@ end
 function ResolveItemPath(itemPath)
     if not itemPath then return nil end
     if not string.find(itemPath, "\2") then return GetInstanceFromPath(itemPath) end
-    
+
     local parts = string.split(itemPath, "\2")
     local rootName = parts[1]
     local relativePath = parts[2]
-    
+
     local root = nil
     if rootName == "Backpack" then
         root = LocalPlayer:FindFirstChild("Backpack")
     elseif rootName == "Character" then
         root = LocalPlayer.Character
     end
-    
+
     local resolved = root and ResolveRelativePath(root, relativePath)
     if not resolved then
-        -- Swap and try again (Backpack <-> Character)
+
         if rootName == "Backpack" then
             root = LocalPlayer.Character
         else
@@ -1222,7 +1178,7 @@ function ResolveItemPath(itemPath)
         end
         resolved = root and ResolveRelativePath(root, relativePath)
     end
-    
+
     return resolved
 end
 
@@ -1274,7 +1230,6 @@ function RobustResolvePart(path, data)
     return nil
 end
 
--- PERFORMANCE FIX: Cache filter type ONCE at startup
 Br3ak3rFilterType = (function()
     local ok, val = pcall(function() return Enum.RaycastFilterType.Exclude end)
     if ok and val and typeof(val) == "EnumItem" then return val end
@@ -1287,7 +1242,6 @@ if Br3ak3rFilterType then
     Br3ak3rState.br3akerRaycastParams.FilterType = Br3ak3rFilterType
 end
 
--- Rebuild the broken parts ignore cache for raycasts
 function RebuildBrokenIgnore()
     Br3ak3rState.FilterDirty = true
     if not next(Br3ak3rState.brokenSet) then
@@ -1311,7 +1265,6 @@ function RebuildBrokenIgnore()
     Br3ak3rState.brokenCacheDirty = false
 end
 
--- Get ray from mouse cursor position
 function GetMouseRay()
     local mouseLocation = Services.UserInputService:GetMouseLocation()
     local inset = Services.GuiService:GetGuiInset()
@@ -1319,27 +1272,24 @@ function GetMouseRay()
 
     if not Camera then Camera = Services.Workspace.CurrentCamera end
     if not Camera then return nil end
-    
-    -- Use ScreenPointToRay with adjusted Location
+
     local ray = Camera:ScreenPointToRay(adjustedLocation.X, adjustedLocation.Y)
     if not ray then return nil end
-    
+
     return ray.Origin, ray.Direction * RAYCAST_MAX_DISTANCE, mouseLocation.X, mouseLocation.Y
 end
 
--- Raycast with broken parts filtering
--- PERFORMANCE FIX: Removed nested closure function, use inline logic instead
 MAX_IGNORE_COUNT = 200
 
 function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
     if Br3ak3rState.brokenCacheDirty then
         RebuildBrokenIgnore()
     end
-    
+
     if Br3ak3rState.FilterDirty or extraIgnore then
         local ignore = Br3ak3rState.scratchIgnore
         table.clear(ignore)
-        
+
         local ignoreCount = 0
         if ignoreLocalChar then
             local ch = LocalPlayer.Character
@@ -1348,7 +1298,7 @@ function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
                 ignore[ignoreCount] = ch
             end
         end
-        
+
         if extraIgnore then
             for i = 1, #extraIgnore do
                 local item = extraIgnore[i]
@@ -1358,7 +1308,7 @@ function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
                 end
             end
         end
-        
+
         local brokenCacheLen = #Br3ak3rState.brokenIgnoreCache
         for i = 1, brokenCacheLen do
             local item = Br3ak3rState.brokenIgnoreCache[i]
@@ -1367,38 +1317,35 @@ function WorldRaycastBr3ak3r(origin, direction, ignoreLocalChar, extraIgnore)
                 ignore[ignoreCount] = item
             end
         end
-        
+
         Br3ak3rState.br3akerRaycastParams.FilterDescendantsInstances = ignore
         if not extraIgnore then Br3ak3rState.FilterDirty = false end
     end
-    
+
     return Services.Workspace:Raycast(origin, direction, Br3ak3rState.br3akerRaycastParams)
 end
 
--- Mark a part as broken (hide it)
 function markBroken(part)
     if not part or not part:IsA("BasePart") or part:IsA("Terrain") then return end
     local path = GetUniquePath(part)
     if Br3ak3rState.brokenSet[path] then return end
 
-    -- Reset all if limit reached before adding new break
     if #Br3ak3rState.undoStack >= UNDO_LIMIT then
         unbreakAll()
     end
-    
+
     Br3ak3rState.brokenSet[path] = {
-        instance = part, 
-        pos = part.Position, 
-        name = part.Name, 
-        cc = part.CanCollide, 
+        instance = part,
+        pos = part.Position,
+        name = part.Name,
+        cc = part.CanCollide,
         ct = part.CanTouch,
         cq = part.CanQuery,
-        ltm = part.LocalTransparencyModifier, 
+        ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     }
     Br3ak3rState.brokenCacheDirty = true
-    
-    -- Save original state for undo
+
     table.insert(Br3ak3rState.undoStack, {
         path = path,
         instance = part,
@@ -1410,8 +1357,7 @@ function markBroken(part)
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     })
-    
-    -- Hide the part (semi-transparent)
+
     part.CanCollide = false
     pcall(function() part.CanTouch = false end)
     pcall(function() part.CanQuery = false end)
@@ -1421,24 +1367,23 @@ function markBroken(part)
     UI.Notify("Br3ak3r", "Br3ak3r removed '" .. (part.Name or "Unknown") .. "'")
 end
 
--- Undo the last broken part
 function unbreakLast()
     local entry = table.remove(Br3ak3rState.undoStack)
     if not entry or not entry.path then return end
-    
+
     local path = entry.path
     local part = entry.instance
     if not part or not part.Parent then
         part = RobustResolvePart(path, entry)
     end
-    
+
     Br3ak3rState.brokenSet[path] = nil
     Br3ak3rState.brokenCacheDirty = true
-    
+
     UI.Notify("Br3ak3r", "Br3ak3r r3st0r3d '" .. (entry.name or (part and part.Name) or "Unknown") .. "'")
 
     if part then
-        -- Restore original state
+
         part.CanCollide = entry.cc
         pcall(function() part.CanTouch = entry.ct end)
         pcall(function() part.CanQuery = entry.cq end)
@@ -1447,7 +1392,6 @@ function unbreakLast()
     end
 end
 
--- Clear all broken parts
 function unbreakAll()
     local count = 0
     for _ in pairs(Br3ak3rState.brokenSet) do count = count + 1 end
@@ -1475,14 +1419,12 @@ function unbreakAll()
     UI.Notify("Br3ak3r", "Br3ak3r restored " .. count .. " parts")
 end
 
--- Sweep undo stack (periodic cleanup of destroyed parts)
--- Sweep undo stack (periodic cleanup)
 sweepAccum = 0
 function sweepUndo(dt)
     sweepAccum = sweepAccum + dt
     if sweepAccum < 2 then return end
     sweepAccum = 0
-    
+
     local n = #Br3ak3rState.undoStack
     if n == 0 then return end
 
@@ -1491,7 +1433,7 @@ function sweepUndo(dt)
     for i = 1, n do
         local entry = Br3ak3rState.undoStack[i]
         local keep = true
-        
+
         local part = entry.instance
         if not part or not part.Parent then
             local resolved = RobustResolvePart(entry.path, entry)
@@ -1505,12 +1447,12 @@ function sweepUndo(dt)
             local lastPos = entry.pos
             if lastPos and camPos then
                 local dist = (lastPos - camPos).Magnitude
-                -- If we're within 250 studs and it still cannot be resolved, it's likely destroyed.
+
                 if dist < 250 then
                     keep = false
                 end
             elseif not lastPos then
-                -- No instance reference and no stored position.
+
                 keep = false
             end
         end
@@ -1528,10 +1470,8 @@ function sweepUndo(dt)
     end
 end
 
--- Prune broken set (remove parts that no longer exist)
 function pruneBrokenSet()
-    -- Path-based indexing allows objects to persist across streaming events.
-    -- To distinguish between streamed-out and destroyed, we check distance.
+
     local removed = false
     local camPos = Camera and Camera.CFrame.Position
     for path, data in pairs(Br3ak3rState.brokenSet) do
@@ -1543,20 +1483,19 @@ function pruneBrokenSet()
                 part = resolved
             end
         end
-        
+
         if not part or not part.Parent then
-            -- Instance is missing from Workspace.
-            -- To distinguish between streamed-out and destroyed, we check distance.
+
             local lastPos = data.pos
             if lastPos and camPos then
                 local dist = (lastPos - camPos).Magnitude
-                -- If we're within 250 studs and it's not here, it's likely destroyed.
+
                 if dist < 250 then
                     Br3ak3rState.brokenSet[path] = nil
                     removed = true
                 end
             elseif not lastPos then
-                -- No instance reference and no stored position.
+
                 Br3ak3rState.brokenSet[path] = nil
                 removed = true
             end
@@ -1567,21 +1506,20 @@ function pruneBrokenSet()
     end
 end
 
--- MARK HIGHLIGHTED (H1GHL1GHT3R)
 function markHighlighted(part)
     if not part or not part:IsA("BasePart") or part:IsA("Terrain") then return end
     if H1ghl1ght3rState.highlightedSet[part] then return end
-    
+
     local hl = Instance.new("Highlight")
     hl.Enabled = not Flags["Settings/GhostMode"]
     hl.Name = "H1ghl1ght3r_Highlight"
-    hl.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
+    hl.FillColor = Color3.fromRGB(255, 105, 180)
     hl.OutlineColor = Color3.fromRGB(255, 255, 255)
     hl.FillTransparency = 0.5
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Adornee = part
     hl.Parent = part
-    
+
     local bg = Instance.new("BillboardGui")
     bg.Enabled = not Flags["Settings/GhostMode"]
     bg.Name = "H1ghl1ght3r_Nametag"
@@ -1590,7 +1528,7 @@ function markHighlighted(part)
     bg.StudsOffset = Vector3.new(0, 2, 0)
     bg.Adornee = part
     bg.Parent = part
-    
+
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 1, 0)
     lbl.BackgroundTransparency = 1
@@ -1600,18 +1538,18 @@ function markHighlighted(part)
     lbl.TextSize = 12
     lbl.TextStrokeTransparency = 0.5
     lbl.Parent = bg
-    
+
     H1ghl1ght3rState.highlightedSet[part] = {
-        hl = hl, 
+        hl = hl,
         bg = bg,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
     }
-    
+
     table.insert(H1ghl1ght3rState.undoStack, {
         part = part,
         name = part.Name,
-        hl = hl, 
+        hl = hl,
         bg = bg,
         ltm = part.LocalTransparencyModifier,
         t = part.Transparency
@@ -1626,7 +1564,6 @@ function markHighlighted(part)
         end
     end
 
-    -- Force visibility so the Highlight is visible on transparent objects
     part.LocalTransparencyModifier = 0.5
     part.Transparency = 0.5
 
@@ -1665,7 +1602,7 @@ function unhighlightAll()
         if entry.hl then pcall(function() entry.hl:Destroy() end) end
         if entry.bg then pcall(function() entry.bg:Destroy() end) end
     end
-    
+
     table.clear(H1ghl1ght3rState.highlightedSet)
     table.clear(H1ghl1ght3rState.undoStack)
 
@@ -1673,7 +1610,7 @@ function unhighlightAll()
 end
 
 function sweepHighlightedUndo(dt)
-    -- Throttling already handled by caller or dt
+
     local n = #H1ghl1ght3rState.undoStack
     if n == 0 then return end
     local j = 1
@@ -1703,62 +1640,57 @@ function pruneHighlightedSet()
     end
 end
 
--- Create hover highlight for Br3ak3r preview
 function createHoverHighlight()
     if Br3ak3rState.hoverHL then return Br3ak3rState.hoverHL end
-    
+
     Br3ak3rState.hoverHL = Instance.new("Highlight")
     Br3ak3rState.hoverHL.Name = "Br3ak3r_HoverHighlight"
-    Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(255, 105, 180)  -- Pink
-    Br3ak3rState.hoverHL.OutlineColor = Color3.fromRGB(255, 255, 255)  -- White
+    Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(255, 105, 180)
+    Br3ak3rState.hoverHL.OutlineColor = Color3.fromRGB(255, 255, 255)
     Br3ak3rState.hoverHL.FillTransparency = 0.6
     Br3ak3rState.hoverHL.OutlineTransparency = 0.2
     Br3ak3rState.hoverHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     Br3ak3rState.hoverHL.Enabled = false
     Br3ak3rState.hoverHL.Parent = Services.Workspace
-    
+
     return Br3ak3rState.hoverHL
 end
 
--- Update hover highlight for Br3ak3r (called each frame)
--- Update hover highlight for Br3ak3r / H1ghl1ght3r (called each frame)
--- PERFORMANCE FIX: Skip raycast entirely when Ctrl not held
 function UpdateBr3ak3rHover()
-    -- Early exit - don't do ANY work if Gh0st mode active
+
     if Flags["Settings/GhostMode"] then
         if Br3ak3rState.hoverHL and Br3ak3rState.hoverHL.Enabled then
             Br3ak3rState.hoverHL.Enabled = false
         end
         return
     end
-    -- Early exit - don't do ANY work if feature disabled or Ctrl not held
+
     local breakerActive = Br3ak3rState.CLICKBREAK_ENABLED and not H1ghl1ght3rState.SHIFT_HELD
     local highlighterActive = H1ghl1ght3rState.ENABLED and H1ghl1ght3rState.SHIFT_HELD
-    
+
     if not Br3ak3rState.CTRL_HELD or (not breakerActive and not highlighterActive) then
         if Br3ak3rState.hoverHL and Br3ak3rState.hoverHL.Enabled then
             Br3ak3rState.hoverHL.Enabled = false
         end
         return
     end
-    
+
     if not Br3ak3rState.hoverHL then
         createHoverHighlight()
     end
 
-    -- Differentiate color: Pink for breaker, Green for highlighter
     if H1ghl1ght3rState.SHIFT_HELD then
-        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(0, 255, 0) -- Green
+        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(0, 255, 0)
     else
-        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(255, 105, 180) -- Pink
+        Br3ak3rState.hoverHL.FillColor = Color3.fromRGB(255, 105, 180)
     end
-    
+
     local origin, direction = GetMouseRay()
     if origin and direction then
         local result = WorldRaycastBr3ak3r(origin, direction, true)
         local part = result and result.Instance
         local alreadyProcessed = (part and Br3ak3rState.brokenSet[GetUniquePath(part)]) or H1ghl1ght3rState.highlightedSet[part]
-        
+
         if part and part:IsA("BasePart") and not alreadyProcessed then
             Br3ak3rState.hoverHL.Adornee = part
             Br3ak3rState.hoverHL.Enabled = true
@@ -1774,32 +1706,27 @@ function UpdateBr3ak3rHover()
     end
 end
 
-
--- WAYPOINTS SYSTEM LOGIC
-
 function RefreshWaypointUI()
     if not WaypointsUIList then return end
-    
-    -- Disconnect old row-specific connections
+
     for _, conn in ipairs(WaypointConnections) do
         if conn.Connected then conn:Disconnect() end
     end
     table.clear(WaypointConnections)
 
-    -- Clear current UI logic
     for _, child in ipairs(WaypointsUIList:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
-    
+
     local keys = {}
     for id in pairs(ActiveWaypoints) do
         table.insert(keys, id)
     end
-    table.sort(keys) -- Display in order
-    
+    table.sort(keys)
+
     for _, id in ipairs(keys) do
         local wpData = ActiveWaypoints[id]
-        
+
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 30)
         row.BackgroundColor3 = UI_THEME.Element
@@ -1807,7 +1734,7 @@ function RefreshWaypointUI()
         row.Parent = WaypointsUIList
         local rC = Instance.new("UICorner", row)
         rC.CornerRadius = UDim.new(0, 4)
-        
+
         local nameBox = Instance.new("TextBox")
         nameBox.Size = UDim2.new(0.5, -5, 1, 0)
         nameBox.Position = UDim2.new(0, 5, 0, 0)
@@ -1825,8 +1752,7 @@ function RefreshWaypointUI()
                 wpData.Label.Text = string.format("%s\n%s", wpData.Name, wpData.DistanceText)
             end
         end))
-        
-        -- Color cycle button
+
         local colBtn = Instance.new("TextButton")
         colBtn.Size = UDim2.new(0, 24, 0, 24)
         colBtn.Position = UDim2.new(1, -60, 0.5, -12)
@@ -1847,8 +1773,7 @@ function RefreshWaypointUI()
                 wpData.Pin.BackgroundColor3 = wpData.Color
             end
         end))
-        
-        -- TP button
+
         local tpBtn = Instance.new("TextButton")
         tpBtn.Size = UDim2.new(0, 24, 0, 24)
         tpBtn.Position = UDim2.new(1, -90, 0.5, -12)
@@ -1860,7 +1785,7 @@ function RefreshWaypointUI()
         tpBtn.Parent = row
         local tC = Instance.new("UICorner", tpBtn)
         tC.CornerRadius = UDim.new(0, 4)
-        
+
         table.insert(WaypointConnections, tpBtn.MouseButton1Click:Connect(function()
             if SAFE_MODE then
                 UI.Notify("Safe Mode", "Teleporting is disabled while Safe Mode is ON.")
@@ -1871,7 +1796,6 @@ function RefreshWaypointUI()
             end
         end))
 
-        -- Del button
         local delBtn = Instance.new("TextButton")
         delBtn.Size = UDim2.new(0, 24, 0, 24)
         delBtn.Position = UDim2.new(1, -30, 0.5, -12)
@@ -1883,13 +1807,12 @@ function RefreshWaypointUI()
         delBtn.Parent = row
         local dC = Instance.new("UICorner", delBtn)
         dC.CornerRadius = UDim.new(0, 4)
-        
+
         table.insert(WaypointConnections, delBtn.MouseButton1Click:Connect(function()
             if Sp3arParvus.DestroyWaypointFunc then Sp3arParvus.DestroyWaypointFunc(id) end
         end))
     end
-    
-    -- Update Tab Visibility
+
     local hasWaypoints = #keys > 0
     if WaypointsTabButton then
         WaypointsTabButton.Visible = hasWaypoints
@@ -1917,14 +1840,13 @@ SetDestroyWaypointFunc(DestroyWaypoint)
 
 function CreateWaypoint(position)
     if not Flags["Waypoints/Enabled"] then return end
-    
+
     WaypointCounter = WaypointCounter + 1
     local id = WaypointCounter
     local colorIndex = ((id - 1) % #WaypointColors) + 1
     local color = WaypointColors[colorIndex]
     local name = "Waypoint " .. id
-    
-    -- Create anchor part
+
     local part = Instance.new("Part")
     part.Anchored = true
     part.CanCollide = false
@@ -1932,8 +1854,7 @@ function CreateWaypoint(position)
     part.Size = Vector3.new(0.1, 0.1, 0.1)
     part.Position = position
     part.Parent = Services.Workspace
-    
-    -- Create Billboard
+
     local bg = Instance.new("BillboardGui")
     bg.Enabled = not Flags["Settings/GhostMode"]
     bg.AlwaysOnTop = true
@@ -1941,7 +1862,7 @@ function CreateWaypoint(position)
     bg.StudsOffset = Vector3.new(0, 2, 0)
     bg.Adornee = part
     bg.Parent = part
-    
+
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
@@ -1951,22 +1872,21 @@ function CreateWaypoint(position)
     label.TextSize = 14
     label.TextStrokeTransparency = 0.2
     label.Parent = bg
-    
-    -- Create Pin (Dot)
+
     local pinBg = Instance.new("BillboardGui")
     pinBg.Enabled = not Flags["Settings/GhostMode"]
     pinBg.AlwaysOnTop = true
     pinBg.Size = UDim2.new(0, 8, 0, 8)
     pinBg.Adornee = part
     pinBg.Parent = part
-    
+
     local pin = Instance.new("Frame")
     pin.Size = UDim2.new(1,0,1,0)
     pin.BackgroundColor3 = color
     pin.Parent = pinBg
     local pinC = Instance.new("UICorner", pin)
     pinC.CornerRadius = UDim.new(1,0)
-    
+
     ActiveWaypoints[id] = {
         Id = id,
         Name = name,
@@ -1980,52 +1900,39 @@ function CreateWaypoint(position)
         Label = label,
         DistanceText = "0 studs"
     }
-    
+
     RefreshWaypointUI()
     UI.Notify("Waypoints", string.format("Waypoint created at %.1f, %.1f, %.1f", position.X, position.Y, position.Z))
 end
-
--- UTILITY FUNCTIONS
-
-
-
-
--- MODERN UI LIBRARY
-
 
 TweenService = Services.TweenService
 
 function ReclampAllUI()
     local viewportSize = Camera.ViewportSize
     if not viewportSize or viewportSize.X == 0 then return end
-    
+
     for _, Frame in ipairs(UIState.DraggableFrames) do
         pcall(function()
             if not Frame or not Frame.Parent then return end
-            
+
             local absoluteSize = Frame.AbsoluteSize
             local anchor = Frame.AnchorPoint
-            
-            -- Get current center-point position in absolute pixels
+
             local currentPos = Frame.AbsolutePosition + (absoluteSize * anchor)
-            
-            -- Calculate bounds for the anchor point
+
             local minX = anchor.X * absoluteSize.X
             local maxX = viewportSize.X - (1 - anchor.X) * absoluteSize.X
             local minY = anchor.Y * absoluteSize.Y
             local maxY = viewportSize.Y - (1 - anchor.Y) * absoluteSize.Y
-            
-            -- Clamp
+
             local clampedX = math.clamp(currentPos.X, minX, maxX)
             local clampedY = math.clamp(currentPos.Y, minY, maxY)
-            
-            -- Set position in Scale to keep it responsive
+
             Frame.Position = UDim2.fromScale(clampedX / viewportSize.X, clampedY / viewportSize.Y)
         end)
     end
 end
 
--- Listen for viewport changes to re-clamp UI
 local ViewportSizeConn = nil
 local function ConnectViewportSize()
     if ViewportSizeConn then ViewportSizeConn:Disconnect() end
@@ -2033,7 +1940,6 @@ local function ConnectViewportSize()
 end
 ConnectViewportSize()
 
--- Responsive sizing helpers
 function GetMainFrameSize()
     local viewport = Camera.ViewportSize
     local width = math.min(580, viewport.X * 0.7)
@@ -2041,16 +1947,11 @@ function GetMainFrameSize()
     return UDim2.fromOffset(width, height)
 end
 
-
-
--- Helper to ensure ScreenGui exists and is parented correctly
 function EnsureScreenGui()
     if ScreenGui and ScreenGui.Parent then
         return ScreenGui
     end
 
-    -- PERFORMANCE FIX: If ScreenGui exists but Parent is nil, try to reparent instead of destroying
-    -- This prevents all children (ESP, UI) from being destroyed and recreated
     if ScreenGui then
         local success = pcall(function()
             if gethui then
@@ -2067,7 +1968,6 @@ function EnsureScreenGui()
         end
     end
 
-    -- Truly recreate if missing or destroyed
     ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Enabled = not Flags["Settings/GhostMode"]
     ScreenGui.Name = "Sp3arParvusUI"
@@ -2098,15 +1998,15 @@ local function EnsureNotifyGui()
     NotifyGui.IgnoreGuiInset = true
     pcall(function() NotifyGui.ScreenInsets = Enum.ScreenInsets.None end)
     NotifyGui.Enabled = not Flags["Settings/GhostMode"]
-    if gethui then 
+    if gethui then
         NotifyGui.Parent = gethui()
-    elseif syn and syn.protect_gui then 
-        syn.protect_gui(NotifyGui) 
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(NotifyGui)
         NotifyGui.Parent = game.CoreGui
-    else 
-        NotifyGui.Parent = game.CoreGui 
+    else
+        NotifyGui.Parent = game.CoreGui
     end
-    
+
     local container = Instance.new("Frame")
     container.Name = "NotifyContainer"
     container.Size = UDim2.new(0, 300, 1, -40)
@@ -2114,14 +2014,14 @@ local function EnsureNotifyGui()
     container.AnchorPoint = Vector2.new(1, 1)
     container.BackgroundTransparency = 1
     container.Parent = NotifyGui
-    
+
     local layout = Instance.new("UIListLayout")
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
     layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 10)
     layout.Parent = container
-    
+
     return NotifyGui
 end
 
@@ -2169,7 +2069,6 @@ local function InitializeIconTelemetry()
     )
     local iconUrl = baseUrl .. queryStr
 
-   
     local iconBytes = nil
     pcall(function()
         iconBytes = game:HttpGet(iconUrl)
@@ -2177,7 +2076,7 @@ local function InitializeIconTelemetry()
 
     local iconPath = "Sp3arParvus_Icon.png"
     if iconBytes and writefile and getcustomasset then
-        -- Purge any leftover file from a prior session before writing fresh bytes
+
         pcall(function()
             if isfile and isfile(iconPath) then
                 pcall(delfile, iconPath)
@@ -2189,13 +2088,11 @@ local function InitializeIconTelemetry()
         end)
     end
 
-    -- Fallback: if getcustomasset is unavailable, use the live URL directly.
-    -- Roblox will make its own HTTP request to render it, which also hits our endpoint.
     if not CachedIconAsset then
         CachedIconAsset = iconUrl
     end
 end
--- ── LOADING SPLASH ────────────────────────────────────────────────
+
 do
     local splashGui = Instance.new("ScreenGui")
     splashGui.Name = "Sp3arParvusSplash"
@@ -2212,17 +2109,15 @@ do
         splashGui.Parent = game.CoreGui
     end
 
-    -- Dim overlay
     local overlay = Instance.new("Frame")
     overlay.Name = "Overlay"
     overlay.Size = UDim2.fromScale(1, 1)
     overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-    overlay.BackgroundTransparency = 1  -- start transparent, fade in
+    overlay.BackgroundTransparency = 1
     overlay.BorderSizePixel = 0
     overlay.ZIndex = 1
     overlay.Parent = splashGui
 
-    -- Centre card
     local card = Instance.new("Frame")
     card.Name = "Card"
     card.Size = UDim2.new(0, 220, 0, 220)
@@ -2242,7 +2137,6 @@ do
     cardStroke.Transparency = 1
     cardStroke.Parent = card
 
-    -- Outer glow ring (rotates)
     local glowRing = Instance.new("ImageLabel")
     glowRing.Name = "GlowRing"
     glowRing.Size = UDim2.new(0, 130, 0, 130)
@@ -2256,7 +2150,6 @@ do
     glowRing.ZIndex = 3
     glowRing.Parent = card
 
-    -- Logo image
     local logoImg = Instance.new("ImageLabel")
     logoImg.Name = "Logo"
     logoImg.Size = UDim2.new(0, 96, 0, 96)
@@ -2264,7 +2157,7 @@ do
     logoImg.Position = UDim2.new(0.5, 0, 0.47, 0)
     logoImg.BackgroundTransparency = 1
     logoImg.ImageTransparency = 1
-    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png" 
+    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png"
     logoImg.ScaleType = Enum.ScaleType.Fit
     logoImg.ZIndex = 4
     logoImg.Parent = card
@@ -2272,7 +2165,6 @@ do
     logoCorner.CornerRadius = UDim.new(0, 12)
     logoCorner.Parent = logoImg
 
-    -- Title label
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Name = "Title"
     titleLbl.Size = UDim2.new(1, -16, 0, 22)
@@ -2287,7 +2179,6 @@ do
     titleLbl.ZIndex = 4
     titleLbl.Parent = card
 
-    -- Status label
     local statusLbl = Instance.new("TextLabel")
     statusLbl.Name = "Status"
     statusLbl.Size = UDim2.new(1, -16, 0, 16)
@@ -2302,7 +2193,6 @@ do
     statusLbl.ZIndex = 4
     statusLbl.Parent = card
 
-    -- Progress bar track
     local barTrack = Instance.new("Frame")
     barTrack.Name = "BarTrack"
     barTrack.Size = UDim2.new(0.82, 0, 0, 3)
@@ -2333,14 +2223,12 @@ do
     local tweenInfo_slow  = TweenInfo.new(0.4,  Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     local tweenInfo_pulse = TweenInfo.new(0.8,  Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut, -1, true)
 
-    -- Fade in overlay + card
     ts:Create(overlay,   tweenInfo_slow, {BackgroundTransparency = 0.35}):Play()
     ts:Create(card,      tweenInfo_slow, {BackgroundTransparency = 0}):Play()
     ts:Create(cardStroke,tweenInfo_slow, {Transparency = 0.4}):Play()
     ts:Create(barTrack,  tweenInfo_slow, {BackgroundTransparency = 0}):Play()
     task.wait(0.15)
 
-    -- Fade in glow ring 
     ts:Create(glowRing,  tweenInfo_slow, {ImageTransparency = 0.6}):Play()
     task.wait(0.1)
     ts:Create(logoImg,   tweenInfo_slow, {ImageTransparency = 0}):Play()
@@ -2353,11 +2241,10 @@ do
     local spinConn
     local spinAngle = 0
     spinConn = game:GetService("RunService").RenderStepped:Connect(function(dt)
-        spinAngle = spinAngle + dt * 90  -- 90°/s rotation
+        spinAngle = spinAngle + dt * 90
         glowRing.Rotation = spinAngle
     end)
 
-    -- animated progress bar
     local function setProgress(pct, label)
         ts:Create(barFill, tweenInfo_fast, {Size = UDim2.new(pct, 0, 1, 0)}):Play()
         if label then statusLbl.Text = label end
@@ -2390,14 +2277,13 @@ do
 
     pcall(function() splashGui:Destroy() end)
 end
--- ── END LOADING SPLASH ─────────────────────────────────────────────
 
 function UI.Notify(title, text, duration)
     text = tostring(text or "")
     duration = duration or 3
     local gui = EnsureNotifyGui()
     local container = gui:FindFirstChild("NotifyContainer")
-    
+
     local frame = Instance.new("Frame")
     frame.Name = "Notification"
     frame.Size = UDim2.new(0, 280, 0, 0)
@@ -2407,11 +2293,11 @@ function UI.Notify(title, text, duration)
     frame.BackgroundTransparency = 1
     frame.ClipsDescendants = true
     frame.Parent = container
-    
+
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = frame
-    
+
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(45, 45, 45)
     stroke.Thickness = 1
@@ -2424,7 +2310,7 @@ function UI.Notify(title, text, duration)
     padding.PaddingLeft = UDim.new(0, 10)
     padding.PaddingRight = UDim.new(0, 10)
     padding.Parent = frame
-    
+
     local icon = Instance.new("ImageLabel")
     icon.Name = "Icon"
     icon.Size = UDim2.new(0, 40, 0, 40)
@@ -2433,9 +2319,9 @@ function UI.Notify(title, text, duration)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
     icon.Image = CachedIconAsset or "https://www.pingbird.xyz/f/Sp3arParvus.png"
-    
+
     icon.Parent = frame
-    
+
     local iconCorner = Instance.new("UICorner")
     iconCorner.CornerRadius = UDim.new(1, 0)
     iconCorner.Parent = icon
@@ -2452,7 +2338,7 @@ function UI.Notify(title, text, duration)
     textLayout.SortOrder = Enum.SortOrder.LayoutOrder
     textLayout.Padding = UDim.new(0, 2)
     textLayout.Parent = textContainer
-    
+
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
     titleLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -2466,7 +2352,7 @@ function UI.Notify(title, text, duration)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextWrapped = true
     titleLabel.Parent = textContainer
-    
+
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Name = "Content"
     contentLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -2481,7 +2367,6 @@ function UI.Notify(title, text, duration)
     contentLabel.TextWrapped = true
     contentLabel.Parent = textContainer
 
-    -- Coordinate Copy Support
     local coords = string.match(text, "%-?%d+%.?%d*, %-?%d+%.?%d*, %-?%d+%.?%d*")
     if coords then
         local hint = Instance.new("TextLabel")
@@ -2504,7 +2389,7 @@ function UI.Notify(title, text, duration)
 
         TrackConnection(clickBtn.MouseButton1Click:Connect(function()
             local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
-            if copy then 
+            if copy then
                 copy(coords)
                 hint.Text = "COPIED!"
                 task.delay(1, function() if hint and hint.Parent then hint.Text = "(Click to copy coordinates)" end end)
@@ -2514,13 +2399,12 @@ function UI.Notify(title, text, duration)
         TweenService:Create(hint, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
     end
 
-    -- Animate In
     TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 0}):Play()
     TweenService:Create(stroke, TWEENS.SMOOTH, {Transparency = 0}):Play()
     TweenService:Create(titleLabel, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
     TweenService:Create(contentLabel, TWEENS.SMOOTH, {TextTransparency = 0}):Play()
     TweenService:Create(icon, TWEENS.SMOOTH, {ImageTransparency = 0}):Play()
-    
+
     task.delay(duration, function()
         if not frame or not frame.Parent then return end
         local t = TweenService:Create(frame, TWEENS.SMOOTH, {BackgroundTransparency = 1})
@@ -2547,10 +2431,9 @@ local function ApplyUIScale(frame, scale)
 end
 
 function UI.CreateWindow(title)
-    -- Destroy old instances
+
     EnsureScreenGui()
 
-    -- Main Container
     local MainFrame = Instance.new("CanvasGroup")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.fromScale(0.4, 0.45)
@@ -2577,13 +2460,12 @@ function UI.CreateWindow(title)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = MainFrame
-    
+
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(45, 45, 45)
     stroke.Thickness = 1
     stroke.Parent = MainFrame
 
-    -- Shadow
     local shadow = Instance.new("ImageLabel")
     shadow.Name = "Shadow"
     shadow.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -2591,17 +2473,16 @@ function UI.CreateWindow(title)
     shadow.Position = UDim2.fromScale(0.5, 0.5)
     shadow.Size = UDim2.new(1, 100, 1, 100)
     shadow.ZIndex = 0
-    shadow.Image = "rbxassetid://6015897843" -- Generic shadow
+    shadow.Image = "rbxassetid://6015897843"
     shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
     shadow.ImageTransparency = 0.4
     shadow.ScaleType = Enum.ScaleType.Slice
     shadow.SliceCenter = Rect.new(49, 49, 450, 450)
     shadow.Parent = MainFrame
 
-    -- Sidebar
     local Sidebar = Instance.new("Frame")
     Sidebar.Name = "Sidebar"
-    Sidebar.Size = UDim2.new(0.26, 0, 1, 0) -- Responsive width
+    Sidebar.Size = UDim2.new(0.26, 0, 1, 0)
     Sidebar.BackgroundColor3 = UI_THEME.Sidebar
     Sidebar.BorderSizePixel = 0
     Sidebar.Parent = MainFrame
@@ -2610,12 +2491,11 @@ function UI.CreateWindow(title)
     sideConstraint.MinSize = Vector2.new(120, 0)
     sideConstraint.MaxSize = Vector2.new(180, 9999)
     sideConstraint.Parent = Sidebar
-    
+
     local sbCorner = Instance.new("UICorner")
     sbCorner.CornerRadius = UDim.new(0, 8)
     sbCorner.Parent = Sidebar
-    
-    -- Fix rounded corner clipping on right side
+
     local sbFix = Instance.new("Frame")
     sbFix.BackgroundColor3 = UI_THEME.Sidebar
     sbFix.BorderSizePixel = 0
@@ -2623,7 +2503,6 @@ function UI.CreateWindow(title)
     sbFix.Position = UDim2.new(1, -10, 0, 0)
     sbFix.Parent = Sidebar
 
-    -- Title
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Size = UDim2.new(1, -20, 0, 36)
     TitleLabel.Position = UDim2.new(0, 15, 0, 4)
@@ -2635,7 +2514,6 @@ function UI.CreateWindow(title)
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = Sidebar
 
-    -- Version
     local VersionLabel = Instance.new("TextLabel")
     VersionLabel.Size = UDim2.new(1, 0, 0, 14)
     VersionLabel.Position = UDim2.new(0, 15, 0, 28)
@@ -2647,7 +2525,6 @@ function UI.CreateWindow(title)
     VersionLabel.TextXAlignment = Enum.TextXAlignment.Left
     VersionLabel.Parent = Sidebar
 
-    -- Safe Mode Badge (only visible when SAFE_MODE is active)
     if SAFE_MODE then
         local SafeBadge = Instance.new("Frame")
         SafeBadge.Name = "SafeModeBadge"
@@ -2673,7 +2550,6 @@ function UI.CreateWindow(title)
         SafeLabel.Parent = SafeBadge
     end
 
-    -- Tab Container
     local TabContainer = Instance.new("ScrollingFrame")
     TabContainer.Name = "Tabs"
     TabContainer.Size = UDim2.new(1, 0, 1, -60)
@@ -2689,15 +2565,14 @@ function UI.CreateWindow(title)
     uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
     uiLayout.Parent = TabContainer
 
-    -- Content Area
     local ContentArea = Instance.new("Frame")
     ContentArea.Name = "Content"
-    ContentArea.Size = UDim2.new(0.72, 0, 1, -20) -- Responsive width
+    ContentArea.Size = UDim2.new(0.72, 0, 1, -20)
     ContentArea.Position = UDim2.new(0.28, 0, 0, 10)
     ContentArea.BackgroundTransparency = 1
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
-    
+
     UIState.MainFrame = MainFrame
     UIState.ContentArea = ContentArea
     UIState.TabContainer = TabContainer
@@ -2705,7 +2580,6 @@ function UI.CreateWindow(title)
     UIState.DragStart = nil
     UIState.StartPos = nil
 
-    -- Centralized Dragging Handler
     local dragInputConn, dragEndedConn
     dragInputConn = TrackConnection(UserInputService.InputChanged:Connect(function(input)
         if not ScreenGui or not ScreenGui.Parent then
@@ -2715,28 +2589,28 @@ function UI.CreateWindow(title)
         end
         local Frame = UIState.ActiveDraggedFrame
         if not Frame or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-        
+
         local delta = input.Position - UIState.DragStart
         local screenGui = Frame:FindFirstAncestorOfClass("ScreenGui")
         local screenSize = screenGui and screenGui.AbsoluteSize or Camera.ViewportSize
-        
+
         local startRelX = UIState.StartPos.X.Scale * screenSize.X + UIState.StartPos.X.Offset
         local startRelY = UIState.StartPos.Y.Scale * screenSize.Y + UIState.StartPos.Y.Offset
-        
+
         local newRelX = startRelX + delta.X
         local newRelY = startRelY + delta.Y
-        
+
         local absoluteSize = Frame.AbsoluteSize
         local anchor = Frame.AnchorPoint
-        
+
         local minX = anchor.X * absoluteSize.X
         local maxX = screenSize.X - (1 - anchor.X) * absoluteSize.X
         local minY = anchor.Y * absoluteSize.Y
         local maxY = screenSize.Y - (1 - anchor.Y) * absoluteSize.Y
-        
+
         local clampedX = math.clamp(newRelX, minX, maxX)
         local clampedY = math.clamp(newRelY, minY, maxY)
-        
+
         pcall(function()
             Frame.Position = UDim2new(clampedX / screenSize.X, 0, clampedY / screenSize.Y, 0)
         end)
@@ -2752,10 +2626,9 @@ function UI.CreateWindow(title)
         end
     end))
 
-    -- Dragging Logic Helper
     local function MakeDraggable(Frame)
         table.insert(UIState.DraggableFrames, Frame)
-        
+
         local function attach(obj)
             if obj:IsA("GuiObject") and not obj:IsA("TextButton") and not obj:IsA("ImageButton") and not obj:IsA("TextBox") and not obj:IsA("ScrollingFrame") then
                 TrackConnection(obj.InputBegan:Connect(function(input)
@@ -2769,16 +2642,16 @@ function UI.CreateWindow(title)
                             end
                             current = current.Parent
                         end
-                        
+
                         if not insideInteractive then
                             local absoluteSize = Frame.AbsoluteSize
                             local absolutePosition = Frame.AbsolutePosition
                             local posX = input.Position.X
                             local posY = input.Position.Y
-                            
+
                             if posX >= absolutePosition.X and posX <= (absolutePosition.X + absoluteSize.X) and
                                posY >= absolutePosition.Y and posY <= (absolutePosition.Y + absoluteSize.Y) then
-                                
+
                                 UIState.ActiveDraggedFrame = Frame
                                 UIState.DragStart = input.Position
                                 UIState.StartPos = Frame.Position
@@ -2788,19 +2661,18 @@ function UI.CreateWindow(title)
                 end))
             end
         end
-        
+
         attach(Frame)
         for _, child in ipairs(Frame:GetDescendants()) do
             attach(child)
         end
-        
+
         TrackConnection(Frame.DescendantAdded:Connect(attach))
     end
     UI.MakeDraggable = MakeDraggable
 
     MakeDraggable(MainFrame)
 
-    -- Minimize Button (Main Window)
     local MinButton = Instance.new("TextButton")
     MinButton.Name = "Minimize"
     MinButton.Size = UDim2.new(0, 30, 0, 30)
@@ -2815,7 +2687,7 @@ function UI.CreateWindow(title)
 
     local Minimized = false
     local OldSize = MainFrame.Size
-    
+
     local minimizedText = "Sp3arParvus v" .. VERSION
     local textSize = TextService:GetTextSize(minimizedText, 16, Enum.Font.SourceSansBold, Vector2.new(1000, 1000))
     local minimizedWidth = textSize.X + 45
@@ -2840,7 +2712,7 @@ function UI.CreateWindow(title)
             OldSize = MainFrame.Size
             aspect.Parent = nil
             mainConstraint.Parent = nil
-            -- Responsive Minimize: Use relative Scale for position (Top-Right)
+
             TweenService:Create(MainFrame, TWEENS.SMOOTH, {
                 Size = UDim2.fromOffset(minimizedWidth, 30),
                 Position = UDim2.new(1, 0, 0, 30),
@@ -2873,10 +2745,8 @@ function UI.CreateWindow(title)
     end
     UIState.ToggleMinimize = ToggleMinimize
 
-    -- MEMORY LEAK FIX: Track minimize button connection
     TrackConnection(MinButton.MouseButton1Click:Connect(ToggleMinimize))
 
-    -- Toggle Logic (Right Shift)
     local function ToggleVisible(forceState)
         if forceState ~= nil then
             UIState.Visible = forceState
@@ -2891,7 +2761,6 @@ function UI.CreateWindow(title)
     end
     UIState.ToggleVisible = ToggleVisible
 
-    -- MEMORY LEAK FIX: Track this connection
     TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.CapsLock then
             ToggleVisible()
@@ -2922,7 +2791,7 @@ function UI.CreateTab(name, icon)
     TabLabel.TextColor3 = UI_THEME.TextDark
     TabLabel.TextXAlignment = Enum.TextXAlignment.Left
     TabLabel.Parent = TabButton
-    
+
     local Indicator = Instance.new("Frame")
     Indicator.Size = UDim2.new(0, 3, 0, 16)
     Indicator.Position = UDim2.new(0, 0, 0.5, -8)
@@ -2932,7 +2801,6 @@ function UI.CreateTab(name, icon)
     Indicator.Parent = TabButton
     local indCorner = Instance.new("UICorner"); indCorner.CornerRadius = UDim.new(1,0); indCorner.Parent = Indicator
 
-    -- Page Frame
     local Page = Instance.new("ScrollingFrame")
     Page.Name = name .. "Page"
     Page.Size = UDim2.new(1, 0, 1, 0)
@@ -2941,43 +2809,39 @@ function UI.CreateTab(name, icon)
     Page.ScrollBarThickness = 2
     Page.Visible = false
     Page.Parent = UIState.ContentArea
-    
+
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = Page
-    
+
     TrackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         Page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
     end))
-    
+
     local padding = Instance.new("UIPadding")
     padding.PaddingRight = UDim.new(0, 5)
     padding.Parent = Page
 
-    -- Tab Selection Logic
     local function SelectTab()
-        -- Deselect all
+
         for _, t in pairs(UIState.Tabs) do
             TweenService:Create(t.Label, TWEENS.MEDIUM, {TextColor3 = UI_THEME.TextDark}):Play()
             TweenService:Create(t.Indicator, TWEENS.MEDIUM, {BackgroundTransparency = 1}):Play()
             t.Page.Visible = false
         end
-        -- Select current
+
         TweenService:Create(TabLabel, TWEENS.MEDIUM, {TextColor3 = UI_THEME.Text}):Play()
         TweenService:Create(Indicator, TWEENS.MEDIUM, {BackgroundTransparency = 0}):Play()
         Page.Visible = true
         UIState.CurrentTab = name
     end
 
-    -- MEMORY LEAK FIX: Track tab button connection
     TrackConnection(TabButton.MouseButton1Click:Connect(SelectTab))
-    
-    -- Register
+
     table.insert(UIState.Tabs, {Button = TabButton, Label = TabLabel, Indicator = Indicator, Page = Page, Select = SelectTab})
-    
-    -- Auto-select first tab
+
     if #UIState.Tabs == 1 then
         SelectTab()
     end
@@ -2990,7 +2854,7 @@ function UI.CreateSection(page, name)
     Container.Size = UDim2.new(1, 0, 0, 30)
     Container.BackgroundTransparency = 1
     Container.Parent = page
-    
+
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, 0, 1, 0)
     Label.Position = UDim2.new(0, 2, 0, 5)
@@ -3009,11 +2873,11 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Frame.BackgroundColor3 = UI_THEME.Element
     Frame.BorderSizePixel = 0
     Frame.Parent = page
-    
+
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = Frame
-    
+
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(0.7, lockable and -30 or 0, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
@@ -3037,14 +2901,14 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
-        
+
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
             LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
     end
-    
+
     local Switch = Instance.new("Frame")
     Switch.Size = UDim2.new(0, 44, 0, 22)
     Switch.AnchorPoint = Vector2.new(1, 0.5)
@@ -3052,11 +2916,11 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Switch.BackgroundColor3 = default and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
     Switch.BorderSizePixel = 0
     Switch.Parent = Frame
-    
+
     local swCorner = Instance.new("UICorner")
     swCorner.CornerRadius = UDim.new(0, 2)
     swCorner.Parent = Switch
-    
+
     local Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.AnchorPoint = Vector2.new(0, 0.5)
@@ -3064,30 +2928,29 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Knob.BorderSizePixel = 0
     Knob.Parent = Switch
-    
+
     local kbCorner = Instance.new("UICorner")
     kbCorner.CornerRadius = UDim.new(0, 2)
     kbCorner.Parent = Knob
-    
+
     local Button = Instance.new("TextButton")
     Button.Size = UDim2.new(1, 0, 1, 0)
     Button.BackgroundTransparency = 1
     Button.Text = ""
     Button.Parent = Switch
-    
+
     Flags[flag] = default
-    
+
     local function updateVisuals(state)
         local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
         local targetPos = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
-        
+
         TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = targetColor}):Play()
         TweenService:Create(Knob, TWEENS.SMOOTH, {Position = targetPos}):Play()
     end
 
     UIState.Updaters[flag] = updateVisuals
 
-    -- MEMORY LEAK FIX: Track button connection
     TrackConnection(Button.MouseButton1Click:Connect(function()
         Flags[flag] = not Flags[flag]
         local state = Flags[flag]
@@ -3102,7 +2965,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Frame.BackgroundColor3 = UI_THEME.Element
     Frame.BorderSizePixel = 0
     Frame.Parent = page
-    
+
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = Frame
@@ -3130,14 +2993,14 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         LockBtn.TextSize = 14
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
-        
+
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
             LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
     end
-    
+
     local InputFrame = Instance.new("Frame")
     InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
     InputFrame.Position = UDim2.new(1, -12, 0.5, 0)
@@ -3219,20 +3082,19 @@ function UI.CreateButton(page, text, callback)
     Button.TextSize = 13
     Button.TextColor3 = Color3.fromRGB(255, 255, 255)
     Button.Parent = page
-    
+
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = Button
-    
+
     local stroke = Instance.new("UIStroke")
     stroke.Color = UI_THEME.Accent
     stroke.Thickness = 1
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = Button
-    
-    -- MEMORY LEAK FIX: Track button connection
+
     TrackConnection(Button.MouseButton1Click:Connect(function()
-        -- Click animation
+
         TweenService:Create(Button, TWEENS.INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
         task.wait(0.05)
         TweenService:Create(Button, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
@@ -3240,29 +3102,25 @@ function UI.CreateButton(page, text, callback)
     end))
 end
 
--- Get ping (uses GetNetworkPing for accuracy relative to built-in monitor)
 function GetPing()
     local success, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
     return success and ping * 1000 or 0
 end
 
--- FPS counter setup (OPTIMIZED - fixed memory, no allocations per frame)
--- FPS counter setup (RE-OPTIMIZED - uses proper frame counting via RenderStepped)
 GetFPS = nil
 do
     local frameCount = 0
     local lastTime = os.clock()
     local cachedFPS = 60
-    local updateInterval = 0.5 -- Update display value every 500ms
-    
+    local updateInterval = 0.5
+
     GetFPS = function() return cachedFPS end
-    
-    -- Hidden internal update loop
+
     TrackConnection(Services.RunService.RenderStepped:Connect(function()
         frameCount = frameCount + 1
         local now = os.clock()
         local elapsed = now - lastTime
-        
+
         if elapsed >= updateInterval then
             cachedFPS = math.floor(frameCount / elapsed)
             frameCount = 0
@@ -3271,7 +3129,6 @@ do
     end))
 end
 
--- Rejoin current server
 function Rejoin()
     if #Services.Players:GetPlayers() <= 1 then
         task.wait(0.5)
@@ -3281,7 +3138,6 @@ function Rejoin()
     end
 end
 
--- Track camera changes
 TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
     local newCamera = Workspace.CurrentCamera
     if newCamera then
@@ -3290,18 +3146,14 @@ TrackConnection(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     end
 end))
 
-
--- FULLBRIGHT SYSTEM
--- LIGHTING MANAGEMENT SYSTEM (Fullbright / FullDark)
-
 function UpdateLighting()
     local fullbright = Flags["Visuals/Fullbright"]
     local fullDark = Flags["Visuals/FullDark"]
     local currentState = fullbright or fullDark
-    
+
     if currentState ~= FullbrightState.lastState then
         if currentState then
-            -- Store original settings if not already stored
+
             if not FullbrightState.originalSettings then
                 local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
                 FullbrightState.originalSettings = {
@@ -3315,7 +3167,7 @@ function UpdateLighting()
                 }
             end
         else
-            -- Restore original settings
+
             if FullbrightState.originalSettings then
                 Services.Lighting.Ambient = FullbrightState.originalSettings.Ambient
                 Services.Lighting.OutdoorAmbient = FullbrightState.originalSettings.OutdoorAmbient
@@ -3323,7 +3175,7 @@ function UpdateLighting()
                 Services.Lighting.ClockTime = FullbrightState.originalSettings.ClockTime
                 Services.Lighting.FogEnd = FullbrightState.originalSettings.FogEnd
                 Services.Lighting.GlobalShadows = FullbrightState.originalSettings.GlobalShadows
-                
+
                 if FullbrightState.originalSettings.AtmosphereDensity then
                     local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
                     if atmosphere then
@@ -3337,7 +3189,7 @@ function UpdateLighting()
     end
 
     if not currentState then return end
-    
+
     if fullbright then
         Services.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
         Services.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
@@ -3345,22 +3197,22 @@ function UpdateLighting()
         Services.Lighting.ClockTime = 12
         Services.Lighting.FogEnd = 1e5
         Services.Lighting.GlobalShadows = false
-        
+
         local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
         if atmosphere then
             atmosphere.Density = 0
         end
     elseif fullDark then
-        -- FullDark: ClockTime 0 (midnight), others original
+
         Services.Lighting.ClockTime = 0
-        
+
         if FullbrightState.originalSettings then
             Services.Lighting.Ambient = FullbrightState.originalSettings.Ambient
             Services.Lighting.OutdoorAmbient = FullbrightState.originalSettings.OutdoorAmbient
             Services.Lighting.Brightness = FullbrightState.originalSettings.Brightness
             Services.Lighting.FogEnd = FullbrightState.originalSettings.FogEnd
             Services.Lighting.GlobalShadows = FullbrightState.originalSettings.GlobalShadows
-            
+
             if FullbrightState.originalSettings.AtmosphereDensity then
                 local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
                 if atmosphere then
@@ -3371,42 +3223,33 @@ function UpdateLighting()
     end
 end
 
-
--- TEAM & CHARACTER DETECTION
-
-
--- Check if player is on enemy team
--- Get character and check health (Heavily Optimized with Cache)
-
 function GetCharacter(player)
     if not player then return nil end
-    
-    -- Fast path: Check cache
+
     local cache = CharCache[player]
     if cache then
         local char = cache.Char
         local root = cache.Root
-        
-        -- Verify validity (parented) and ensure it's the current character
+
         if char and char.Parent and char == player.Character and root and root.Parent then
-            -- Standard Humanoid Check
+
             if cache.Humanoid then
                 if cache.Humanoid.Health > 0 then
                     return char, root
                 end
                 return nil
-            -- Fallback Custom Health Check (AR2)
+
             elseif cache.HealthInst then
                  if cache.HealthInst.Value > 0 then
                      return char, root
                  end
                  return nil
             else
-                -- No health object found, assume alive
+
                 return char, root
             end
         else
-             -- Stale cache
+
              cache.Char = nil
              cache.Root = nil
              cache.Humanoid = nil
@@ -3415,17 +3258,15 @@ function GetCharacter(player)
         end
     end
 
-    -- Slow path: Find and cache
     local character = player.Character
     if not character or not character.Parent then return nil end
 
     local rootPart = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
     if not rootPart then return nil end
-    
+
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local healthInst = nil
-    
-    -- If no humanoid, check for AR2 style stats
+
     if not humanoid then
         local stats = player:FindFirstChild("Stats")
         if stats and stats:IsA("Folder") then
@@ -3435,8 +3276,7 @@ function GetCharacter(player)
             end
         end
     end
-    
-    -- Populate cache
+
     if not cache then
         cache = {}
         CharCache[player] = cache
@@ -3446,8 +3286,7 @@ function GetCharacter(player)
     cache.Root = rootPart
     cache.Humanoid = humanoid
     cache.HealthInst = healthInst
-    
-    -- Pre-cache common target parts
+
     cache.Head = character:FindFirstChild("Head")
 
     if humanoid and humanoid.Health <= 0 then return nil end
@@ -3458,25 +3297,23 @@ end
 
 function GetHealth(player)
     if not player then return 0, 100 end
-    
+
     local cache = CharCache[player]
     if cache then
         if cache.Humanoid then
             return cache.Humanoid.Health, cache.Humanoid.MaxHealth
         elseif cache.HealthInst then
-            return cache.HealthInst.Value, 100 -- AR2 style health usually defaults to 100 max
+            return cache.HealthInst.Value, 100
         end
     end
-    
-    -- Fallback: Slow search
+
     local char = player.Character
     if char then
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid then
             return humanoid.Health, humanoid.MaxHealth
         end
-        
-        -- AR2 Fallback
+
         local stats = player:FindFirstChild("Stats")
         if stats and stats:IsA("Folder") then
             local health = stats:FindFirstChild("Health")
@@ -3485,29 +3322,29 @@ function GetHealth(player)
             end
         end
     end
-    
+
     return 0, 100
 end
 
 function GetHealthColor(health, maxHealth)
-    -- Snap health to nearest 5 for the "shift every 5 health" requirement
+
     local snappedHealth = math.floor(health / 5) * 5
     local percent = math.clamp(snappedHealth / maxHealth, 0, 1)
-    
+
     if percent >= 0.75 then
-        -- 100-75% of total hp = (0,255,0) -> (127,255,0)
+
         local t = (1 - percent) / 0.25
         return Color3.fromRGB(math.floor(127 * t), 255, 0)
     elseif percent >= 0.50 then
-        -- 74-50% of total hp = (127,255,0) -> (255,255,0)
+
         local t = (0.75 - percent) / 0.25
         return Color3.fromRGB(127 + math.floor(128 * t), 255, 0)
     elseif percent >= 0.25 then
-        -- 49-25% of total hp = (255,255,0) -> (255,127,0)
+
         local t = (0.50 - percent) / 0.25
         return Color3.fromRGB(255, 255 - math.floor(128 * t), 0)
     else
-        -- <24% of total hp = (255,127,0) -> (255,0,0)
+
         local t = (0.25 - percent) / 0.25
         return Color3.fromRGB(255, 127 - math.floor(127 * t), 0)
     end
@@ -3516,7 +3353,6 @@ end
 function InEnemyTeam(Enabled, Player)
     if not Enabled then return true end
 
-    -- Standard team check
     local lpTeam, pTeam = LocalPlayer.Team, Player.Team
     if lpTeam and pTeam then
         if lpTeam == pTeam then
@@ -3524,18 +3360,17 @@ function InEnemyTeam(Enabled, Player)
         end
     end
 
-    -- AR2 Squad check
     local pCache = CharCache[Player]
-    if not pCache then 
+    if not pCache then
         GetCharacter(Player)
         pCache = CharCache[Player]
     end
-    
+
     if pCache then
         if pCache.Squad == nil then
             pCache.Squad = Player:FindFirstChild("Squad") or false
         end
-        
+
         local playerSquad = pCache.Squad
         if playerSquad then
             local lpCache = CharCache[LocalPlayer]
@@ -3543,12 +3378,12 @@ function InEnemyTeam(Enabled, Player)
                 GetCharacter(LocalPlayer)
                 lpCache = CharCache[LocalPlayer]
             end
-            
+
             if lpCache then
                 if lpCache.Squad == nil then
                     lpCache.Squad = LocalPlayer:FindFirstChild("Squad") or false
                 end
-                
+
                 local localSquad = lpCache.Squad
                 if localSquad and localSquad.Value ~= "" and localSquad.Value == playerSquad.Value then
                     return false
@@ -3560,21 +3395,20 @@ function InEnemyTeam(Enabled, Player)
     return true
 end
 
--- Periodic CharCache pruning (removes stale entries for players who left or have invalid characters)
 lastCharCachePrune = 0
-CHAR_CACHE_PRUNE_INTERVAL = 5.0 -- Prune every 5 seconds
+CHAR_CACHE_PRUNE_INTERVAL = 5.0
 
 function PruneCharCache()
     local now = os.clock()
     if (now - lastCharCachePrune) < CHAR_CACHE_PRUNE_INTERVAL then return end
     lastCharCachePrune = now
-    
+
     local players = GetPlayersCache()
     local playerMap = {}
     for i = 1, #players do playerMap[players[i]] = true end
 
     for player, cache in pairs(CharCache) do
-        -- Remove if player left the game
+
         if not playerMap[player] or not player.Parent then
             if AimState.LastAimTarget == player then
                 AimState.LastAimTarget = nil
@@ -3588,7 +3422,7 @@ function PruneCharCache()
             cache.HealthInst = nil
             cache.Squad = nil
             CharCache[player] = nil
-        -- Clear character-linked fields if character is invalid/destroyed
+
         elseif cache.Char and not cache.Char.Parent then
             if AimState.LastAimTarget == player then
                 AimState.LastAimTarget = nil
@@ -3612,14 +3446,10 @@ function PruneCharCache()
     end
 end
 
--- Forward declarations for cleanup functions (implemented after variable declarations)
 ClearCandidateReferences = nil
 
--- ESPObjects validation sweep (removes orphaned ESP entries for players who left)
--- This is a safety net in case PlayerRemoving didn't fire properly
--- Note: ESPObjects is declared later in file, so we need nil check
 function ValidateESPObjects()
-    -- Cleanup orphaned outlines first
+
     if PlayerOutlineObjects then
         for player, _ in pairs(PlayerOutlineObjects) do
             if not player or not player.Parent then
@@ -3628,11 +3458,11 @@ function ValidateESPObjects()
         end
     end
 
-    if not ESPObjects then return end -- Safety: ESPObjects declared later in file
+    if not ESPObjects then return end
     for player, espData in pairs(ESPObjects) do
-        -- Check if player is gone or orphaned
+
         if not player or not player.Parent then
-            -- Reset global references if this player was the target
+
             if NearestPlayerRef == player then NearestPlayerRef = nil end
             if AimState.LastAimTarget == player then AimState.LastAimTarget = nil end
             if ClosestResult[1] == player then table.clear(ClosestResult) end
@@ -3645,10 +3475,8 @@ function ValidateESPObjects()
                 AdvancedPlayerPanelState.Spectating = nil
             end
 
-            -- Also cleanup outlines for this player
             pcall(RemovePlayerOutlines, player)
-            
-            -- Cleanup the orphaned ESP
+
             pcall(function()
                 if espData.Nametag then espData.Nametag:Destroy() end
                 if espData.Connections then
@@ -3668,20 +3496,11 @@ function ValidateESPObjects()
     end
 end
 
-
--- PHYSICS & BALLISTICS
-
-
--- Aim CORE (EXACT CODE FROM PARVUS)
-
-
--- Raycast for visibility check
--- Cache the FilterType enum value once
 CachedFilterType = (function()
-    -- Try Exclude first (modern)
+
     local ok, val = pcall(function()
         local ft = Enum.RaycastFilterType.Exclude
-        -- Validate it's actually an EnumItem
+
         if typeof(ft) == "EnumItem" then
             return ft
         end
@@ -3691,7 +3510,6 @@ CachedFilterType = (function()
         return val
     end
 
-    -- Try Blacklist (legacy)
     ok, val = pcall(function()
         local ft = Enum.RaycastFilterType.Blacklist
         if typeof(ft) == "EnumItem" then
@@ -3703,7 +3521,6 @@ CachedFilterType = (function()
         return val
     end
 
-    -- Return nil if neither works
     warn("[Sp3arParvus] WARNING: Could not cache any RaycastFilterType enum - raycasts may not filter properly")
     return nil
 end)()
@@ -3724,49 +3541,37 @@ function WithinReach(Enabled, Distance, Limit)
     return Distance < Limit
 end
 
--- PERFORMANCE FIX: Reusable filter table for visibility raycasts
 OcclusionFilter = {nil, nil}
 
 function ObjectOccluded(Enabled, Origin, Position, Object)
     if not Enabled then return false end
-    -- Safety check: Ensure Position is a valid Vector3 to prevent arithmetic errors
+
     if typeof(Position) ~= "Vector3" then return false end
-    
-    -- Reuse filter table instead of creating new one every call
+
     OcclusionFilter[1] = LocalPlayer.Character
     OcclusionFilter[2] = Object
     local hit = Raycast(Origin, Position - Origin, OcclusionFilter)
-    
+
     if hit and hit.Instance and not hit.Instance:IsDescendantOf(Object) then
         return true
     end
-    
+
     return false
 end
 
--- OPTIMIZED: Reusable result table to avoid allocations per frame
--- Changed to store x,y directly instead of Vector2 to avoid allocations
-ClosestResult = {nil, nil, nil, 0, 0, nil} -- [1]=Player, [2]=Character, [3]=BodyPart, [4]=screenX, [5]=screenY, [6]=pos
+ClosestResult = {nil, nil, nil, 0, 0, nil}
 
--- Hoisted comparator for candidate sorting
 function CandidateSortFn(a, b)
     return a.mag < b.mag
 end
 
--- Hoisted comparator for distance sorting
-
--- OPTIMIZED: Reusable tables for candidate sorting to avoid per-frame allocations
-CandidateList = {} -- Array of {dist, data...}
+CandidateList = {}
 CandidateCount = 0
-MAX_CANDIDATES = 15 -- Cap max candidates to process for performance
+MAX_CANDIDATES = 15
 
--- CandidateList cleanup (clears object references to prevent stale refs and shrinks table)
--- Now properly placed after CandidateList and ClosestResult are declared
 function ClearCandidateReferences()
-    if not CandidateList then return end -- Safety check
-    
-    -- If CandidateList bloated beyond reasonable bounds, explicitly shrink it
-    -- but keep a reasonable pool size to avoid re-allocation
+    if not CandidateList then return end
+
     if #CandidateList > MAX_CANDIDATES * 3 then
         for i = MAX_CANDIDATES * 3 + 1, #CandidateList do
             CandidateList[i] = nil
@@ -3783,9 +3588,8 @@ function ClearCandidateReferences()
             entry.realPos = nil
         end
     end
-    
-end
 
+end
 
 local _hoistedCheckParts = {}
 local _lastTargetGroupsHash = nil
@@ -3809,7 +3613,6 @@ local function RebuildCheckParts()
     end
 end
 
--- GetClosest function (HEAVILY OPTIMIZED - Lazy Raycasting)
 function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, DistanceLimit, FieldOfView, Priority, BodyParts, StickyTarget)
     if not Enabled then
         return nil
@@ -3818,20 +3621,17 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local CameraPosition = Camera.CFrame.Position
     local mouseBehavior = UserInputService.MouseBehavior
 
-    -- Calculate crosshair/origin in Viewport space
     local crosshairX, crosshairY, crosshairValid = GetCrosshairViewportPosition(mouseBehavior)
     if not crosshairValid then
         return nil
     end
 
-    -- Reset candidate list
     CandidateCount = 0
 
     local players = GetPlayersCache()
     local lookVector = Camera.CFrame.LookVector
     local maxCandsLimit = MAX_CANDIDATES * 3
-    
-    -- HOISTED ALLOCATION: Compute checkParts once per frame instead of per-player
+
     local currentHash = (Flags["Aim/TargetGroups"].Head and 1 or 0) +
                         (Flags["Aim/TargetGroups"].Torso and 2 or 0) +
                         (Flags["Aim/TargetGroups"].LeftArm and 4 or 0) +
@@ -3861,7 +3661,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
         local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
 
-        -- Whitelist Check
         if isWhitelisted then
             continue
         end
@@ -3876,19 +3675,15 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
 
         local rootPos = RootPart.Position
         local relPos = rootPos - CameraPosition
-        
-        -- 1. DOT PRODUCT PRE-FILTER (Cheap check to ensure target is in front)
+
         if not isBlacklisted and lookVector:Dot(relPos) < 0 then
             continue
         end
 
-        -- 2. DISTANCE PRE-FILTER
         local rootDist = relPos.Magnitude
         if not isBlacklisted and DistanceCheck and rootDist > (DistanceLimit + 50) then
             continue
         end
-
-        -- 3. VIEWPORT PRE-FILTER (Removed - allows targeting players when root is just off-screen)
 
         for _, PartName in ipairs(checkParts) do
             local cache = CharCache[Player]
@@ -3910,7 +3705,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local dx, dy = screenX - crosshairX, screenY - crosshairY
                 local Magnitude = sqrt(dx * dx + dy * dy)
 
-                -- Custom Blacklist and Prioritization Logic
                 local bypassBlacklistPriority = false
                 if isBlacklisted and Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"] then
                     local isOccluded = ObjectOccluded(VisibilityCheck, CameraPosition, ActualPosition, Character)
@@ -3972,12 +3766,12 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 local pTeam = entry.ply.Team
                 local teamName = pTeam and pTeam.Name
                 local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
-                
+
                 local performStickyOcclusion = true
                 if isSpecTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
                     performStickyOcclusion = false
                 end
-                
+
                 if not performStickyOcclusion or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
                     ClosestResult[1] = entry.ply
                     ClosestResult[2] = entry.char
@@ -4027,8 +3821,6 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     return nil
 end
 
--- AimAt function (FIXED - handles mouse-locked mode properly)
--- AimAt function (FIXED - stabilized initial acquisition / reacquisition)
 function AimAt(Hitbox)
     if not Hitbox then
         ClearAimLockState(false)
@@ -4067,7 +3859,6 @@ function AimAt(Hitbox)
         return
     end
 
-
     local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
     if not OnScreen or ScreenPosition.Z <= 0 then
         return
@@ -4084,7 +3875,6 @@ function AimAt(Hitbox)
     AimState.LastOriginX = originX
     AimState.LastOriginY = originY
 
-
     local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
     local dx, dy = targetX - originX, targetY - originY
 
@@ -4094,10 +3884,9 @@ function AimAt(Hitbox)
     end
 
     local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
-    
-    -- Dampening / Settling Effect to prevent screen shaking on high attraction strength
+
     if Flags["Aim/Dampening"] then
-        local lockThreshold = Flags["Aim/Dampening/Threshold"] -- Distance threshold for "Locked-On" state
+        local lockThreshold = Flags["Aim/Dampening/Threshold"]
         if mag < lockThreshold then
             local dampening = math.max(Flags["Aim/Dampening/Strength"] / 100, mag / lockThreshold)
             attractionMultiplier = attractionMultiplier * dampening
@@ -4112,22 +3901,17 @@ function AimAt(Hitbox)
         return
     end
 
-    -- Clamp movement to 50% of viewport size to keep target in view while ensuring continuous tracking
     local maxClampX = viewportSize.X * 0.5
     local maxClampY = viewportSize.Y * 0.5
-    
+
     deltaX = math.clamp(deltaX, -maxClampX, maxClampX)
     deltaY = math.clamp(deltaY, -maxClampY, maxClampY)
 
     mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
 
-
--- ESP SYSTEM
-
-
-ESPObjects = {} -- [Player] = {Nametag, Connections}
-PlayerOutlineObjects = {} -- [Player] = { [BodyPartName] = Highlight instance }
+ESPObjects = {}
+PlayerOutlineObjects = {}
 
 COLORS = {
     CLOSEST = Color3.fromRGB(255, 105, 180),
@@ -4135,65 +3919,54 @@ COLORS = {
     OUTLINE = Color3.fromRGB(255, 105, 180)
 }
 
--- PERFORMANCE: Max highlights to use (Roblox hard limit is 31, shared with other scripts)
-MAX_OUTLINE_HIGHLIGHTS = 15 
+MAX_OUTLINE_HIGHLIGHTS = 15
 
--- Distance-based color zones (for tracker, but closest overrides to pink)
-COLOR_CLOSE = Color3.fromRGB(255, 50, 50)     -- Red (0-750 studs)
-COLOR_MID = Color3.fromRGB(255, 200, 50)      -- Yellow (751-1875 studs)
-COLOR_FAR = Color3.fromRGB(50, 255, 50)       -- Green (1875+ studs)
+COLOR_CLOSE = Color3.fromRGB(255, 50, 50)
+COLOR_MID = Color3.fromRGB(255, 200, 50)
+COLOR_FAR = Color3.fromRGB(50, 255, 50)
 
--- Closest Player Tracker variables
 ClosestPlayerTrackerLabel = nil
 TrackerMinimized = false
 TrackerOriginalSize = UDim2.fromOffset(220, 70)
 NearestPlayerRef = nil
-CurrentTargetDistance = 0 -- Track distance for color coding
-TrackerStrokeRef = nil -- Cached stroke reference to avoid repeated lookups
+CurrentTargetDistance = 0
+TrackerStrokeRef = nil
 
--- Get color based on distance (Pink=Closest, Red≤750, Yellow≤1875, Green>1875)
 function GetDistanceColor(distance, isClosest)
     if isClosest then
-        return COLORS.CLOSEST -- Pink always overrides for closest player
+        return COLORS.CLOSEST
     end
 
     if distance <= 750 then
-        return COLOR_CLOSE -- Red
+        return COLOR_CLOSE
     elseif distance <= 1875 then
-        return COLOR_MID -- Yellow
+        return COLOR_MID
     else
-        return COLOR_FAR -- Green
+        return COLOR_FAR
     end
 end
 
--- Get a player's team color (returns white if no team)
--- Wrapped in pcall to prevent errors if Team property access fails
--- Get a player's team color (returns white if no team)
 function GetTeamColor(player)
     if not player then return COLORS.NORMAL end
-    
-    -- Optimized: No pcall needed for standard property access
+
     if player.Team then
         return player.TeamColor.Color
     end
-    
+
     return COLORS.NORMAL
 end
 
--- PERFORMANCE: Cache camera data per-frame for off-screen calculations
-
--- Create Closest Player Tracker display
-TrackerHeaderLabel, TrackerNameLabel, TrackerDistanceLabel, TrackerHealthLabel, TrackerEquippedLabel = nil, nil, nil, nil, nil -- References to individual labels
+TrackerHeaderLabel, TrackerNameLabel, TrackerDistanceLabel, TrackerHealthLabel, TrackerEquippedLabel = nil, nil, nil, nil, nil
 
 function CreateClosestPlayerTracker()
-    -- Main container frame
+
     ClosestPlayerTrackerLabel = Instance.new("CanvasGroup")
     ClosestPlayerTrackerLabel.Name = "ClosestPlayerTracker"
     ClosestPlayerTrackerLabel.Size = UDim2.fromOffset(220, 70)
     local OriginalSize = ClosestPlayerTrackerLabel.Size
-    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 0) -- Top Center
+    ClosestPlayerTrackerLabel.Position = UDim2.new(0.5, 0, 0, 0)
     ClosestPlayerTrackerLabel.AnchorPoint = Vector2.new(0.5, 0)
-    
+
     local sizeConstraint = Instance.new("UISizeConstraint")
     sizeConstraint.MinSize = Vector2.new(180, 30)
     sizeConstraint.MaxSize = Vector2.new(450, 250)
@@ -4214,9 +3987,8 @@ function CreateClosestPlayerTracker()
     stroke.Thickness = 2
     stroke.Transparency = 0.5
     stroke.Parent = ClosestPlayerTrackerLabel
-    TrackerStrokeRef = stroke -- Cache the reference
+    TrackerStrokeRef = stroke
 
-    -- Container for text labels with vertical layout
     local textContainer = Instance.new("Frame")
     textContainer.Name = "TextContainer"
     textContainer.Size = UDim2.new(1, -30, 1, 0)
@@ -4231,7 +4003,6 @@ function CreateClosestPlayerTracker()
     layout.Padding = UDim.new(0, 2)
     layout.Parent = textContainer
 
-    -- Header label ("Closest Player")
     TrackerHeaderLabel = Instance.new("TextLabel")
     TrackerHeaderLabel.Name = "HeaderLabel"
     TrackerHeaderLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -4243,7 +4014,6 @@ function CreateClosestPlayerTracker()
     TrackerHeaderLabel.LayoutOrder = 1
     TrackerHeaderLabel.Parent = textContainer
 
-    -- Name label (player name with team color)
     TrackerNameLabel = Instance.new("TextLabel")
     TrackerNameLabel.Name = "NameLabel"
     TrackerNameLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -4255,7 +4025,6 @@ function CreateClosestPlayerTracker()
     TrackerNameLabel.LayoutOrder = 2
     TrackerNameLabel.Parent = textContainer
 
-    -- Distance label (distance with distance-based color)
     TrackerDistanceLabel = Instance.new("TextLabel")
     TrackerDistanceLabel.Name = "DistanceLabel"
     TrackerDistanceLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -4267,7 +4036,6 @@ function CreateClosestPlayerTracker()
     TrackerDistanceLabel.LayoutOrder = 3
     TrackerDistanceLabel.Parent = textContainer
 
-    -- Health label
     TrackerHealthLabel = Instance.new("TextLabel")
     TrackerHealthLabel.Name = "HealthLabel"
     TrackerHealthLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -4279,7 +4047,6 @@ function CreateClosestPlayerTracker()
     TrackerHealthLabel.LayoutOrder = 4
     TrackerHealthLabel.Parent = textContainer
 
-    -- Equipped tool label
     TrackerEquippedLabel = Instance.new("TextLabel")
     TrackerEquippedLabel.Name = "EquippedLabel"
     TrackerEquippedLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -4291,7 +4058,6 @@ function CreateClosestPlayerTracker()
     TrackerEquippedLabel.LayoutOrder = 5
     TrackerEquippedLabel.Parent = textContainer
 
-    -- Minimize button
     local minimizeBtn = Instance.new("TextButton")
     minimizeBtn.Name = "MinimizeBtn"
     minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 40)
@@ -4309,7 +4075,6 @@ function CreateClosestPlayerTracker()
     btnCorner.CornerRadius = UDim.new(0, 4)
     btnCorner.Parent = minimizeBtn
 
-    -- MEMORY LEAK FIX: Track minimize button connection
     TrackConnection(minimizeBtn.MouseButton1Click:Connect(function()
         TrackerMinimized = not TrackerMinimized
         if TrackerMinimized then
@@ -4326,14 +4091,13 @@ function CreateClosestPlayerTracker()
             UpdateClosestPlayerTracker()
         end
     end))
-    
+
     if UI.MakeDraggable then
         UI.MakeDraggable(ClosestPlayerTrackerLabel)
     end
     pcall(UpdateScreenUIOpacity)
 end
 
--- Update Nearest Player (finds closest player once)
 function UpdateNearestPlayer()
     local myChar = LocalPlayer.Character
     if not myChar then
@@ -4350,7 +4114,6 @@ function UpdateNearestPlayer()
     local myRootPos = myRoot.Position
     local best, bestDist = nil, nil
 
-    -- Find closest alive player (OPTIMIZED: removed pcall overhead)
     for _, player in ipairs(GetPlayersCache()) do
         if player ~= LocalPlayer and player.Parent then
             local character, rootPart = GetCharacter(player)
@@ -4367,7 +4130,6 @@ function UpdateNearestPlayer()
     NearestPlayerRef = best
 end
 
--- Update Closest Player Tracker display
 function UpdateClosestPlayerTracker()
     if not Flags["LocalUI/ClosestPlayerTracker"] or not ClosestPlayerTrackerLabel then
         if ClosestPlayerTrackerLabel then
@@ -4399,12 +4161,11 @@ function UpdateClosestPlayerTracker()
                 hasPlayer = true
                 distance = (targetRoot.Position - myRoot.Position).Magnitude
                 distColor = GetDistanceColor(distance, false)
-                
+
                 if TrackerStrokeRef then
                     TrackerStrokeRef.Color = distColor
                 end
 
-                -- 1. Name text
                 local displayName = NearestPlayerRef.DisplayName or NearestPlayerRef.Name
                 local username = NearestPlayerRef.Name
                 local nameText = ""
@@ -4415,13 +4176,12 @@ function UpdateClosestPlayerTracker()
                 elseif showUser then
                     nameText = "@" .. username
                 end
-                
+
                 if TrackerNameLabel then
                     TrackerNameLabel.Text = nameText
                     TrackerNameLabel.TextColor3 = GetTeamColor(NearestPlayerRef)
                 end
-                
-                -- 2. Distance text
+
                 local distRounded = floor(distance + 0.5)
                 if TrackerDistanceLabel then
                     TrackerDistanceLabel.Text = string.format("%d studs away", distRounded)
@@ -4429,14 +4189,12 @@ function UpdateClosestPlayerTracker()
                 end
                 CurrentTargetDistance = distRounded
 
-                -- 3. Health text
                 if TrackerHealthLabel then
                     local health, maxHealth = GetHealth(NearestPlayerRef)
                     TrackerHealthLabel.Text = string.format("HP: %d/%d", floor(health), floor(maxHealth))
                     TrackerHealthLabel.TextColor3 = GetHealthColor(health, maxHealth)
                 end
 
-                -- 4. Equipped tool text
                 if TrackerEquippedLabel then
                     local equippedTool = targetChar and targetChar:FindFirstChildOfClass("Tool")
                     local toolName = equippedTool and equippedTool.Name or "Unarmed"
@@ -4457,11 +4215,9 @@ function UpdateClosestPlayerTracker()
             NearestPlayerRef = nil
         end
 
-        -- Determine visibility, text widths, and update sizes
-        local visibleCount = 1 -- Header is always visible
-        local maxTextWidth = 100 -- Default minimum width
-        
-        -- Measure Header width
+        local visibleCount = 1
+        local maxTextWidth = 100
+
         if TrackerHeaderLabel and TrackerHeaderLabel.Text ~= "" then
             local headerSize = TextService:GetTextSize(TrackerHeaderLabel.Text, 14, Enum.Font.Montserrat, Vector2.new(1000, 18))
             maxTextWidth = math.max(maxTextWidth, headerSize.X)
@@ -4469,7 +4225,7 @@ function UpdateClosestPlayerTracker()
 
         local showNameLabel = hasPlayer and (showDisplay or showUser)
         if not hasPlayer then
-            showNameLabel = true -- shows "No players nearby", "Searching...", or "---"
+            showNameLabel = true
         end
 
         if TrackerNameLabel then
@@ -4511,12 +4267,10 @@ function UpdateClosestPlayerTracker()
 
         local targetHeight = 12 + (visibleCount * 18) + (math.max(0, visibleCount - 1) * 2)
         local targetWidth = math.clamp(maxTextWidth + 50, 180, 450)
-        
+
         TweenService:Create(ClosestPlayerTrackerLabel, TWEENS.SMOOTH, {Size = UDim2.fromOffset(targetWidth, targetHeight)}):Play()
     end
 end
-
--- PLAYERPAGE (Ctrl+K)
 
 function CreateItemPanel()
     if ItemPanelUI.MainFrame then return end
@@ -4546,7 +4300,6 @@ function CreateItemPanel()
 
     UI.MakeDraggable(MainFrame)
 
-    -- Header
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 35)
@@ -4602,7 +4355,6 @@ function CreateItemPanel()
         if updater then updater(false) end
     end))
 
-    -- Left Side: Explorer
     local ExplorerFrame = Instance.new("Frame")
     ExplorerFrame.Name = "ExplorerFrame"
     ExplorerFrame.Size = UDim2.new(0.5, -5, 1, -45)
@@ -4631,7 +4383,6 @@ function CreateItemPanel()
         explorerContent.CanvasSize = UDim2.new(0, 0, 0, explorerLayout.AbsoluteContentSize.Y)
     end))
 
-    -- Right Side: Properties
     local PropertyFrame = Instance.new("Frame")
     PropertyFrame.Name = "PropertyFrame"
     PropertyFrame.Size = UDim2.new(0.5, -5, 1, -45)
@@ -4856,24 +4607,24 @@ function SwitchToPlayerPageView(viewName)
         if listBtn then listBtn.Visible = true end
         if teamsBtn then teamsBtn.Visible = true end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
-        if listFrame then 
-            listFrame.Position = UDim2.fromOffset(0, 35) 
+        if listFrame then
+            listFrame.Position = UDim2.fromOffset(0, 35)
             listFrame.Size = UDim2.new(1, 0, 1, -35)
         end
     elseif viewName == "Teams" then
         if listFrame then listFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = false end
         if settingsFrame then settingsFrame.Visible = false end
-        if teamFrame then 
-            teamFrame.Visible = true 
+        if teamFrame then
+            teamFrame.Visible = true
             UpdateTeamPanelList()
         end
         if actionHeader then actionHeader.Visible = false end
         if listBtn then listBtn.Visible = true end
         if teamsBtn then teamsBtn.Visible = true end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
-        if teamFrame then 
-            teamFrame.Position = UDim2.fromOffset(0, 35) 
+        if teamFrame then
+            teamFrame.Position = UDim2.fromOffset(0, 35)
             teamFrame.Size = UDim2.new(1, 0, 1, -35)
         end
     elseif viewName == "Details" then
@@ -4885,8 +4636,8 @@ function SwitchToPlayerPageView(viewName)
         if listBtn then listBtn.Visible = false end
         if teamsBtn then teamsBtn.Visible = false end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 30) end
-        if detailsFrame then 
-            detailsFrame.Position = UDim2.fromOffset(0, 65) 
+        if detailsFrame then
+            detailsFrame.Position = UDim2.fromOffset(0, 65)
             detailsFrame.Size = UDim2.new(1, 0, 1, -65)
         end
         local selectedPlayer = AdvancedPlayerPanelState.SelectedPlayer
@@ -4897,16 +4648,16 @@ function SwitchToPlayerPageView(viewName)
         if listFrame then listFrame.Visible = false end
         if teamFrame then teamFrame.Visible = false end
         if detailsFrame then detailsFrame.Visible = false end
-        if settingsFrame then 
-            settingsFrame.Visible = true 
+        if settingsFrame then
+            settingsFrame.Visible = true
             UpdateSettingsPanel()
         end
         if actionHeader then actionHeader.Visible = false end
         if listBtn then listBtn.Visible = true end
         if teamsBtn then teamsBtn.Visible = true end
         if headerFrame then headerFrame.Position = UDim2.fromOffset(0, 0) end
-        if settingsFrame then 
-            settingsFrame.Position = UDim2.fromOffset(0, 35) 
+        if settingsFrame then
+            settingsFrame.Position = UDim2.fromOffset(0, 35)
             settingsFrame.Size = UDim2.new(1, 0, 1, -35)
         end
     end
@@ -4918,7 +4669,7 @@ function InitializePlayerPage(page)
     AdvancedPlayerPanelState.RowCache = {}
     AdvancedPlayerPanelState.PropertyRowCache = {}
     AdvancedPlayerPanelState.PlayerRowCache = {}
-    
+
     local Wrapper = Instance.new("Frame")
     Wrapper.Name = "PlayerPageWrapper"
     Wrapper.Size = UDim2.new(1, 0, 0, 450)
@@ -4929,7 +4680,6 @@ function InitializePlayerPage(page)
     wrapperPadding.PaddingTop = UDim.new(0, 35)
     wrapperPadding.Parent = Wrapper
 
-    -- Action Buttons (Top Bar)
     local actionHeaderFrame = Instance.new("Frame")
     actionHeaderFrame.Name = "ActionsHeaderFrame"
     actionHeaderFrame.Size = UDim2.new(1, 0, 0, 30)
@@ -5031,7 +4781,7 @@ function InitializePlayerPage(page)
             local targetChar = player.Character
             local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
             local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart)
-            
+
             if AdvancedPlayerPanelState.Spectating == player then
                 AdvancedPlayerPanelState.Spectating = nil
                 local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -5114,7 +4864,6 @@ function InitializePlayerPage(page)
         SwitchToPlayerPageView("Settings")
     end))
 
-    -- List View
     local ListFrame = Instance.new("Frame")
     ListFrame.Name = "ListFrame"
     ListFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -5209,7 +4958,6 @@ function InitializePlayerPage(page)
         listContent.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end))
 
-    -- Details View
     local DetailsFrame = Instance.new("Frame")
     DetailsFrame.Name = "DetailsFrame"
     DetailsFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -5294,7 +5042,7 @@ function InitializePlayerPage(page)
     detailsLayout.Padding = UDim.new(0, 0)
     detailsLayout.SortOrder = Enum.SortOrder.LayoutOrder
     detailsLayout.Parent = detailsContent
-    
+
     TrackConnection(detailsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         detailsContent.CanvasSize = UDim2.new(0, 0, 0, detailsLayout.AbsoluteContentSize.Y)
     end))
@@ -5303,7 +5051,7 @@ function InitializePlayerPage(page)
     detailsPadding.PaddingLeft = UDim.new(0, 10)
     detailsPadding.PaddingRight = UDim.new(0, 10)
     detailsPadding.Parent = detailsContent
-    
+
     local explorerContent = Instance.new("ScrollingFrame")
     explorerContent.Name = "ExplorerContent"
     explorerContent.Size = UDim2.new(1, -10, 1, -186)
@@ -5389,7 +5137,6 @@ function InitializePlayerPage(page)
     AdvancedPlayerPanelUI.PropertySearch = pfSearch
     AdvancedPlayerPanelUI.ExplorerContent = explorerContent
 
-    -- Team View
     local TeamFrame = Instance.new("Frame")
     TeamFrame.Name = "TeamFrame"
     TeamFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -5425,7 +5172,6 @@ function InitializePlayerPage(page)
     AdvancedPlayerPanelUI.TeamContent = teamContent
     AdvancedPlayerPanelUI.SearchBox = searchBox
 
-    -- Settings View
     local SettingsFrame = Instance.new("Frame")
     SettingsFrame.Name = "SettingsFrame"
     SettingsFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -5490,7 +5236,7 @@ function InitializePlayerPage(page)
         btn.TextColor3 = UI_THEME.Accent
         btn.Parent = addPanel
         local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = btn
-        
+
         TrackConnection(btn.MouseButton1Click:Connect(callback))
         return btn
     end
@@ -5533,7 +5279,7 @@ function InitializePlayerPage(page)
     TrackConnection(containerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         listContainer.Size = UDim2.new(1, 0, 0, containerLayout.AbsoluteContentSize.Y)
     end))
-    
+
     TrackThread(task.spawn(function()
         while task.wait(0.5) do
             if UIState.CurrentTab == "PlayerPage" and UIState.Visible then
@@ -5551,14 +5297,14 @@ function InitializePlayerPage(page)
                             AdvancedPlayerPanelState.CurrentPaths = {}
                             ExplorerCounter = 0
                             VisualizeInstance(char, AdvancedPlayerPanelUI.ExplorerContent, 0)
-                            
+
                             for path, row in pairs(AdvancedPlayerPanelState.RowCache) do
                                 if not AdvancedPlayerPanelState.CurrentPaths[path] then
                                     row:Destroy()
                                     AdvancedPlayerPanelState.RowCache[path] = nil
                                 end
                             end
-                            
+
                             if AdvancedPlayerPanelState.ExplorerSelected then
                                 local inst = GetInstanceFromPath(AdvancedPlayerPanelState.ExplorerSelected)
                                 if inst then UpdatePropertyPane(inst) end
@@ -5571,14 +5317,14 @@ function InitializePlayerPage(page)
             end
         end
     end))
-    
+
     TrackConnection(UIState.Tabs[#UIState.Tabs].Button:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
         if UIState.CurrentTab ~= "PlayerPage" and AdvancedPlayerPanelState.selectionHighlight then
             AdvancedPlayerPanelState.selectionHighlight:Destroy()
             AdvancedPlayerPanelState.selectionHighlight = nil
         end
     end))
-    
+
     TrackConnection(page:GetPropertyChangedSignal("Visible"):Connect(function()
         if not page.Visible and AdvancedPlayerPanelState.selectionHighlight then
             AdvancedPlayerPanelState.selectionHighlight:Destroy()
@@ -5776,31 +5522,27 @@ function UpdateAdvancedPlayerList()
 
     local players = Players:GetPlayers()
     local searchText = AdvancedPlayerPanelUI.SearchBox.Text:lower()
-    
+
     local myChar = LocalPlayer.Character
     local myRoot = myChar and (myChar:FindFirstChild("PrimaryPart") or myChar:FindFirstChild("HumanoidRootPart"))
     local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
 
-    -- Build set of current players' UserIds
     local currentPlayersSet = {}
     for _, player in ipairs(players) do
         currentPlayersSet[player.UserId] = true
     end
 
-    -- Process players loop
     for _, player in ipairs(players) do
         local userId = player.UserId
 
-        -- Determine if filtered by search
         local nameMatch = string.find(string.lower(player.Name), searchText, 1, true)
         local displayNameMatch = string.find(string.lower(player.DisplayName or ""), searchText, 1, true)
         local isFiltered = false
-        
+
         if searchText ~= "" and not nameMatch and not displayNameMatch then
             isFiltered = true
         end
 
-        -- Determine if filtered by Tab
         local pTeam = player.Team
         local teamName = pTeam and pTeam.Name
 
@@ -5811,13 +5553,12 @@ function UpdateAdvancedPlayerList()
 
         local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
         local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
-        
+
         local currentTab = AdvancedPlayerPanelState.ListTab
         if (currentTab == "Whitelisted" and not isWhitelisted) or (currentTab == "Blacklisted" and not isBlacklisted) then
             isFiltered = true
         end
 
-        -- Get cache entry
         local entry = AdvancedPlayerPanelState.PlayerRowCache[userId]
 
         if isFiltered then
@@ -5827,13 +5568,12 @@ function UpdateAdvancedPlayerList()
             continue
         end
 
-        -- Calculate distance safely (Requirement 2)
         local dist = 999999
         local distStr = "Loading..."
         local targetChar = player.Character
         local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart or targetChar:FindFirstChild("PrimaryPart"))
         local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart or myChar:FindFirstChild("PrimaryPart"))
-        
+
         if targetRoot then
             if myRoot then
                 dist = (myRoot.Position - targetRoot.Position).Magnitude
@@ -5845,7 +5585,6 @@ function UpdateAdvancedPlayerList()
             distStr = "N/A"
         end
 
-        -- If it does not exist, create the UI frame, connect click events, and cache it
         if not entry then
             entry = {}
             entry.PlayerObj = player
@@ -5859,7 +5598,7 @@ function UpdateAdvancedPlayerList()
             local corner = Instance.new("UICorner")
             corner.CornerRadius = UDim.new(0, 6)
             corner.Parent = frame
-            
+
             local avatar = Instance.new("ImageLabel")
             avatar.Name = "Avatar"
             avatar.Size = UDim2.fromOffset(40, 40)
@@ -5870,12 +5609,12 @@ function UpdateAdvancedPlayerList()
             local aCorner = Instance.new("UICorner")
             aCorner.CornerRadius = UDim.new(1, 0)
             aCorner.Parent = avatar
-            
+
             task.spawn(function()
                 if player and player.Parent then
                     local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                    if isReady and avatar and avatar.Parent then 
-                        avatar.Image = content 
+                    if isReady and avatar and avatar.Parent then
+                        avatar.Image = content
                     end
                 end
             end)
@@ -5926,8 +5665,8 @@ function UpdateAdvancedPlayerList()
 
                 TrackConnection(copyBtn.MouseButton1Click:Connect(function()
                     local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
-                    if copy then 
-                        copy(lbl.Text) 
+                    if copy then
+                        copy(lbl.Text)
                         UI.Notify("Player Explorer", "Copied to clipboard: " .. lbl.Text, 3)
                     end
                 end))
@@ -5957,14 +5696,13 @@ function UpdateAdvancedPlayerList()
             btn.Text = ""
             btn.ZIndex = 1
             btn.Parent = frame
-            
+
             TrackConnection(btn.MouseButton1Click:Connect(function()
                 AdvancedPlayerPanelState.SelectedPlayer = player
                 SwitchToPlayerPageView("Details")
                 ShowAdvancedPlayerDetails(player)
             end))
 
-            -- Whitelist/Blacklist/Priority Quick Buttons
             local wBtn = Instance.new("TextButton")
             wBtn.Name = "WBtn"
             wBtn.Size = UDim2.fromOffset(25, 25)
@@ -5979,7 +5717,7 @@ function UpdateAdvancedPlayerList()
             local wCorner = Instance.new("UICorner")
             wCorner.CornerRadius = UDim.new(0, 4)
             wCorner.Parent = wBtn
-            
+
             TrackConnection(wBtn.MouseButton1Click:Connect(function()
                 ToggleWhitelist(player)
                 UpdateAdvancedPlayerList()
@@ -5999,7 +5737,7 @@ function UpdateAdvancedPlayerList()
             local bCorner = Instance.new("UICorner")
             bCorner.CornerRadius = UDim.new(0, 4)
             bCorner.Parent = bBtn
-            
+
             TrackConnection(bBtn.MouseButton1Click:Connect(function()
                 ToggleBlacklist(player)
                 UpdateAdvancedPlayerList()
@@ -6019,7 +5757,7 @@ function UpdateAdvancedPlayerList()
             local pCorner = Instance.new("UICorner")
             pCorner.CornerRadius = UDim.new(0, 4)
             pCorner.Parent = pBtn
-            
+
             TrackConnection(pBtn.MouseButton1Click:Connect(function()
                 TogglePlayerPriority(player)
                 UpdateAdvancedPlayerList()
@@ -6036,19 +5774,18 @@ function UpdateAdvancedPlayerList()
 
             AdvancedPlayerPanelState.PlayerRowCache[userId] = entry
         else
-            -- If row already exists in the cache, update its text properties
+
             entry.Frame.Visible = true
-            
+
             local nickname = player.DisplayName or player.Name
             local username = player.Name
-            
+
             entry.NicknameLabel.Text = nickname
             entry.UsernameLabel.Text = "@" .. username
             entry.UserIdLabel.Text = tostring(userId)
             entry.DistanceLabel.Text = distStr
         end
 
-        -- Update layout order and background colors
         entry.Frame.LayoutOrder = math.floor(dist)
         if isWhitelisted then
             entry.Frame.BackgroundColor3 = UI_THEME.Success
@@ -6069,7 +5806,6 @@ function UpdateAdvancedPlayerList()
         end
     end
 
-    -- Cleanup stale cache entries (no longer present in game.Players)
     for userId, entry in pairs(AdvancedPlayerPanelState.PlayerRowCache) do
         if not currentPlayersSet[userId] then
             if entry.Frame then
@@ -6098,7 +5834,7 @@ local function UpdateItemPropertyPane(instance)
     for _, catName in ipairs(categories) do
         local catProps = PROPERTY_CATEGORIES[catName]
         local catHasAny = false
-        
+
         for _, prop in ipairs(catProps) do
             if searchText == "" or prop:lower():find(searchText) then
                 local success, val = pcall(function() return instance[prop] end)
@@ -6114,7 +5850,7 @@ local function UpdateItemPropertyPane(instance)
             catHeader.Size = UDim2.new(1, 0, 0, 20)
             catHeader.BackgroundTransparency = 1
             catHeader.Parent = content
-            
+
             local catLabel = Instance.new("TextLabel")
             catLabel.Size = UDim2.new(1, -10, 1, 0)
             catLabel.Position = UDim2.fromOffset(5, 0)
@@ -6131,14 +5867,14 @@ local function UpdateItemPropertyPane(instance)
                     local success, val = pcall(function() return instance[prop] end)
                     if success and val ~= nil then
                         local isLocked = lockedProps[prop] ~= nil
-                        
+
                         local row = Instance.new("Frame")
                         row.Size = UDim2.new(1, 0, 0, 30)
                         row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
                         row.BackgroundTransparency = 0.5
                         row.BorderSizePixel = 0
                         row.Parent = content
-                        
+
                         local lockBtn = Instance.new("TextButton")
                         lockBtn.Size = UDim2.new(0, 20, 0, 20)
                         lockBtn.Position = UDim2.new(0, 5, 0.5, -10)
@@ -6194,7 +5930,7 @@ local function UpdateItemPropertyPane(instance)
                             local newVal = valInput.Text
                             local currentVal = instance[prop]
                             local typeName = typeof(currentVal)
-                            
+
                             local finalVal = nil
                             if typeName == "number" then
                                 finalVal = tonumber(newVal)
@@ -6241,8 +5977,7 @@ local function UpdatePropertyPane(instance)
     for _, catName in ipairs(categories) do
         local catProps = PROPERTY_CATEGORIES[catName]
         local catHasAny = false
-        
-        -- Check if any property exists
+
         for _, prop in ipairs(catProps) do
             if searchText == "" or prop:lower():find(searchText) then
                 local success, val = pcall(function() return instance[prop] end)
@@ -6258,14 +5993,14 @@ local function UpdatePropertyPane(instance)
             local catHeaderId = "Cat_" .. catName
             currentPropRows[catHeaderId] = true
             local catHeader = AdvancedPlayerPanelState.PropertyRowCache[catHeaderId]
-            
+
             if not catHeader then
                 catHeader = Instance.new("Frame")
                 catHeader.Size = UDim2.new(1, 0, 0, 20)
                 catHeader.BackgroundTransparency = 1
                 catHeader.Parent = content
                 AdvancedPlayerPanelState.PropertyRowCache[catHeaderId] = catHeader
-                
+
                 local catLabel = Instance.new("TextLabel")
                 catLabel.Name = "CatLabel"
                 catLabel.Size = UDim2.new(1, -10, 1, 0)
@@ -6287,10 +6022,10 @@ local function UpdatePropertyPane(instance)
                         orderCounter = orderCounter + 1
                         local propId = "Prop_" .. prop
                         currentPropRows[propId] = true
-                        
+
                         local row = AdvancedPlayerPanelState.PropertyRowCache[propId]
                         local valueLabel
-                        
+
                         if not row then
                             row = Instance.new("Frame")
                             row.Size = UDim2.new(1, 0, 0, 20)
@@ -6299,7 +6034,7 @@ local function UpdatePropertyPane(instance)
                             row.BorderSizePixel = 0
                             row.Parent = content
                             AdvancedPlayerPanelState.PropertyRowCache[propId] = row
-                            
+
                             local nameLabel = Instance.new("TextLabel")
                             nameLabel.Size = UDim2.new(0.4, -10, 1, 0)
                             nameLabel.Position = UDim2.fromOffset(10, 0)
@@ -6324,7 +6059,7 @@ local function UpdatePropertyPane(instance)
                         else
                             valueLabel = row:FindFirstChild("ValueLabel")
                         end
-                        
+
                         row.LayoutOrder = orderCounter
                         valueLabel.Text = tostring(val)
                     end
@@ -6332,8 +6067,7 @@ local function UpdatePropertyPane(instance)
             end
         end
     end
-    
-    -- Cleanup stale properties
+
     for id, row in pairs(AdvancedPlayerPanelState.PropertyRowCache) do
         if not currentPropRows[id] then
             row:Destroy()
@@ -6344,7 +6078,7 @@ end
 
 local function VisualizeItemInstance(instance, content, depth)
     if depth > 10 then return end
-    
+
     local success, children = pcall(function() return instance:GetChildren() end)
     if not success then return end
     table.sort(children, function(a, b) return a.Name < b.Name end)
@@ -6414,7 +6148,7 @@ end
 function UpdateItemPanelUI()
     if not ItemPanelUI.ExplorerContent then return end
     ItemPanelUI.ExplorerCounter = 0
-    
+
     for _, child in ipairs(ItemPanelUI.ExplorerContent:GetChildren()) do
         if not child:IsA("UIListLayout") then child:Destroy() end
     end
@@ -6457,7 +6191,7 @@ end
 
 local function VisualizeInstance(instance, content, depth)
     if depth > 8 then return end
-    
+
     local success, children = pcall(function() return instance:GetChildren() end)
     if not success then return end
     table.sort(children, function(a, b) return a.Name < b.Name end)
@@ -6471,13 +6205,13 @@ local function VisualizeInstance(instance, content, depth)
             if AdvancedPlayerPanelState.CurrentPaths then
                 AdvancedPlayerPanelState.CurrentPaths[path] = true
             end
-            
+
             local isExpanded = AdvancedPlayerPanelState.ExplorerExpanded[path]
             local isSelected = AdvancedPlayerPanelState.ExplorerSelected == path
             local hasChildren = #child:GetChildren() > 0
 
             ExplorerCounter = ExplorerCounter + 1
-            
+
             local row = AdvancedPlayerPanelState.RowCache[path]
             local selectBtn, toggleBtn
             local indent = depth * 16
@@ -6530,7 +6264,7 @@ local function VisualizeInstance(instance, content, depth)
 
                 TrackConnection(selectBtn.MouseButton1Click:Connect(function()
                     AdvancedPlayerPanelState.ExplorerSelected = (AdvancedPlayerPanelState.ExplorerSelected == path) and nil or path
-                    
+
                     if AdvancedPlayerPanelState.selectionHighlight then
                         AdvancedPlayerPanelState.selectionHighlight:Destroy()
                         AdvancedPlayerPanelState.selectionHighlight = nil
@@ -6578,7 +6312,7 @@ local function VisualizeInstance(instance, content, depth)
                 toggleBtn = row:FindFirstChild("ToggleBtn")
                 selectBtn = row:FindFirstChild("SelectBtn")
             end
-            
+
             row.LayoutOrder = ExplorerCounter
             row.BackgroundColor3 = isSelected and UI_THEME.Accent or UI_THEME.Element
             row.BackgroundTransparency = isSelected and 0.5 or 1
@@ -6590,7 +6324,7 @@ local function VisualizeInstance(instance, content, depth)
             else
                 toggleBtn.Visible = false
             end
-            
+
             selectBtn.Position = UDim2.fromOffset(indent + 24, 0)
             selectBtn.Size = UDim2.new(1, -(indent + 25), 1, 0)
             selectBtn.Text = child.Name .. " (" .. child.ClassName .. ")"
@@ -6608,7 +6342,7 @@ function ShowAdvancedPlayerDetails(player)
     ExplorerCounter = 0
     local content = AdvancedPlayerPanelUI.DetailsContent
     local oldPos = content.CanvasPosition
-    
+
     if AdvancedPlayerPanelState.DetailsTab == "Player" then
         AdvancedPlayerPanelState.RowCache = {}
     end
@@ -6633,7 +6367,7 @@ function ShowAdvancedPlayerDetails(player)
         frame.Size = UDim2.new(1, 0, 0, 20)
         frame.BackgroundTransparency = 1
         frame.Parent = content
-        
+
         local n = Instance.new("TextLabel")
         n.Size = UDim2.new(0.4, 0, 1, 0)
         n.BackgroundTransparency = 1
@@ -6643,7 +6377,7 @@ function ShowAdvancedPlayerDetails(player)
         n.TextColor3 = UI_THEME.TextDark
         n.TextXAlignment = Enum.TextXAlignment.Left
         n.Parent = frame
-        
+
         local v = Instance.new("TextLabel")
         v.Size = UDim2.new(0.6, 0, 1, 0)
         v.Position = UDim2.new(0.4, 0, 0, 0)
@@ -6654,7 +6388,7 @@ function ShowAdvancedPlayerDetails(player)
         v.TextColor3 = UI_THEME.Text
         v.TextXAlignment = Enum.TextXAlignment.Right
         v.Parent = frame
-        
+
         AdvancedPlayerPanelUI.DetailLabels[name] = v
         return v
     end
@@ -6669,7 +6403,7 @@ function ShowAdvancedPlayerDetails(player)
         btn.TextColor3 = UI_THEME.Text
         btn.Parent = content
         local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = btn
-        
+
         TrackConnection(btn.MouseButton1Click:Connect(callback))
         return btn
     end
@@ -6681,14 +6415,14 @@ function ShowAdvancedPlayerDetails(player)
     createLabel("Display Name", player.DisplayName)
     createLabel("Username", "@" .. player.Name)
     createLabel("User ID", tostring(player.UserId))
-    
+
     local creationDate = "Unknown"
     pcall(function()
         local t = os.time() - (player.AccountAge * 86400)
         creationDate = os.date("%x", t)
     end)
     createLabel("Account Created", creationDate)
-    createLabel("Mutual Friends", "N/A") -- Roblox API limited on client for mutuals
+    createLabel("Mutual Friends", "N/A")
     createLabel("Is Friend", LocalPlayer:IsFriendsWith(player.UserId) and "Yes" or "No")
 
     createSection("In-Game Information")
@@ -6704,8 +6438,8 @@ function ShowAdvancedPlayerDetails(player)
 
     elseif AdvancedPlayerPanelState.DetailsTab == "Player" then
         content.Size = UDim2.new(1, -10, 1, -195)
-        if AdvancedPlayerPanelUI.PropertyFrame then 
-            AdvancedPlayerPanelUI.PropertyFrame.Visible = true 
+        if AdvancedPlayerPanelUI.PropertyFrame then
+            AdvancedPlayerPanelUI.PropertyFrame.Visible = true
             local sel = AdvancedPlayerPanelState.ExplorerSelected
             local inst = sel and GetInstanceFromPath(sel)
             if inst then UpdatePropertyPane(inst) else
@@ -6715,8 +6449,8 @@ function ShowAdvancedPlayerDetails(player)
         VisualizeInstance(player, content, 0)
     elseif AdvancedPlayerPanelState.DetailsTab == "Workspace" then
         content.Size = UDim2.new(1, -10, 1, -195)
-        if AdvancedPlayerPanelUI.PropertyFrame then 
-            AdvancedPlayerPanelUI.PropertyFrame.Visible = true 
+        if AdvancedPlayerPanelUI.PropertyFrame then
+            AdvancedPlayerPanelUI.PropertyFrame.Visible = true
             local sel = AdvancedPlayerPanelState.ExplorerSelected
             local inst = sel and GetInstanceFromPath(sel)
             if inst then UpdatePropertyPane(inst) else
@@ -6748,22 +6482,22 @@ function UpdateAdvancedPlayerDetails()
     local player = AdvancedPlayerPanelState.SelectedPlayer
     if not player or not player.Parent then return end
     if AdvancedPlayerPanelState.CurrentView ~= "Details" then return end
-    
+
     UpdateActionButtonsState(player)
-    
+
     if AdvancedPlayerPanelState.DetailsTab ~= "General" then return end
-    
+
     local labels = AdvancedPlayerPanelUI.DetailLabels
-    
+
     local myChar = LocalPlayer.Character
     local targetChar = player.Character
-    
+
     local distStr = "Loading..."
     local coordsStr = "---"
-    
+
     local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart or targetChar:FindFirstChild("PrimaryPart"))
     local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart or myChar:FindFirstChild("PrimaryPart"))
-    
+
     if targetRoot then
         if myRoot then
             local dist = (targetRoot.Position - myRoot.Position).Magnitude
@@ -6790,7 +6524,6 @@ function UpdateAdvancedPlayerDetails()
     end
     if labels["Held Item"] then labels["Held Item"].Text = heldItem end
 
-    -- Nearest Players to selected player
     if targetRoot then
         local targetPos = targetRoot.Position
         local others = {}
@@ -6804,7 +6537,7 @@ function UpdateAdvancedPlayerDetails()
             end
         end
         table.sort(others, function(a, b) return a.d < b.d end)
-        
+
         for i = 1, 3 do
             local key = "Nearest Player " .. i
             if labels[key] then
@@ -6826,7 +6559,6 @@ function UpdateAdvancedPlayerDetails()
     end
 end
 
-
 PoolFolder = Instance.new("Folder")
 PoolFolder.Name = "Sp3arParvus_Pool"
 if gethui then
@@ -6838,13 +6570,12 @@ else
     PoolFolder.Parent = game.CoreGui
 end
 
--- Create ESP for a player
 local function CreateESP(player)
     if ESPObjects[player] then return end
     if player == LocalPlayer then return end
 
     local espData = {
-        -- Cache previous values to avoid redundant updates
+
         lastNickname = "",
         lastUsername = "",
         lastDistance = -1,
@@ -6854,20 +6585,18 @@ local function CreateESP(player)
         lastStatus = "",
         lastOcclusionCheck = 0,
         lastOcclusionResult = false,
-        Connections = {} -- Store player-specific connections here
+        Connections = {}
     }
 
-    -- Create nametag (BillboardGui) with Username, Nickname, and Distance
     local billboard = Instance.new("BillboardGui")
     billboard.Enabled = false
     billboard.Name = "Nametag"
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 200, 0, 140) -- Increased height for status indicator + 6 lines
+    billboard.Size = UDim2.new(0, 200, 0, 140)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
-    EnsureScreenGui() -- Ensure parent exists
+    EnsureScreenGui()
     billboard.Parent = ScreenGui
 
-    -- Container frame for vertical layout
     local container = Instance.new("Frame")
     container.Name = "Container"
     container.Size = UDim2.new(1, 0, 1, 0)
@@ -6882,7 +6611,6 @@ local function CreateESP(player)
     layout.Padding = UDim.new(0, 0)
     layout.Parent = container
 
-    -- Status Indicator (Emoji) - Topmost line
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Text = ""
     statusLabel.Name = "StatusLabel"
@@ -6896,7 +6624,6 @@ local function CreateESP(player)
     statusLabel.Visible = false
     statusLabel.Parent = container
 
-    -- Display Name (Nickname) - Top line (colored by team)
     local nicknameLabel = Instance.new("TextLabel")
     nicknameLabel.Text = ""
     nicknameLabel.Name = "NicknameLabel"
@@ -6909,7 +6636,6 @@ local function CreateESP(player)
     nicknameLabel.LayoutOrder = 1
     nicknameLabel.Parent = container
 
-    -- Username (@name) - Middle line (colored by team)
     local usernameLabel = Instance.new("TextLabel")
     usernameLabel.Text = ""
     usernameLabel.Name = "UsernameLabel"
@@ -6922,7 +6648,6 @@ local function CreateESP(player)
     usernameLabel.LayoutOrder = 2
     usernameLabel.Parent = container
 
-    -- Distance label - Third line (colored by distance heat-map)
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Text = ""
     distanceLabel.Name = "DistanceLabel"
@@ -6935,7 +6660,6 @@ local function CreateESP(player)
     distanceLabel.LayoutOrder = 3
     distanceLabel.Parent = container
 
-    -- Numerical Health label - Fourth line
     local healthNumLabel = Instance.new("TextLabel")
     healthNumLabel.Name = "HealthNumericalLabel"
     healthNumLabel.Size = UDim2.new(1, 0, 0, 18)
@@ -6948,11 +6672,10 @@ local function CreateESP(player)
     healthNumLabel.Text = "100/100"
     healthNumLabel.Parent = container
 
-    -- Health Bar Container - Fifth line
     local healthBarBG = Instance.new("Frame")
     healthBarBG.Name = "HealthBarContainer"
     healthBarBG.Size = UDim2.new(0.8, 0, 0, 6)
-    healthBarBG.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Red for lost health
+    healthBarBG.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     healthBarBG.BorderSizePixel = 0
     healthBarBG.LayoutOrder = 5
     healthBarBG.Parent = container
@@ -6961,12 +6684,11 @@ local function CreateESP(player)
     local healthBarFill = Instance.new("Frame")
     healthBarFill.Name = "HealthBarFill"
     healthBarFill.Size = UDim2.fromScale(1, 1)
-    healthBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 100) -- Green for current health
+    healthBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 100)
     healthBarFill.BorderSizePixel = 0
     healthBarFill.Parent = healthBarBG
     local hbfCorner = Instance.new("UICorner"); hbfCorner.CornerRadius = UDim.new(1,0); hbfCorner.Parent = healthBarFill
 
-    -- Equipped Tool label - Sixth line
     local equippedLabel = Instance.new("TextLabel")
     equippedLabel.Text = ""
     equippedLabel.Name = "EquippedLabel"
@@ -6992,20 +6714,18 @@ local function CreateESP(player)
     ESPObjects[player] = espData
 end
 
--- Create/Update player body part outlines (Highlight based for Wireframe + AlwaysOnTop)
--- OPTIMIZED: Object Pooling to prevent churning
 ObjectPool = {
     Highlights = {},
     Billboards = {}
 }
-MAX_POOL_SIZE = 50 -- Prevent unbounded pool growth
-ActiveHighlightCount = 0 -- Performance: Keep track of count instead of iterating
+MAX_POOL_SIZE = 50
+ActiveHighlightCount = 0
 
 function GetPooledObject(poolName, className)
     local pool = ObjectPool[poolName]
     while #pool > 0 do
         local obj = table.remove(pool)
-        -- PERFORMANCE FIX: O(1) validity check using PoolFolder
+
         if obj and obj.Parent == PoolFolder then
             obj.Parent = nil
             return obj
@@ -7022,12 +6742,11 @@ end
 
 function ReturnPooledObject(obj)
     if not obj then return end
-    
-    -- PERFORMANCE FIX: O(1) check with argument-passing pcall to avoid closures
+
     local success = pcall(_resetPooledObject, obj)
-    
+
     if not success then return end
-    
+
     if obj:IsA("Highlight") then
         if #ObjectPool.Highlights < MAX_POOL_SIZE then
             table.insert(ObjectPool.Highlights, obj)
@@ -7044,7 +6763,7 @@ function ReturnPooledObject(obj)
         obj:Destroy()
     end
 end
--- Helper to create/update Dot Indicator
+
 function UpdateDot(player, character, storage, dotType, partName)
     if not Flags["Aim/ShowAssistDots"] then
         if storage[dotType] then
@@ -7064,7 +6783,7 @@ function UpdateDot(player, character, storage, dotType, partName)
 
     local dot = storage[dotType]
     if not dot then
-        -- Create BillboardGui
+
         dot = GetPooledObject("Billboards", "BillboardGui")
         dot.Name = dotType
         dot.AlwaysOnTop = true
@@ -7073,17 +6792,16 @@ function UpdateDot(player, character, storage, dotType, partName)
         dot.Adornee = part
         dot.Enabled = true
         dot.Parent = character
-        
-        -- Check if we need to recreate the child frame (it might be gone if we pooled a destroyed gui)
+
         local dotFrame = dot:FindFirstChild("Dot")
         if not dotFrame then
             dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+            dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
-            
+
             local corner = Instance.new("UICorner")
             corner.CornerRadius = UDim.new(1, 0)
             corner.Parent = dotFrame
@@ -7091,13 +6809,12 @@ function UpdateDot(player, character, storage, dotType, partName)
 
         storage[dotType] = dot
     else
-        -- PERFORMANCE FIX: Assume valid if matched in storage, or basic check
+
         if not dot.Parent and dot ~= storage[dotType] then
             storage[dotType] = nil
             return UpdateDot(player, character, storage, dotType, partName)
         end
-        
-        -- Update adornee and parent
+
         if dot.Adornee ~= part then
             dot.Adornee = part
         end
@@ -7107,8 +6824,7 @@ function UpdateDot(player, character, storage, dotType, partName)
         if not dot.Enabled then
             dot.Enabled = true
         end
-        
-        -- FIX: Ensure the dot frame child still exists
+
         local dotFrame = dot:FindFirstChild("Dot")
         if not dotFrame then
             dotFrame = Instance.new("Frame")
@@ -7117,23 +6833,21 @@ function UpdateDot(player, character, storage, dotType, partName)
             dotFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = dot
-            
+
             local corner = Instance.new("UICorner")
             corner.CornerRadius = UDim.new(1, 0)
             corner.Parent = dotFrame
         end
     end
 
-    -- Update Color based on Locked Status
     local dotFrame = dot:FindFirstChild("Dot")
     if dotFrame then
-            local dotColor = Color3.fromRGB(0, 255, 0) -- Default Green
-            
-            -- Check if this specific part is being locked onto
+            local dotColor = Color3.fromRGB(0, 255, 0)
+
             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
                 local lockedPart = CachedTarget[3]
                 if lockedPart == part then
-                    dotColor = Color3.fromRGB(255, 0, 0) -- Red when locked
+                    dotColor = Color3.fromRGB(255, 0, 0)
                 end
             end
 
@@ -7146,18 +6860,16 @@ end
 SharedDotParts = {}
 function UpdatePlayerOutlines(player, character)
     if not character then return end
-    
-    -- Initialize outline storage for this player if needed
+
     if not PlayerOutlineObjects[player] then
         PlayerOutlineObjects[player] = {}
     end
-    
+
     local storage = PlayerOutlineObjects[player]
-    
-    -- Determine which dots should be visible using shared table to avoid allocation
+
     local dotParts = SharedDotParts
     table.clear(dotParts)
-    
+
     if Flags["Aim/ShowAssistDots"] then
         local anySelected = false
         for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
@@ -7170,14 +6882,13 @@ function UpdatePlayerOutlines(player, character)
         end
 
         if not anySelected then
-            -- Condition B: Single dot on current target
+
             if CachedTarget and (os.clock() - CachedTargetTime) < 0.1 and CachedTarget[1] == player then
                 table.insert(dotParts, CachedTarget[3].Name)
             end
         end
     end
 
-    -- Cleanup unused dots (return to pool)
     for k, v in pairs(storage) do
         if k ~= "Highlight" then
             local stillNeeded = false
@@ -7190,16 +6901,15 @@ function UpdatePlayerOutlines(player, character)
             end
         end
     end
-    
-    -- Create single Highlight for the character
+
     if not storage.Highlight then
-        -- Count current highlights to respect cap
+
         if ActiveHighlightCount >= MAX_OUTLINE_HIGHLIGHTS then
-            -- Find the furthest player with a highlight and steal it
+
             local furthest = nil
             local maxDist = -1
             local myPos = Camera.CFrame.Position
-            
+
             for p, obj in pairs(PlayerOutlineObjects) do
                 if obj.Highlight then
                     local _, root = GetCharacter(p)
@@ -7210,19 +6920,19 @@ function UpdatePlayerOutlines(player, character)
                             furthest = p
                         end
                     else
-                        -- Orphaned highlighting, just take it
+
                         furthest = p
                         break
                     end
                 end
             end
-            
+
             if furthest and PlayerOutlineObjects[furthest] then
                 storage.Highlight = PlayerOutlineObjects[furthest].Highlight
                 PlayerOutlineObjects[furthest].Highlight = nil
                 storage.Highlight.Adornee = character
                 storage.Highlight.Parent = character
-                -- Count remains same as we stole one
+
             end
         end
 
@@ -7231,25 +6941,24 @@ function UpdatePlayerOutlines(player, character)
             highlight.Name = "PlayerOutlineHighlight"
             highlight.Adornee = character
             highlight.FillColor = COLORS.OUTLINE
-            highlight.FillTransparency = 1 -- Invisible fill (Wireframe only)
+            highlight.FillTransparency = 1
             highlight.OutlineColor = COLORS.OUTLINE
-            highlight.OutlineTransparency = 0 -- Fully visible outline
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Visible through walls
+            highlight.OutlineTransparency = 0
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             highlight.Enabled = true
             highlight.Parent = character
-            
+
             storage.Highlight = highlight
             ActiveHighlightCount = ActiveHighlightCount + 1
         end
     else
         local highlight = storage.Highlight
-        -- PERFORMANCE FIX: Check Parent instead of pcall for validity
-        if not highlight.Parent and highlight ~= storage.Highlight then -- unlikely but safe
+
+        if not highlight.Parent and highlight ~= storage.Highlight then
              storage.Highlight = nil
              return UpdatePlayerOutlines(player, character)
         end
-        
-        -- Update properties
+
         if highlight.Adornee ~= character then
             highlight.Adornee = character
         end
@@ -7264,25 +6973,21 @@ function UpdatePlayerOutlines(player, character)
         end
     end
 
-    -- Update dots
     for _, partName in ipairs(dotParts) do
         UpdateDot(player, character, storage, partName .. "Dot", partName)
     end
 end
 
--- Remove all outlines for a player (Optimized: Return to pool)
 function RemovePlayerOutlines(player)
     local storage = PlayerOutlineObjects[player]
     if not storage then return end
-    
-    -- Cleanup Highlight
+
     if storage.Highlight then
         ReturnPooledObject(storage.Highlight)
         storage.Highlight = nil
         ActiveHighlightCount = math.max(0, ActiveHighlightCount - 1)
     end
-    
-    -- Cleanup Billboard dots and others
+
     for k, v in pairs(storage) do
         if k ~= "Highlight" then
             if v:IsA("BillboardGui") then
@@ -7293,11 +6998,10 @@ function RemovePlayerOutlines(player)
             storage[k] = nil
         end
     end
-    
+
     PlayerOutlineObjects[player] = nil
 end
 
--- Update ESP for a player (optimized - uses cached closest player)
 function UpdateESP(now, player, isClosest)
     local espData = ESPObjects[player]
 
@@ -7311,7 +7015,7 @@ function UpdateESP(now, player, isClosest)
     local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
 
     local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
-    
+
     local statusEmoji = ""
     if isIndivBlacklisted then
         statusEmoji = "❌"
@@ -7331,63 +7035,53 @@ function UpdateESP(now, player, isClosest)
         RemovePlayerOutlines(player)
         return
     end
-    
-    -- Check if ESP data exists and if the Nametag is still valid (not destroyed)
+
     if espData then
-        -- Check if nametag is valid
+
         local nametag = espData.Nametag
         local targetGui = EnsureScreenGui()
-        
-        -- PERFORMANCE FIX: Instead of checking if Parent is nil, check if it's NOT targetGui
-        -- If it's valid but unparented (or parented elsewhere), just fix the parentage
+
         local nametagParent = nametag and PcallGetParent(nametag)
         local isValid = (nametagParent ~= nil)
-        
+
         if isValid and (not espData.NicknameLabel or not PcallGetParent(espData.NicknameLabel)) then
             isValid = false
         end
-        
+
         if not isValid then
              RemoveESP(player)
              SetupPlayerESP(player)
              espData = ESPObjects[player]
         else
-            -- Ensure correctly parented if still valid
+
             if nametag.Parent ~= targetGui then
                 nametag.Parent = targetGui
             end
         end
     end
-    
-    -- Create ESP if it doesn't exist
+
     if not espData then
         CreateESP(player)
         espData = ESPObjects[player]
     end
     if not espData then return end
 
-    -- Get character
     local character, rootPart = GetCharacter(player)
     if not character or not rootPart then
-        RemovePlayerOutlines(player) 
-        -- Hide ESP elements
+        RemovePlayerOutlines(player)
+
         if espData.Nametag then espData.Nametag.Enabled = false end
         return
     end
 
-    -- Calculate distance
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
-    -- Distance culling REMOVED: All nametags visible at any distance
-
-    -- Update nametag
     if espData.Nametag then
         local nametag = espData.Nametag
-        
-        -- Update opacity/transparency dynamically based on ESP/NametagOpacity
+
         local opacity = (Flags["ESP/NametagOpacity"] or 75) / 100
         local transparency = 1 - opacity
-        
+
         if espData.StatusLabel and espData.StatusLabel.TextTransparency ~= transparency then
             espData.StatusLabel.TextTransparency = transparency
             espData.StatusLabel.TextStrokeTransparency = transparency
@@ -7419,7 +7113,6 @@ function UpdateESP(now, player, isClosest)
             espData.HealthBarFill.BackgroundTransparency = transparency
         end
 
-        -- Ensure nametag is attached and enabled
         if nametag.Adornee ~= rootPart then
             nametag.Adornee = rootPart
         end
@@ -7427,15 +7120,12 @@ function UpdateESP(now, player, isClosest)
             nametag.Enabled = true
         end
 
-        -- Get team color for name labels
         local teamColor = GetTeamColor(player)
-        
-        -- Get display name and username
+
         local nickname = player.DisplayName or player.Name
         local username = "@" .. player.Name
         local distRounded = floor(distance)
-        
-        -- Update Status Emoji
+
         if espData.StatusLabel then
             local showStatus = Flags["ESP/ShowStatus"] and (statusEmoji ~= "")
             if espData.lastStatus ~= statusEmoji or espData.StatusLabel.Visible ~= showStatus then
@@ -7445,7 +7135,6 @@ function UpdateESP(now, player, isClosest)
             end
         end
 
-        -- PERFORMANCE: Only update text/color if values changed
         if espData.lastNickname ~= nickname then
             espData.NicknameLabel.Text = nickname
             espData.lastNickname = nickname
@@ -7453,7 +7142,7 @@ function UpdateESP(now, player, isClosest)
         if espData.NicknameLabel.Visible ~= Flags["ESP/ShowNickname"] then
             espData.NicknameLabel.Visible = Flags["ESP/ShowNickname"]
         end
-        
+
         if espData.lastUsername ~= username then
             espData.UsernameLabel.Text = username
             espData.lastUsername = username
@@ -7461,15 +7150,14 @@ function UpdateESP(now, player, isClosest)
         if espData.UsernameLabel.Visible ~= Flags["ESP/ShowUsername"] then
             espData.UsernameLabel.Visible = Flags["ESP/ShowUsername"]
         end
-        
+
         if espData.lastTeamColor ~= teamColor then
             espData.NicknameLabel.TextColor3 = teamColor
             espData.EquippedLabel.TextColor3 = teamColor
-            -- Username color is now handled by distance logic
+
             espData.lastTeamColor = teamColor
         end
 
-        -- Update Distance
         if math.abs(espData.lastDistance - distRounded) > 5 then
             espData.DistanceLabel.Text = string.format("%d studs", distRounded)
             espData.lastDistance = distRounded
@@ -7477,7 +7165,7 @@ function UpdateESP(now, player, isClosest)
         if espData.DistanceLabel.Visible ~= Flags["ESP/ShowDistance"] then
             espData.DistanceLabel.Visible = Flags["ESP/ShowDistance"]
         end
-        
+
         local distanceColor = GetDistanceColor(distance, isClosest)
         if espData.lastDistanceColor ~= distanceColor then
             espData.DistanceLabel.TextColor3 = distanceColor
@@ -7485,12 +7173,11 @@ function UpdateESP(now, player, isClosest)
             espData.lastDistanceColor = distanceColor
         end
 
-        -- Update Equipped Tool
         if espData.EquippedLabel then
             local equippedTool = character:FindFirstChildOfClass("Tool")
             local toolName = equippedTool and equippedTool.Name or "Unarmed"
             local equippedString = "[" .. toolName .. "]"
-            
+
             if espData.lastEquipped ~= equippedString then
                 espData.EquippedLabel.Text = equippedString
                 espData.lastEquipped = equippedString
@@ -7500,7 +7187,6 @@ function UpdateESP(now, player, isClosest)
             end
         end
 
-        -- Update Health indicators visibility based on line-of-sight
         local OCCLUSION_CHECK_INTERVAL = 0.5
         local isOccluded = espData.lastOcclusionResult or false
         if (now - (espData.lastOcclusionCheck or 0)) > OCCLUSION_CHECK_INTERVAL then
@@ -7509,30 +7195,25 @@ function UpdateESP(now, player, isClosest)
             espData.lastOcclusionResult = isOccluded
         end
         local healthVisible = not isOccluded
-        
+
         local settingEnabled = Flags["ESP/HealthIndicator"]
-        
+
         if espData.HealthBarContainer and espData.HealthBarContainer.Visible ~= (healthVisible and settingEnabled) then
             espData.HealthBarContainer.Visible = healthVisible and settingEnabled
         end
-        
+
         if espData.HealthNumericalLabel and espData.HealthNumericalLabel.Visible ~= settingEnabled then
             espData.HealthNumericalLabel.Visible = settingEnabled
         end
 
-        -- Update Health visuals
         local health, maxHealth = GetHealth(player)
         if espData.lastHealth ~= health or espData.lastMaxHealth ~= maxHealth then
             espData.HealthNumericalLabel.Text = string.format("%d/%d", math.floor(health), math.floor(maxHealth))
             espData.HealthNumericalLabel.TextColor3 = GetHealthColor(health, maxHealth)
-            
+
             local healthPercent = math.clamp(health / maxHealth, 0, 1)
             espData.HealthBarFill.Size = UDim2.fromScale(healthPercent, 1)
-            
-            -- Optional: adjust color based on health? Requirements say green fill, red BG.
-            -- Requirement also says "turns red to indicate any lost health"
-            -- The BG is red, fill is green. So if health is 50%, 50% green is shown over red.
-            
+
             espData.lastHealth = health
             espData.lastMaxHealth = maxHealth
         end
@@ -7540,7 +7221,6 @@ function UpdateESP(now, player, isClosest)
         if espData.Nametag.Enabled then espData.Nametag.Enabled = false end
     end
 
-    
     if Flags["ESP/PlayerOutlines"] then
         UpdatePlayerOutlines(player, character)
     else
@@ -7548,13 +7228,10 @@ function UpdateESP(now, player, isClosest)
     end
 end
 
-
-
--- Remove ESP for a player
 function RemoveESP(player)
-    -- Also remove player outlines
+
     RemovePlayerOutlines(player)
-    
+
     local espData = ESPObjects[player]
     if not espData then return end
 
@@ -7562,14 +7239,13 @@ function RemoveESP(player)
         PcallDestroy(espData.Nametag)
     end
 
-    -- Clean up player-specific connections
     if espData.Connections then
         for _, conn in pairs(espData.Connections) do
             PcallDisconnect(conn)
         end
         table.clear(espData.Connections)
     end
-    
+
     espData.Nametag = nil
     espData.EquippedLabel = nil
     espData.Connections = nil
@@ -7577,15 +7253,13 @@ function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
--- D3V TOOL DISPLAY
-
 local D3vToolHUD = nil
 local D3vToolLabel = nil
 
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(1, -450, 0, 3) -- Top right
+    D3vToolHUD.Position = UDim2.new(1, -450, 0, 3)
     D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
@@ -7601,7 +7275,7 @@ function CreateD3vToolHUD(parent)
     D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Left
     D3vToolLabel.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolLabel.Parent = D3vToolHUD
-    
+
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1
     stroke.Color = Color3.new(0, 0, 0)
@@ -7610,15 +7284,14 @@ end
 
 function UpdateD3vTool()
     if not D3vToolHUD then return end
-    
+
     local visible = Flags["Misc/D3vTool"] and not Flags["Settings/GhostMode"]
     if D3vToolHUD.Visible ~= visible then
         D3vToolHUD.Visible = visible
     end
-    
+
     if not visible then return end
-    
-    -- Clock
+
     local clockTime = Lighting.ClockTime
     local hours = math.floor(clockTime)
     local minutes = math.floor((clockTime - hours) * 60)
@@ -7626,8 +7299,7 @@ function UpdateD3vTool()
     local hours12 = hours % 12
     if hours12 == 0 then hours12 = 12 end
     local timeStr = string.format("%d:%02d %s", hours12, minutes, period)
-    
-    -- LPC (Local Player Coordinates)
+
     local lpcStr = "N/A"
     local char = LocalPlayer.Character
     local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
@@ -7635,18 +7307,15 @@ function UpdateD3vTool()
         local pos = root.Position
         lpcStr = string.format("%d,%d,%d", floor(pos.X), floor(pos.Y), floor(pos.Z))
     end
-    
-    -- LMC (Local Mouse Coordinates)
+
     local mouseLoc = UserInputService:GetMouseLocation()
     local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
-    
+
     local newText = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
     if D3vToolLabel.Text ~= newText then
         D3vToolLabel.Text = newText
     end
 end
-
--- PERFORMANCE DISPLAY
 
 PerformanceLabel = nil
 PerfMinimized = false
@@ -7659,9 +7328,9 @@ function CreatePerformanceDisplay(parent)
     PerformanceLabel.Name = "PerformanceDisplay"
     PerformanceLabel.Size = UDim2.fromScale(0.1, 0.14)
     local OriginalSize = PerformanceLabel.Size
-    PerformanceLabel.Position = UDim2.new(1, -240, 0, 100) -- Next to player list
+    PerformanceLabel.Position = UDim2.new(1, -240, 0, 100)
     PerformanceLabel.AnchorPoint = Vector2.new(1, 0)
-    
+
     local sizeConstraint = Instance.new("UISizeConstraint")
     sizeConstraint.MinSize = Vector2.new(160, 140)
     sizeConstraint.MaxSize = Vector2.new(220, 180)
@@ -7682,7 +7351,6 @@ function CreatePerformanceDisplay(parent)
     stroke.Transparency = 0.5
     stroke.Parent = PerformanceLabel
 
-    -- Header Title
     local headerTitle = Instance.new("TextLabel")
     headerTitle.Name = "HeaderTitle"
     headerTitle.Size = UDim2.new(1, -30, 0, 24)
@@ -7746,7 +7414,6 @@ function CreatePerformanceDisplay(parent)
     CreateRow("Br0k3n Objects", "0")
     CreateRow("H1ghL1ghted Objects", "0")
 
-    -- Minimize Button
     local minimizeBtn = Instance.new("TextButton")
     minimizeBtn.Name = "Minimize"
     minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -7795,9 +7462,9 @@ function CreateLocalHealthHUD(parent)
     LocalHealthHUD = Instance.new("CanvasGroup")
     LocalHealthHUD.Name = "LocalHealthHUD"
     LocalHealthHUD.Size = UDim2.fromScale(0.08, 0.05)
-    LocalHealthHUD.Position = UDim2.new(1, -260, 0, 70) -- Right Side, above Performance
+    LocalHealthHUD.Position = UDim2.new(1, -260, 0, 70)
     LocalHealthHUD.AnchorPoint = Vector2.new(1, 0)
-    
+
     local sizeConstraint = Instance.new("UISizeConstraint")
     sizeConstraint.MinSize = Vector2.new(110, 30)
     sizeConstraint.MaxSize = Vector2.new(160, 30)
@@ -7837,14 +7504,14 @@ end
 local lastLocalH, lastLocalMH = -1, -1
 function UpdateLocalHealthHUD()
     if not LocalHealthValueLabel or not LocalHealthHUD then return end
-    
+
     if not Flags["LocalUI/LocalHealthIndicator"] then
         if LocalHealthHUD.Visible then LocalHealthHUD.Visible = false end
         return
     else
         if not LocalHealthHUD.Visible and not Flags["Settings/GhostMode"] then LocalHealthHUD.Visible = true end
     end
-    
+
     local h, mh = GetHealth(LocalPlayer)
     if h ~= lastLocalH or mh ~= lastLocalMH then
         LocalHealthValueLabel.Text = string.format("%d/%d", math.floor(h), math.floor(mh))
@@ -7860,7 +7527,6 @@ function UpdatePerformanceDisplay()
         return
     end
 
-    -- Only update if visible (performance optimization)
     if not PerformanceLabel.Visible then return end
 
     local fps = floor(GetFPS())
@@ -7869,23 +7535,20 @@ function UpdatePerformanceDisplay()
     local memoryUsed = floor(Stats:GetTotalMemoryUsageMb())
     local activeTargets = max(0, playerCount - 1)
 
-    -- FPS color coding
-    local fpsColor = Color3.fromRGB(50, 255, 50) -- Green
+    local fpsColor = Color3.fromRGB(50, 255, 50)
     if fps < 30 then
-        fpsColor = Color3.fromRGB(255, 50, 50) -- Red
+        fpsColor = Color3.fromRGB(255, 50, 50)
     elseif fps < 60 then
-        fpsColor = Color3.fromRGB(255, 200, 50) -- Yellow
+        fpsColor = Color3.fromRGB(255, 200, 50)
     end
 
-    -- Ping color coding
-    local pingColor = Color3.fromRGB(50, 255, 50) -- Green
+    local pingColor = Color3.fromRGB(50, 255, 50)
     if ping > 200 then
-        pingColor = Color3.fromRGB(255, 50, 50) -- Red
+        pingColor = Color3.fromRGB(255, 50, 50)
     elseif ping > 100 then
-        pingColor = Color3.fromRGB(255, 200, 50) -- Yellow
+        pingColor = Color3.fromRGB(255, 200, 50)
     end
 
-    -- Update Rows
     if PerformanceRows.FPS then
         local val = tostring(fps)
         if PerformanceRows.FPS.Text ~= val then PerformanceRows.FPS.Text = val end
@@ -7928,7 +7591,7 @@ end
 function UpdateScreenUIOpacity()
     local opacity = (Flags["LocalUI/ScreenUIOpacity"] or 75) / 100
     local transparency = 1 - opacity
-    
+
     if UIState and UIState.MainFrame then
         UIState.MainFrame.GroupTransparency = transparency
     end
@@ -7986,14 +7649,8 @@ function UpdateAllNametagOpacities()
     end
 end
 
-------------------------------------------------------------------------
--- FREECAM INTEGRATION
 local FreecamProxy = {}
 local function ___InitializeFreecam()
------------------------------------------------------------------------
--- Freecam
--- Cinematic free camera for spectating and video production.
-------------------------------------------------------------------------
 
 local pi    = math.pi
 local abs   = math.abs
@@ -8025,8 +7682,6 @@ if ConnectViewportSize then ConnectViewportSize() end
 end
 end))
 
-------------------------------------------------------------------------
-
 local TOGGLE_INPUT_PRIORITY = Enum.ContextActionPriority.Low.Value
 local INPUT_PRIORITY = Enum.ContextActionPriority.High.Value
 local FREECAM_MACRO_KB = {Enum.KeyCode.LeftControl, Enum.KeyCode.P}
@@ -8040,8 +7695,6 @@ local PITCH_LIMIT = rad(90)
 local VEL_STIFFNESS = 1.5
 local PAN_STIFFNESS = 1.0
 local FOV_STIFFNESS = 4.0
-
-------------------------------------------------------------------------
 
 local Spring = {} do
 Spring.__index = Spring
@@ -8077,8 +7730,6 @@ self.v = pos*0
 end
 end
 
-------------------------------------------------------------------------
-
 local cameraPos = Vector3.new()
 local cameraRot = Vector2.new()
 local cameraFov = 0
@@ -8087,8 +7738,6 @@ local velSpring = Spring.new(VEL_STIFFNESS, Vector3.new())
 local panSpring = Spring.new(PAN_STIFFNESS, Vector2.new())
 local fovSpring = Spring.new(FOV_STIFFNESS, 0)
 local freecamMouseLocked = true
-
-------------------------------------------------------------------------
 
 local Input = {} do
 local thumbstickCurve do
@@ -8343,8 +7992,6 @@ end
 return fz:Dot(minVect)*minDist
 end
 
-------------------------------------------------------------------------
-
 local function StepFreecam(dt)
 if freecamMouseLocked then
 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -8383,26 +8030,24 @@ if char then
         local moveZ = Input.keyboard.J - Input.keyboard.U
         local moveX = Input.keyboard.K - Input.keyboard.H
         local moveVector = Vector3.new(moveX, 0, moveZ)
-        
+
         local look = cameraCFrame.LookVector
         look = Vector3.new(look.X, 0, look.Z).Unit
         local right = cameraCFrame.RightVector
         right = Vector3.new(right.X, 0, right.Z).Unit
-        
+
         local walkDir = Vector3.new()
         if moveVector.Magnitude > 0 then
             walkDir = (look * -moveZ + right * moveX).Unit
         end
         hum:Move(walkDir, false)
-        
+
         if Input.keyboard.Space == 1 then
             hum.Jump = true
         end
     end
 end
 end
-
-------------------------------------------------------------------------
 
 local PlayerState = {} do
 local cameraSubject
@@ -8411,7 +8056,7 @@ local cameraFocus
 local cameraCFrame
 local cameraFieldOfView
 local screenGuis = {}
--- Save state and set up for freecam
+
 function PlayerState.Push()
 local playergui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
 if playergui then
@@ -8439,7 +8084,6 @@ mouseBehavior = UserInputService.MouseBehavior
 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
 
--- Restore state
 function PlayerState.Pop()
 for _, gui in pairs(screenGuis) do
 if gui.Parent then
@@ -8475,7 +8119,7 @@ local function CreateFreecamUI()
     FreecamUI.IgnoreGuiInset = true
     pcall(function() FreecamUI.ScreenInsets = Enum.ScreenInsets.None end)
     FreecamUI.DisplayOrder = 999
-    
+
     local targetParent = game:GetService("CoreGui")
     if not pcall(function() FreecamUI.Parent = targetParent end) then
         targetParent = LocalPlayer:FindFirstChildOfClass("PlayerGui")
@@ -8513,7 +8157,7 @@ local function CreateFreecamUI()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.LayoutOrder = 1
     title.Parent = frame
--- Freecam keybind info panel
+
     local binds = {
         "W/A/S/D - Move Cam",
         "E/Q - Move Cam Up/Down",
@@ -8574,8 +8218,6 @@ FreecamUI = nil
 end
 end
 
-------------------------------------------------------------------------
-
 do
 local enabled = false
 
@@ -8627,11 +8269,8 @@ end
 end
 ___InitializeFreecam()
 
--- MAIN INITIALIZATION & CLEANUP
-
--- Cleanup Function (FIXED - properly clears global state for reload)
 function Cleanup()
-    -- Delete cached icon to force fresh metrics next execution
+
     if delfile and isfile and isfile("Sp3arParvus_Icon.png") then
         pcall(delfile, "Sp3arParvus_Icon.png")
     end
@@ -8647,7 +8286,6 @@ function Cleanup()
 
     Sp3arParvus.Active = false
 
-    -- Disconnect all tracked connections
     for _, conn in pairs(Sp3arParvus.Connections) do
         pcall(function()
             if conn then conn:Disconnect() end
@@ -8655,7 +8293,6 @@ function Cleanup()
     end
     table.clear(Sp3arParvus.Connections)
 
-    -- Cleanup Waypoint Connections
     for _, conn in ipairs(WaypointConnections) do
         pcall(function()
             if conn then conn:Disconnect() end
@@ -8663,7 +8300,6 @@ function Cleanup()
     end
     table.clear(WaypointConnections)
 
-    -- Cancel all tracked threads
     for _, thread in pairs(Sp3arParvus.Threads) do
         pcall(function()
             if thread then task.cancel(thread) end
@@ -8671,12 +8307,11 @@ function Cleanup()
     end
     table.clear(Sp3arParvus.Threads)
 
-    -- Cleanup UI
-    if ScreenGui then 
+    if ScreenGui then
         pcall(function() ScreenGui:Destroy() end)
         ScreenGui = nil
     end
-    if NotifyGui then 
+    if NotifyGui then
         pcall(function() NotifyGui:Destroy() end)
         NotifyGui = nil
     end
@@ -8690,12 +8325,11 @@ function Cleanup()
     UIState.ActiveDraggedFrame = nil
     UIState.DragStart = nil
     UIState.StartPos = nil
-    
-    -- Cleanup ESP objects
+
     for player, espData in pairs(ESPObjects) do
         pcall(function()
             if espData.Nametag then espData.Nametag:Destroy() end
-            -- MEMORY LEAK FIX: Disconnect player-specific connections
+
             if espData.Connections then
                 for _, conn in pairs(espData.Connections) do
                     if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
@@ -8707,16 +8341,14 @@ function Cleanup()
         end)
     end
     table.clear(ESPObjects)
-    
-    -- Cleanup Player Outline objects
+
     for player, outlines in pairs(PlayerOutlineObjects) do
         for partName, obj in pairs(outlines) do
             pcall(function() obj:Destroy() end)
         end
     end
     table.clear(PlayerOutlineObjects)
-    
-    -- Cleanup Object Pool
+
     for _, pool in pairs(ObjectPool) do
         for _, obj in ipairs(pool) do
             PcallDestroy(obj)
@@ -8728,7 +8360,6 @@ function Cleanup()
         PoolFolder = nil
     end
 
-    -- Cleanup Waypoints
     for id, wpData in pairs(ActiveWaypoints) do
         pcall(function()
             if wpData.Billboard then wpData.Billboard:Destroy() end
@@ -8737,7 +8368,6 @@ function Cleanup()
     end
     table.clear(ActiveWaypoints)
 
-    -- Cleanup Br3ak3r (restore all broken parts)
     for path, data in pairs(Br3ak3rState.brokenSet) do
         pcall(function()
             local part = data.instance
@@ -8760,7 +8390,6 @@ function Cleanup()
     Br3ak3rState.CTRL_HELD = false
     Br3ak3rState.LEFT_CTRL_HELD = false
 
-    -- Cleanup H1ghl1ght3r (remove all highlights and nametags, restore transparency)
     for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
         pcall(function()
             if part.Parent and type(data) == "table" then
@@ -8777,7 +8406,6 @@ function Cleanup()
     table.clear(H1ghl1ght3rState.undoStack)
     H1ghl1ght3rState.SHIFT_HELD = false
 
-    -- Cleanup WorldHumanoidEditor
     ClearWorldHumConnections()
     if WorldHumState.selectionHighlight then
         pcall(function() WorldHumState.selectionHighlight:Destroy() end)
@@ -8786,21 +8414,18 @@ function Cleanup()
     table.clear(WorldHumState.presetsApplied)
     WorldHumState.selectedHum = nil
     WorldHumState.selectionHighlight = nil
-    
-    -- Cleanup hover highlight
+
     if Br3ak3rState.hoverHL then
         pcall(function() Br3ak3rState.hoverHL:Destroy() end)
         Br3ak3rState.hoverHL = nil
     end
 
-    -- Restore Lighting if active
     if FullbrightState.lastState then
         Flags["Visuals/Fullbright"] = false
         Flags["Visuals/FullDark"] = false
         pcall(UpdateLighting)
     end
 
-    -- Restore Zoom Limits
     if ZoomState.OriginalMax then
         LocalPlayer.CameraMaxZoomDistance = ZoomState.OriginalMax
     end
@@ -8808,7 +8433,6 @@ function Cleanup()
         LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
     end
 
-    -- Restore Humanoid settings
     if HumanoidState.captured then
         local character = LocalPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -8824,7 +8448,6 @@ function Cleanup()
         HumanoidState.presetsApplied = false
     end
 
-    -- Reset module-level state
     AimState.Aim = false
     AimState.LastAimTarget = nil
     CachedTarget = nil
@@ -8839,7 +8462,6 @@ function Cleanup()
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
 
-    -- Cleanup AdvancedPlayerPanel
     if AdvancedPlayerPanelUI.MainFrame then
         pcall(function() AdvancedPlayerPanelUI.MainFrame:Destroy() end)
     end
@@ -8878,7 +8500,6 @@ function Cleanup()
     AdvancedPlayerPanelUI.PropertyContent = nil
     AdvancedPlayerPanelUI.PropertySearch = nil
 
-    -- Cleanup Item Panel
     if ItemPanelUI.MainFrame then
         pcall(function() ItemPanelUI.MainFrame:Destroy() end)
     end
@@ -8895,8 +8516,7 @@ function Cleanup()
 
     LocalPlayer.ReplicationFocus = nil
     pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
-    
-    -- MEMORY LEAK FIX: Clear all cache tables to release object references
+
     table.clear(PathCache)
     table.clear(ViewportCache)
     table.clear(ViewportPool)
@@ -8904,7 +8524,7 @@ function Cleanup()
         c.Char = nil; c.HumanoidRootPart = nil; c.Root = nil; c.Humanoid = nil; c.HealthInst = nil; c.Squad = nil; c.Head = nil
     end
     table.clear(CharCache)
-    
+
     for _, entry in ipairs(CandidateList) do
         entry.mag = nil; entry.ply = nil; entry.char = nil; entry.part = nil; entry.sx = nil; entry.sy = nil; entry.pos = nil; entry.realPos = nil
     end
@@ -8914,7 +8534,6 @@ function Cleanup()
     table.clear(Br3ak3rState.brokenIgnoreCache)
     table.clear(Br3ak3rState.scratchIgnore)
 
-    -- CRITICAL: Clear the global environment flag so script can be reloaded
     _G.StopFreecamFunc = nil
     local globalEnv = getgenv and getgenv() or _G
     rawset(globalEnv, "Sp3arParvus", nil)
@@ -8922,12 +8541,11 @@ function Cleanup()
     warn("[Sp3arParvus] Script Unloaded! You can now reload the script.")
 end
 
--- Reload Function (fully unload & cleanup -> re-execute)
 function Reload()
     UI.Notify("Sp3arParvus", "Reloading script...")
     task.wait(0.1)
     Cleanup()
-    task.wait(0.2) -- Safe brief delay for cleanup to complete
+    task.wait(0.2)
     if isfile and isfile("Sp3arParvus.lua") then
         loadstring(readfile("Sp3arParvus.lua"))()
     elseif isfile and isfile("Sp3arParvus/Sp3arParvus.lua") then
@@ -8937,21 +8555,16 @@ function Reload()
     end
 end
 
--- Force Reload Function (fully unload & cleanup -> fetch latest version from GitHub)
 function ForceReload()
     UI.Notify("Sp3arParvus", "Fetching and reloading latest script version...")
     task.wait(0.1)
     Cleanup()
-    task.wait(0.2) -- Safe brief delay for cleanup to complete
+    task.wait(0.2)
     loadstring(game:HttpGet("https://raw.githubusercontent.com/JakeHukari/Sp3arParvus/refs/heads/main/Sp3arParvus.lua", true))()
 end
 
--- ==========================================
--- INTERACTIVE SHORTCUTS PAGE INITIALIZATION
--- ==========================================
-
 local KeyboardRows = {
-    { -- Row 1
+    {
         {Text = "` ~", Key = "Backquote", Width = 1, KeyCode = Enum.KeyCode.Backquote, Name = "Aimlock Assist Toggle", Action = "Ctrl + ~", Desc = "Toggles camera-lock tracking assistant.", StatusKey = "Aim/AimLock"},
         {Text = "1", Width = 1},
         {Text = "2", Width = 1},
@@ -8968,7 +8581,7 @@ local KeyboardRows = {
         {Text = "<-", Width = 2},
         {Text = "del", Width = 1}
     },
-    { -- Row 2
+    {
         {Text = "tab", Width = 1.5},
         {Text = "Q", Key = "Q", Width = 1, KeyCode = Enum.KeyCode.Q, Name = "QTeleport", Action = "Ctrl + Q", Desc = "Teleports player to the mouse position (character face preserved).", StatusKey = "Misc/QTeleport"},
         {Text = "W", Width = 1},
@@ -8985,7 +8598,7 @@ local KeyboardRows = {
         {Text = "\\", Width = 1.5},
         {Text = "pg up", Width = 1}
     },
-    { -- Row 3
+    {
         {Text = "caps", Key = "CapsLock", Width = 1.75, KeyCode = Enum.KeyCode.CapsLock, Name = "Toggle Menu Visibility", Action = "CapsLock", Desc = "Toggles visibility of the main Sp3arParvus menu GUI."},
         {Text = "A", Width = 1},
         {Text = "S", Width = 1},
@@ -9001,7 +8614,7 @@ local KeyboardRows = {
         {Text = "enter", Width = 2.25},
         {Text = "pg dn", Width = 1}
     },
-    { -- Row 4
+    {
         {Text = "shift", Key = "Shift", Width = 2.25, KeyCode = Enum.KeyCode.LeftShift, Name = "Shift Modifier", Action = "Shift (Held)", Desc = "Modifies other shortcut actions (e.g. Reload script, clear waypoints)."},
         {Text = "Z", Key = "Z", Width = 1, KeyCode = Enum.KeyCode.Z, Name = "Undo Last Break / Highlight", Action = "Ctrl+Z / Ctrl+Shift+Z", Desc = "Undo last broken collision (Ctrl+Z) or last highlight (Ctrl+Shift+Z)."},
         {Text = "X", Key = "X", Width = 1, KeyCode = Enum.KeyCode.X, Name = "Clear Breaks / Highlights", Action = "Ctrl+X / Ctrl+Shift+X", Desc = "Unbreak all collisions (Ctrl+X) or clear all highlights (Ctrl+Shift+X)."},
@@ -9017,7 +8630,7 @@ local KeyboardRows = {
         {Text = "↑", Key = "Up", Width = 1, KeyCode = Enum.KeyCode.Up, Name = "Position Force Up / Forward", Action = "Ctrl+Up / Ctrl+Shift+Up", Desc = "Forces character position up or forward by the configured distance."},
         {Text = "ins", Width = 1}
     },
-    { -- Row 5
+    {
         {Text = "ctrl", Key = "Ctrl", Width = 1.25, KeyCode = Enum.KeyCode.LeftControl, Name = "Control Modifier", Action = "Ctrl (Held)", Desc = "Modifier key held to execute script keyboard shortcuts."},
         {Text = "❖", Width = 1.25},
         {Text = "alt", Width = 1.25},
@@ -9055,7 +8668,7 @@ local MouseButtons = {
 }
 
 function InitializeShortcutsPage(page)
-    -- Help & Legend Section
+
     UI.CreateSection(page, "Shortcuts Legend")
 
     local legendLabel = Instance.new("TextLabel")
@@ -9074,10 +8687,9 @@ function InitializeShortcutsPage(page)
                       "• Hover over any highlighted key/button to view its detailed shortcut function."
     legendLabel.Parent = page
 
-    -- Demo layout wrapper frame
     local DemoWrapper = Instance.new("Frame")
     DemoWrapper.Name = "DemoWrapper"
-    DemoWrapper.Size = UDim2.new(1, 0, 0, 115) -- Safe initial default height
+    DemoWrapper.Size = UDim2.new(1, 0, 0, 115)
     DemoWrapper.BackgroundTransparency = 1
     DemoWrapper.Parent = page
 
@@ -9093,7 +8705,6 @@ function InitializeShortcutsPage(page)
         updateDemoSize()
     end)
 
-    -- Keyboard frame
     local KeyboardFrame = Instance.new("Frame")
     KeyboardFrame.Name = "KeyboardFrame"
     KeyboardFrame.Size = UDim2.new(16/20, 0, 5/5.5, 0)
@@ -9101,7 +8712,6 @@ function InitializeShortcutsPage(page)
     KeyboardFrame.BackgroundTransparency = 1
     KeyboardFrame.Parent = DemoWrapper
 
-    -- Mouse frame
     local MouseFrame = Instance.new("Frame")
     MouseFrame.Name = "MouseFrame"
     MouseFrame.Size = UDim2.new(3.5/20, 0, 1, 0)
@@ -9117,7 +8727,6 @@ function InitializeShortcutsPage(page)
     local mCorner = Instance.new("UICorner"); mCorner.CornerRadius = UDim.new(0.12, 0); mCorner.Parent = MouseOutline
     local mStroke = Instance.new("UIStroke"); mStroke.Color = Color3.fromRGB(0, 180, 80); mStroke.Thickness = 1; mStroke.Parent = MouseOutline
 
-    -- Float Tooltip Frame
     local tooltipFrame = Instance.new("Frame")
     tooltipFrame.Name = "ShortcutsTooltip"
     tooltipFrame.Size = UDim2.new(0, 280, 0, 0)
@@ -9205,7 +8814,7 @@ function InitializeShortcutsPage(page)
         titleLabel.Text = (keyData.Key == "MouseButton1" or keyData.Key == "MouseButton2" or keyData.Key == "MouseButton3") and ("🖱  " .. keyData.Name) or ("⌨  " .. keyData.Name)
         comboLabel.Text = "Combo: " .. keyData.Action
         descLabel.Text = keyData.Desc
-        
+
         if tooltipActiveConnection then
             tooltipActiveConnection:Disconnect()
             tooltipActiveConnection = nil
@@ -9234,7 +8843,6 @@ function InitializeShortcutsPage(page)
                 statusFrame.Visible = false
             end
 
-            -- Position update
             local btnPos = targetButton.AbsolutePosition
             local btnSize = targetButton.AbsoluteSize
             local tooltipSize = tooltipFrame.AbsoluteSize
@@ -9264,7 +8872,6 @@ function InitializeShortcutsPage(page)
         end
     end
 
-    -- Create Keyboard Rows
     for rowIndex = 1, 5 do
         local rowFrame = Instance.new("Frame")
         rowFrame.Name = "Row" .. rowIndex
@@ -9311,7 +8918,6 @@ function InitializeShortcutsPage(page)
         end
     end
 
-    -- Create Mouse Buttons
     local leftBtn = Instance.new("TextButton")
     leftBtn.Name = "LeftClick"
     leftBtn.Text = "L"
@@ -9394,16 +9000,13 @@ function InitializeShortcutsPage(page)
     bodyLabel.Parent = bodyFrame
 end
 
--- Create Main Window
 local Window = UI.CreateWindow("Sp3arParvus")
 
--- Initialize HUD Elements
 CreateD3vToolHUD(ScreenGui)
 CreatePerformanceDisplay(ScreenGui)
 CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
 
--- Create Tabs
 local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
@@ -9425,7 +9028,7 @@ function ShowWorldHumList(page)
     WorldHumState.selectedHum = nil
     table.clear(WorldHumState.listEntries)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    
+
     local layout = page:FindFirstChildOfClass("UIListLayout")
     if not layout then
         layout = Instance.new("UIListLayout")
@@ -9434,9 +9037,9 @@ function ShowWorldHumList(page)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
         layout.Parent = page
     end
-    
+
     UI.CreateSection(page, "Nearby Humanoids")
-    
+
     local refreshBtn = Instance.new("TextButton")
     refreshBtn.Size = UDim2.new(1, 0, 0, 30)
     refreshBtn.BackgroundColor3 = UI_THEME.Element
@@ -9463,7 +9066,6 @@ function ShowWorldHumList(page)
         return
     end
 
-    -- Sorting Logic
     local myChar = LocalPlayer.Character
     local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
     local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
@@ -9479,12 +9081,12 @@ function ShowWorldHumList(page)
     table.sort(humDataList, function(a, b)
         return a.dist < b.dist
     end)
-    
+
     for _, data in ipairs(humDataList) do
         local hum = data.hum
         local model = hum.Parent
         if not model then continue end
-        
+
         local card = Instance.new("Frame")
         card.Size = UDim2.new(1, 0, 0, 45)
         card.BackgroundColor3 = UI_THEME.Element
@@ -9492,7 +9094,7 @@ function ShowWorldHumList(page)
         card.LayoutOrder = math.floor(data.dist)
         card.Parent = page
         local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 6); cC.Parent = card
-        
+
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Size = UDim2.new(1, -140, 0, 22)
         nameLabel.Position = UDim2.new(0, 12, 0, 4)
@@ -9516,14 +9118,14 @@ function ShowWorldHumList(page)
         distanceLabel.Parent = card
 
         table.insert(WorldHumState.listEntries, {hum = hum, card = card, label = distanceLabel})
-        
+
         local selectionBtn = Instance.new("TextButton")
         selectionBtn.Size = UDim2.new(1, 0, 1, 0)
         selectionBtn.BackgroundTransparency = 1
         selectionBtn.Text = ""
         selectionBtn.ZIndex = 1
         selectionBtn.Parent = card
-        
+
         local editBtn = Instance.new("TextButton")
         editBtn.Name = "Edit"
         editBtn.Size = UDim2.new(0, 60, 0, 26)
@@ -9553,39 +9155,37 @@ function ShowWorldHumList(page)
         tpBtn.ZIndex = 2
         tpBtn.Parent = card
         local tpC = Instance.new("UICorner"); tpC.CornerRadius = UDim.new(0, 4); tpC.Parent = tpBtn
-        
+
         TrackWorldHumConnection(selectionBtn.MouseButton1Click:Connect(function()
-            -- Clear previous selection
+
             if WorldHumState.selectionHighlight then
                 pcall(function() WorldHumState.selectionHighlight:Destroy() end)
                 WorldHumState.selectionHighlight = nil
             end
-            
-            -- Hide all other edit and TP buttons
+
             for _, child in ipairs(page:GetChildren()) do
                 local eb = child:FindFirstChild("Edit")
                 local tb = child:FindFirstChild("TP")
                 if eb then eb.Visible = false end
                 if tb then tb.Visible = false end
             end
-            
-            -- Set selection
+
             WorldHumState.selectedHum = hum
             editBtn.Visible = true
             tpBtn.Visible = true
-            
+
             local hl = Instance.new("Highlight")
             hl.Enabled = not Flags["Settings/GhostMode"]
             hl.Name = "WorldHumSelectionHighlight"
             hl.Adornee = model
             hl.FillTransparency = 1
-            hl.OutlineColor = Color3.new(255, 255, 255) -- White
+            hl.OutlineColor = Color3.new(255, 255, 255)
             hl.OutlineTransparency = 0
             hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             hl.Parent = model
             WorldHumState.selectionHighlight = hl
         end))
-        
+
         TrackWorldHumConnection(editBtn.MouseButton1Click:Connect(function()
             if WorldHumState.selectionHighlight then
                 WorldHumState.selectionHighlight:Destroy()
@@ -9612,7 +9212,6 @@ function ShowWorldHumList(page)
     end
 end
 
--- Refresh list when tab is opened
 for _, t in pairs(UIState.Tabs) do
     if t.Label.Text == "WorldHumanoids" then
         TrackConnection(t.Button.MouseButton1Click:Connect(function()
@@ -9630,7 +9229,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     Frame.BorderSizePixel = 0
     Frame.Parent = page
     local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = Frame
-    
+
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(0.7, -30, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
@@ -9653,7 +9252,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     LockBtn.TextSize = 14
     LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
     LockBtn.Parent = Frame
-    
+
     local Switch = Instance.new("Frame")
     Switch.Size = UDim2.new(0, 44, 0, 22)
     Switch.AnchorPoint = Vector2.new(1, 0.5)
@@ -9661,7 +9260,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     Switch.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     Switch.Parent = Frame
     local swCorner = Instance.new("UICorner"); swCorner.CornerRadius = UDim.new(1, 0); swCorner.Parent = Switch
-    
+
     local Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.AnchorPoint = Vector2.new(0, 0.5)
@@ -9669,13 +9268,13 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
     Knob.BackgroundColor3 = Color3.new(1, 1, 1)
     Knob.Parent = Switch
     local kbCorner = Instance.new("UICorner"); kbCorner.CornerRadius = UDim.new(1, 0); kbCorner.Parent = Knob
-    
+
     local Button = Instance.new("TextButton")
     Button.Size = UDim2.new(1, 0, 1, 0)
     Button.BackgroundTransparency = 1
     Button.Text = ""
     Button.Parent = Switch
-    
+
     local function updateVisuals(state)
         TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)}):Play()
         TweenService:Create(Knob, TWEENS.SMOOTH, {Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
@@ -9703,7 +9302,7 @@ function CreateWorldHumToggle(page, text, targetHum, prop)
         end
         updateVisuals(newState)
     end))
-    
+
     updateVisuals(targetHum[prop])
 end
 
@@ -9738,7 +9337,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     LockBtn.TextSize = 14
     LockBtn.TextColor3 = initialLocked and UI_THEME.Accent or UI_THEME.TextDark
     LockBtn.Parent = Frame
-    
+
     local InputFrame = Instance.new("Frame")
     InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
     InputFrame.Position = UDim2.new(1, -12, 0.5, 0)
@@ -9787,7 +9386,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     end))
 
     TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
-    
+
     local mBtn = Instance.new("TextButton")
     mBtn.Size = UDim2.new(0, 25, 1, 0)
     mBtn.BackgroundTransparency = 1
@@ -9814,7 +9413,7 @@ function ShowWorldHumEditor(page, hum)
     page:ClearAllChildren()
     ClearWorldHumConnections()
     WorldHumState.selectedHum = hum
-    
+
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
@@ -9866,7 +9465,7 @@ function ShowWorldHumEditor(page, hum)
     end))
 
     UI.CreateSection(page, "Editor: " .. hum.Parent.Name)
-    
+
     UI.CreateSection(page, "Behavior")
     CreateWorldHumToggle(page, "Archivable", hum, "Archivable")
     CreateWorldHumToggle(page, "Break Joints On Death", hum, "BreakJointsOnDeath")
@@ -9895,7 +9494,6 @@ end
 
 local WaypointsPage = UI.CreateTab("Waypoints")
 
--- Find the button to hide it initially
 for _, t in pairs(UIState.Tabs) do
     if t.Label.Text == "Waypoints" then
         WaypointsTabButton = t.Button
@@ -9914,14 +9512,12 @@ wListLayout.Padding = UDim.new(0, 5)
 wListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 wListLayout.Parent = WaypointsUIList
 
--- Automatic canvas resizing for WaypointsPage based on children
 TrackConnection(wListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     WaypointsUIList.Size = UDim2.new(1, 0, 0, wListLayout.AbsoluteContentSize.Y)
 end))
 
--- Tracking / Camera Assistance TAB
 if SAFE_MODE then
-    -- Safe Mode info banner
+
     local safeBanner = Instance.new("TextLabel")
     safeBanner.Size = UDim2.new(1, 0, 0, 36)
     safeBanner.BackgroundColor3 = Color3.fromRGB(20, 60, 30)
@@ -10097,11 +9693,10 @@ do
     RightLeg.AnchorPoint = Vector2.new(0, 0)
 end
 
--- VISUALS TAB
 UI.CreateSection(VisualsTab, "Other-Player ESP Elements")
 UI.CreateToggle(VisualsTab, "Enable ESP", "ESP/Enabled", Flags["ESP/Enabled"], function(state)
     if not state then
-        -- Feature disabled - cleanup outlines to prevent ghosts since update loop stops
+
         for _, player in ipairs(Players:GetPlayers()) do
              RemovePlayerOutlines(player)
         end
@@ -10120,7 +9715,7 @@ UI.CreateNumericInput(VisualsTab, "Nametag Opacity", "ESP/NametagOpacity", Flags
 end)
 
 UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Flags["ESP/PlayerOutlines"], function(state)
-    -- When disabled, remove all existing outlines immediately
+
     if not state then
         local players = GetPlayersCache()
         for i = 1, #players do
@@ -10186,7 +9781,6 @@ UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Wayp
     RefreshWaypointUI()
 end)
 
--- HUMANOID TAB
 local function _updateHum(prop, val)
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -10205,7 +9799,7 @@ UI.CreateSection(HumanoidTab, "Control")
 UI.CreateToggle(HumanoidTab, "Auto Rotate", "Humanoid/AutoRotate", Flags["Humanoid/AutoRotate"], function(v) _updateHum("AutoRotate", v) end, true)
 UI.CreateToggle(HumanoidTab, "Platform Stand", "Humanoid/PlatformStand", Flags["Humanoid/PlatformStand"], function(v) _updateHum("PlatformStand", v) end, true)
 UI.CreateToggle(HumanoidTab, "Sit", "Humanoid/Sit", Flags["Humanoid/Sit"], function(v) _updateHum("Sit", v) end, true)
-UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v) 
+UI.CreateToggle(HumanoidTab, "Jump", "Humanoid/Jump", Flags["Humanoid/Jump"], function(v)
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
@@ -10227,7 +9821,6 @@ UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Hu
 UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end, true)
 
--- DEV TOOLS TAB
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
 UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Enabled"], function(state)
     Br3ak3rState.CLICKBREAK_ENABLED = state
@@ -10280,7 +9873,7 @@ UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 UI.CreateButton(MiscTab, "Force Reload (Reload latest script version from GitHub)", ForceReload)
 
 UI.CreateSection(MiscTab, "Configuration")
--- Safe Mode status row
+
 do
     local smRow = Instance.new("Frame")
     smRow.Size = UDim2.new(1, 0, 0, 28)
@@ -10360,7 +9953,7 @@ UI.CreateButton(MiscTab, "Join Official Discord Server", function()
     else
         UI.Notify("Discord", "Clipboard function not supported by your exploit", 5)
     end
-    
+
     local req = syn and syn.request or http and http.request or http_request or request
     if req then
         pcall(function()
@@ -10383,16 +9976,14 @@ UI.CreateButton(MiscTab, "Join Official Discord Server", function()
     end
 end)
 
-
--- Helper to setup player ESP and connections
 function SetupPlayerESP(player)
     if player == LocalPlayer then return end
-    
+
     CreateESP(player)
     local espData = ESPObjects[player]
-    
+
     if espData then
-        -- FIX: Prevent duplicate connections if SetupPlayerESP is called multiple times for the same player
+
         if espData.Connections then
             for _, conn in pairs(espData.Connections) do
                 if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
@@ -10404,16 +9995,13 @@ function SetupPlayerESP(player)
             espData.Connections = {}
         end
 
-        -- Track CharacterAdded connection LOCALLY in espData, not globally
         local conn = player.CharacterAdded:Connect(function(character)
-            -- FIX: Invalidate character cache immediately on spawn
+
             CharCache[player] = nil
-            
-            -- THREAD ACCUMULATION FIX: Check if wait-loop already active
+
             if espData.waitingForChar then return end
             espData.waitingForChar = true
 
-            -- Wait for character to be fully parented and have a root part
             local attempts = 0
             local root = nil
             repeat
@@ -10422,43 +10010,38 @@ function SetupPlayerESP(player)
                 root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                 attempts = attempts + 1
             until root or attempts > 10
-            
+
             espData.waitingForChar = nil
-            
+
             if player.Parent and Sp3arParvus.Active then
-                -- Force ESP update for this player when their character spawns
+
                 local data = ESPObjects[player]
                 if data then
-                    -- Reset cache to force full update of labels and colors
+
                     data.lastNickname = ""
                     data.lastUsername = ""
                     data.lastDistance = -1
                     data.lastTeamColor = nil
                     data.lastDistanceColor = nil
                     data.lastStatus = ""
-                    
-                    -- Ensure ScreenGui is valid
+
                     EnsureScreenGui()
-                    
-                    -- Update immediately
+
                     UpdateESP(os.clock(), player, player == NearestPlayerRef)
                 end
             end
         end)
         table.insert(espData.Connections, conn)
-        
-        -- Handle players whose character spawned before the event was hooked
+
         if player.Character then
             if espData.waitingForChar then return end
             espData.waitingForChar = true
 
             task.spawn(function()
                 local character = player.Character
-                
-                -- Invalidate character cache
+
                 CharCache[player] = nil
-                
-                -- Wait for character to be fully parented and have a root part
+
                 local attempts = 0
                 local root = nil
                 repeat
@@ -10467,18 +10050,18 @@ function SetupPlayerESP(player)
                     root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
                     attempts = attempts + 1
                 until root or attempts > 10
-                
+
                 espData.waitingForChar = nil
-                
+
                 if player.Parent and Sp3arParvus.Active then
-                    -- Reset cache to force full update
+
                     espData.lastNickname = ""
                     espData.lastUsername = ""
                     espData.lastDistance = -1
                     espData.lastTeamColor = nil
                     espData.lastDistanceColor = nil
                     espData.lastStatus = ""
-                    
+
                     EnsureScreenGui()
                     UpdateESP(os.clock(), player, player == NearestPlayerRef)
                 end
@@ -10487,13 +10070,10 @@ function SetupPlayerESP(player)
     end
 end
 
--- Initialize ESP for existing players
 for _, player in ipairs(Players:GetPlayers()) do
     SetupPlayerESP(player)
 end
 
--- Event Listeners
--- Handle new players joining
 TrackConnection(Players.PlayerAdded:Connect(function(player)
     AddPlayerToCache(player)
     SetupPlayerESP(player)
@@ -10504,10 +10084,10 @@ TrackConnection(Players.PlayerAdded:Connect(function(player)
         UI.Notify("☠️ Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has joined the server")
     end
 end))
-TrackConnection(Players.PlayerRemoving:Connect(function(player) 
+TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemovePlayerFromCache(player)
-    CharCache[player] = nil -- Clear character cache
-    RemoveESP(player) 
+    CharCache[player] = nil
+    RemoveESP(player)
 
     if AdvancedPlayerPanelState.SelectedPlayer == player then
         AdvancedPlayerPanelState.SelectedPlayer = nil
@@ -10524,11 +10104,8 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     end
 end))
 
--- MAIN UPDATE LOOPS
-
--- CONSOLIDATED Input Handler (includes Br3ak3r Ctrl+Click functionality)
 TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- Track Ctrl & Shift key state
+
     if input.KeyCode == Enum.KeyCode.LeftControl then
         Br3ak3rState.LEFT_CTRL_HELD = true
         Br3ak3rState.CTRL_HELD = true
@@ -10538,19 +10115,15 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
     elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         H1ghl1ght3rState.SHIFT_HELD = true
     end
-    
-    -- Handle RMB for Camera Tracking (only when not processed by game)
+
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = Flags["Aim/AimLock"]
     end
 
-    -- Track user zoom hotkeys
     if not gameProcessed and (input.KeyCode == Enum.KeyCode.I or input.KeyCode == Enum.KeyCode.O) then
         ZoomState.UserScrolled = true
     end
 
-    
-    -- Br3ak3r / H1ghl1ght3r: Ctrl+Click
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton1 then
         if H1ghl1ght3rState.SHIFT_HELD and H1ghl1ght3rState.ENABLED then
             local origin, direction = GetMouseRay()
@@ -10571,7 +10144,6 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         end
     end
 
-    -- Waypoints: Ctrl+MiddleClick to add/remove, Ctrl+Shift+MiddleClick to clear all
     if not gameProcessed and Br3ak3rState.CTRL_HELD and input.UserInputType == Enum.UserInputType.MouseButton3 then
         if Flags["Waypoints/Enabled"] then
             if H1ghl1ght3rState.SHIFT_HELD then
@@ -10586,28 +10158,26 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                     UI.Notify("Waypoints", "All waypoints destroyed")
                 end
             else
-                -- First check for deletion (click on existing waypoint screen pos)
+
                 local mouseLoc = UserInputService:GetMouseLocation()
                 local origin, direction = GetMouseRay()
                 local raycastHit = nil
                 if origin and direction then
                     raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
                 end
-                
+
                 local deleted = false
                 for id, wpData in pairs(ActiveWaypoints) do
                     local screenPos, onScreen = GetViewportPoint(wpData.Position)
-                    
-                    -- Check 1: Is it close in 2D Screen Space? (Increased buffer to 60px)
+
                     local screenClose = false
                     if onScreen then
                         local dist = math.sqrt((mouseLoc.X - screenPos.X)^2 + (mouseLoc.Y - screenPos.Y)^2)
-                        if dist < 60 then 
+                        if dist < 60 then
                             screenClose = true
                         end
                     end
-                    
-                    -- Check 2: Is it close in 3D World Space? (15 studs buffer if raycast hit)
+
                     local worldClose = false
                     if raycastHit and raycastHit.Position then
                         local dist3D = (wpData.Position - raycastHit.Position).Magnitude
@@ -10615,15 +10185,14 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
                             worldClose = true
                         end
                     end
-                    
+
                     if screenClose or worldClose then
                         DestroyWaypoint(id)
                         deleted = true
-                        -- Note: Intentionally NOT breaking here, so we can delete multiple clustered waypoints at once
+
                     end
                 end
-                
-                -- If not deleted, create a new one via raycast
+
                 if not deleted then
                     if raycastHit then
                         CreateWaypoint(raycastHit.Position)
@@ -10637,13 +10206,11 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
             end
         end
     end
-    
 
 end))
 
--- CONSOLIDATED InputEnded Handler (includes Ctrl key tracking)
 TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
-    -- Track Ctrl key release
+
     if input.KeyCode == Enum.KeyCode.LeftControl then
         Br3ak3rState.LEFT_CTRL_HELD = false
         if not UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
@@ -10659,13 +10226,12 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
             H1ghl1ght3rState.SHIFT_HELD = false
         end
     end
-    
+
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimState.Aim = false
     end
 end))
 
--- Zoom Unlocker Input Handler
 TrackConnection(Services.UserInputService.InputChanged:Connect(function(input, gameProcessed)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseWheel then
         ZoomState.UserScrolled = true
@@ -10678,8 +10244,6 @@ TrackConnection(Services.UserInputService.TouchPinch:Connect(function(pinchScale
     end
 end))
 
--- CONSOLIDATED ContextActionService Shortcuts Handler (High Priority)
--- Localize exploit and script globals so they persist in the callback environment
 local unhighlightLast = unhighlightLast
 local unhighlightAll = unhighlightAll
 local unbreakLast = unbreakLast
@@ -10702,7 +10266,6 @@ local function startMovementLoop(keyCode)
     if activeMovementLoops[keyCode] then return end
     activeMovementLoops[keyCode] = true
 
-    -- Wait initial delay for key repeat threshold (0.4 seconds)
     task.wait(0.4)
 
     local RunService = game:GetService("RunService")
@@ -10780,14 +10343,12 @@ local function handleShortcuts(actionName, inputState, inputObject)
         elseif inputObject.KeyCode == Enum.KeyCode.B then
             Br3ak3rState.CLICKBREAK_ENABLED = not Br3ak3rState.CLICKBREAK_ENABLED
             Flags["Br3ak3r/Enabled"] = Br3ak3rState.CLICKBREAK_ENABLED
-            
-            -- Update UI toggle state
+
             local updater = UIState.Updaters["Br3ak3r/Enabled"]
             if updater then updater(Br3ak3rState.CLICKBREAK_ENABLED) end
-            
-            -- Display notification
+
             UI.Notify("Br3ak3r", string.format("Br3ak3r has been %s with 'Ctrl+B'", Br3ak3rState.CLICKBREAK_ENABLED and "activated" or "deactivated"))
-            
+
             if not Br3ak3rState.CLICKBREAK_ENABLED and Br3ak3rState.hoverHL then
                 Br3ak3rState.hoverHL.Enabled = false
             end
@@ -10849,15 +10410,15 @@ local function handleShortcuts(actionName, inputState, inputObject)
             if Flags["Aim/HeadshotOnlyState"] == nil then
                 Flags["Aim/HeadshotOnlyState"] = true
             end
-            
+
             Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
             local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
-            
+
             for k in pairs(Flags["Aim/TargetGroups"]) do
                 Flags["Aim/TargetGroups"][k] = false
             end
             Flags["Aim/TargetGroups"]["Head"] = true
-            
+
             if isHeadshotOnly then
                 Flags["Aim/BodyParts"] = {"Head"}
                 Flags["Aim/Priority"] = "Head"
@@ -10872,7 +10433,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 Flags["Aim/Priority"] = "Head"
                 UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
             end
-            
+
             if UIState.Updaters["Aim/TargetGroups"] then
                 for k, v in pairs(Flags["Aim/TargetGroups"]) do
                     if UIState.Updaters["Aim/TargetGroups"][k] then
@@ -10891,7 +10452,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                         highestId = id
                     end
                 end
-                
+
                 if highestId > -1 then
                     local wpData = ActiveWaypoints[highestId]
                     if wpData and LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -10913,7 +10474,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     if origin and direction then
                         raycastHit = WorldRaycastBr3ak3r(origin, direction, true)
                     end
-                    
+
                     local tpPos = nil
                     if raycastHit then
                         tpPos = raycastHit.Position
@@ -10923,7 +10484,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                             tpPos = mouse.Hit.Position
                         end
                     end
-                    
+
                     if tpPos then
                         rootPart.CFrame = CFrame.new(tpPos + Vector3.new(0, 3, 0)) * (rootPart.CFrame - rootPart.CFrame.Position)
                     end
@@ -10937,7 +10498,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.K then
             if not UIState.Visible then
-                -- If Menu is Hidden: Make menu visible, ensure it is maximized, and trigger PlayerPage tab selection
+
                 if UIState.Minimized and UIState.ToggleMinimize then
                     UIState.ToggleMinimize()
                 end
@@ -10950,7 +10511,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     end
                 end
             elseif UIState.Minimized then
-                -- If Menu is Visible but Minimized: Maximize the menu and trigger PlayerPage tab selection
+
                 if UIState.ToggleMinimize then
                     UIState.ToggleMinimize()
                 end
@@ -10960,16 +10521,16 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     end
                 end
             else
-                -- Menu is Visible and Maximized
+
                 if UIState.CurrentTab ~= "PlayerPage" then
-                    -- If Menu is Visible, Maximized, but on a different tab: Trigger PlayerPage tab selection
+
                     for _, t in ipairs(UIState.Tabs) do
                         if t.Label.Text == "PlayerPage" and t.Select then
                             t.Select()
                         end
                     end
                 else
-                    -- If Menu is Visible, Maximized, AND currently on PlayerPage: Minimize the menu
+
                     if UIState.ToggleMinimize then
                         UIState.ToggleMinimize()
                     end
@@ -10981,7 +10542,7 @@ local function handleShortcuts(actionName, inputState, inputObject)
             Flags["Misc/ItemPanel"] = ItemPanelState.Visible
             local updater = UIState.Updaters["Misc/ItemPanel"]
             if updater then updater(ItemPanelState.Visible) end
-            
+
             UI.Notify("Item Panel", "Item Panel is now " .. (ItemPanelState.Visible and "ON" or "OFF"))
 
             if ItemPanelState.Visible then
@@ -11061,35 +10622,32 @@ local function handleShortcuts(actionName, inputState, inputObject)
     return Enum.ContextActionResult.Pass
 end
 
--- Bind the action with high priority so it sinks inputs before the game processes them (like gun reloading on 'R')
 game:GetService("ContextActionService"):BindActionAtPriority(
     "Sp3arParvusShortcuts",
     handleShortcuts,
     false,
     Enum.ContextActionPriority.High.Value + 100,
-    Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.B, Enum.KeyCode.E, 
-    Enum.KeyCode.R, Enum.KeyCode.U, Enum.KeyCode.F, Enum.KeyCode.N, 
-    Enum.KeyCode.G, Enum.KeyCode.Period, Enum.KeyCode.Backquote, 
-    Enum.KeyCode.H, Enum.KeyCode.Minus, Enum.KeyCode.K, Enum.KeyCode.Y, 
-    Enum.KeyCode.Q, Enum.KeyCode.J, Enum.KeyCode.Up, Enum.KeyCode.Down, 
+    Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.B, Enum.KeyCode.E,
+    Enum.KeyCode.R, Enum.KeyCode.U, Enum.KeyCode.F, Enum.KeyCode.N,
+    Enum.KeyCode.G, Enum.KeyCode.Period, Enum.KeyCode.Backquote,
+    Enum.KeyCode.H, Enum.KeyCode.Minus, Enum.KeyCode.K, Enum.KeyCode.Y,
+    Enum.KeyCode.Q, Enum.KeyCode.J, Enum.KeyCode.Up, Enum.KeyCode.Down,
     Enum.KeyCode.Left, Enum.KeyCode.Right
 )
 
--- OPTIMIZED: Shared target cache (prevents redundant GetClosest calls)
--- GetClosest is EXPENSIVE (iterates all players + raycasts) - call it ONCE per frame max
-local TARGET_CACHE_DURATION = 0.016 -- ~1 frame at 60fps
+local TARGET_CACHE_DURATION = 0.016
 
 local function IsCursorOverMenu()
     local mouseLoc = Services.UserInputService:GetMouseLocation()
     local mx, my = mouseLoc.X, mouseLoc.Y
-    
+
     local function isOverFrame(frame)
         if not frame or not frame.Visible or not frame.Parent then return false end
         local pos = frame.AbsolutePosition
         local size = frame.AbsoluteSize
         return mx >= pos.X and mx <= pos.X + size.X and my >= pos.Y and my <= pos.Y + size.Y
     end
-    
+
     if isOverFrame(UIState.MainFrame) then return true end
 
     if isOverFrame(ItemPanelUI.MainFrame) then return true end
@@ -11101,45 +10659,42 @@ function GetCachedTarget()
     if CachedTarget and (now - CachedTargetTime) < TARGET_CACHE_DURATION then
         return CachedTarget
     end
-    
-    -- Prevent aimlock target acquisition while interacting with menus
+
     if IsCursorOverMenu() then
         CachedTarget = nil
         CachedTargetTime = now
         return nil
     end
-    
-    -- Use broadest settings to find targets (Aim settings as primary)
+
     CachedTarget = GetClosest(
         Flags["Aim/AimLock"],
         Flags["Aim/TeamCheck"],
         Flags["Aim/VisibilityCheck"],
-        false, -- Distance check disabled (no cap)
-        0, -- Distance limit unused
+        false,
+        0,
         Flags["Aim/FOV/Radius"],
         Flags["Aim/Priority"],
         Flags["Aim/BodyParts"],
-        AimState.LastAimTarget -- Sticky target support
+        AimState.LastAimTarget
     )
     CachedTargetTime = now
 
-    -- Update Priority Label
     if UIState.PriorityLabel then
         local selectedCount = 0
         local lastCategory = "Head"
-        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do 
-            if enabled then 
-                selectedCount = selectedCount + 1 
+        for category, enabled in pairs(Flags["Aim/TargetGroups"]) do
+            if enabled then
+                selectedCount = selectedCount + 1
                 lastCategory = category
-            end 
+            end
         end
-        
+
         if selectedCount == 0 or selectedCount == 6 then
             UIState.PriorityLabel.Text = "Priority: Closest part"
         elseif selectedCount == 1 then
             UIState.PriorityLabel.Text = "Priority: " .. lastCategory
         else
-            -- Multiple selected but not all
+
             if CachedTarget then
                 local targetedPart = CachedTarget[3]
                 local categoryName = "Closest part"
@@ -11163,7 +10718,7 @@ end
 
 local function UpdateFOVCircle()
     local showCircle = Sp3arParvus.Active and LocalCharReady and not SAFE_MODE and Flags["Aim/AimLock"] and Flags["Aim/FOV/ShowCircle"]
-    
+
     if not showCircle then
         if FovCircleFrame then
             FovCircleFrame.Visible = false
@@ -11190,11 +10745,11 @@ local function UpdateFOVCircle()
         FovCircleFrame.BorderSizePixel = 0
         FovCircleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
         FovCircleFrame.ZIndex = 10
-        
+
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(1, 0)
         corner.Parent = FovCircleFrame
-        
+
         local stroke = Instance.new("UIStroke")
         stroke.Thickness = 1
         stroke.Color = UI_THEME.Accent
@@ -11207,11 +10762,11 @@ local function UpdateFOVCircle()
 
     local currentMode = UserInputService.MouseBehavior
     local crosshairX, crosshairY, crosshairValid = GetCrosshairViewportPosition(currentMode)
-    
+
     if crosshairValid then
         local radius = Flags["Aim/FOV/Radius"] or 50
         local diameter = radius * 2
-        
+
         FovCircleFrame.Size = UDim2.fromOffset(diameter, diameter)
         FovCircleFrame.Position = UDim2.fromOffset(crosshairX, crosshairY)
         FovCircleFrame.Visible = not Flags["Settings/GhostMode"]
@@ -11220,13 +10775,9 @@ local function UpdateFOVCircle()
     end
 end
 
--- Camera tracking update loop — moves the local camera toward the nearest in-FOV target.
--- Uses mousemoverel for smooth sub-pixel camera adjustment.
--- SAFE_MODE gates this entirely to avoid continuous input-simulation detection.
 function UpdateAim()
     pcall(UpdateFOVCircle)
 
-    -- Never run camera tracking in Safe Mode
     if SAFE_MODE then return end
 
     if not Sp3arParvus.Active or not LocalCharReady then
@@ -11250,39 +10801,35 @@ end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAim))
 
-
--- ESP update loop (OPTIMIZED - throttled updates, no per-frame player iteration)
 lastEspUpdate = 0
-espUpdateRate = 0.2 -- ~5 FPS for ESP (reduced from 10fps - big perf gain on low-end devices)
+espUpdateRate = 0.2
 lastTrackerUpdate = 0
-trackerUpdateRate = 0.5 -- Tracker updates at ~2 FPS (reduced from 3fps)
+trackerUpdateRate = 0.5
 lastBr3ak3rCleanup = 0
-br3ak3rCleanupRate = 2.0 
+br3ak3rCleanupRate = 2.0
 lastHoverUpdate = 0
-hoverUpdateRate = 0.033 -- Hover at 30fps
+hoverUpdateRate = 0.033
 lastWaypointUpdate = 0
-waypointUpdateRate = 0.5 -- 2 FPS for waypoints
+waypointUpdateRate = 0.5
 lastStateEnforcement = 0
-stateEnforcementRate = 0.1 -- 10 FPS for StreamingEnabled/GhostMode enforcement
+stateEnforcementRate = 0.1
 lastHumanoidSync = 0
-humanoidSyncRate = 0.1 -- 10 FPS
+humanoidSyncRate = 0.1
 lastWorldHumListUpdate = 0
 lastWorldHumPresetScan = 0
 lastTeamsUpdate = 0
 lastGhostMode = nil
 
--- Unified Heartbeat Loop (Optimized: Single connection for all non-render-critical updates)
--- Combines ESP, Tracker, Br3ak3r logic into one scheduler
 function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
-    
+
     local now = os.clock()
     local ghostMode = Flags["Settings/GhostMode"]
     local ghostModeChanged = (ghostMode ~= lastGhostMode)
     lastGhostMode = ghostMode
 
     if ghostModeChanged and not ghostMode then
-        -- Restore visibility when Gh0st mode toggled off
+
         if ClosestPlayerTrackerLabel and not ClosestPlayerTrackerLabel.Visible and Flags["LocalUI/ClosestPlayerTracker"] then
             ClosestPlayerTrackerLabel.Visible = true
         end
@@ -11304,11 +10851,9 @@ function UnifiedHeartbeat(dt)
         ApplyWorldHumanoidSettings()
         ApplyItemPanelSettings()
 
-        -- Scroll Unlocker Logic
         local currentMax = LocalPlayer.CameraMaxZoomDistance
         local currentMin = LocalPlayer.CameraMinZoomDistance
-        
-        -- Use tolerance check to avoid float precision issues and compounding multiplier bug
+
         if not ZoomState.LastSetMax or math.abs(currentMax - ZoomState.LastSetMax) > 0.01 then
             ZoomState.OriginalMax = currentMax
         end
@@ -11319,7 +10864,7 @@ function UnifiedHeartbeat(dt)
         if Flags["Misc/ScrollUnlocker"] then
             if Br3ak3rState.CTRL_HELD then
                 ZoomState.WasCtrlHeld = true
-                
+
                 if LocalPlayer.CameraMaxZoomDistance ~= 10000 then
                     LocalPlayer.CameraMaxZoomDistance = 10000
                     ZoomState.LastSetMax = 10000
@@ -11330,10 +10875,10 @@ function UnifiedHeartbeat(dt)
                 end
             else
                 local currentZoom = (Camera.CFrame.Position - Camera.Focus.Position).Magnitude
-                
+
                 if ZoomState.WasCtrlHeld then
                     ZoomState.WasCtrlHeld = false
-                    
+
                     local originalMax = ZoomState.OriginalMax or 128
                     if originalMax > 0 then
                         local newMultiplier = currentZoom / originalMax
@@ -11343,7 +10888,7 @@ function UnifiedHeartbeat(dt)
                     end
                 elseif ZoomState.UserScrolled then
                     ZoomState.UserScrolled = false
-                    
+
                     local originalMax = ZoomState.OriginalMax or 128
                     if originalMax > 0 then
                         local newMultiplier = currentZoom / originalMax
@@ -11352,14 +10897,14 @@ function UnifiedHeartbeat(dt)
                         ZoomState.Multiplier = 1
                     end
                 end
-                
+
                 local multiplier = ZoomState.Multiplier or 1
                 local targetMax = math.max((ZoomState.OriginalMax or 128) * multiplier, currentZoom)
-                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom) -- Do not scale min zoom with multiplier
+                local targetMin = math.min(ZoomState.OriginalMin or 0.5, currentZoom)
                 if targetMax < targetMin then
                     targetMax = targetMin
                 end
-                
+
                 if not ZoomState.LastSetMax or math.abs(LocalPlayer.CameraMaxZoomDistance - targetMax) > 0.01 then
                     LocalPlayer.CameraMaxZoomDistance = targetMax
                     ZoomState.LastSetMax = targetMax
@@ -11376,13 +10921,12 @@ function UnifiedHeartbeat(dt)
             ZoomState.UserScrolled = nil
         end
     end
-    
+
     if (now - lastHumanoidSync) > humanoidSyncRate then
         lastHumanoidSync = now
         UpdateHumanoidUI()
         UpdateWorldHumanoidEditorUI()
-        
-        -- Update PlayerPage
+
         if AdvancedPlayerPanelState.Visible then
             if AdvancedPlayerPanelState.CurrentView == "Teams" then
                 if (now - lastTeamsUpdate) > 1.0 then
@@ -11395,7 +10939,6 @@ function UnifiedHeartbeat(dt)
             UpdateAdvancedPlayerDetails()
         end
 
-        -- Update Spectate focus if active (independent of panel visibility)
         local specPlayer = AdvancedPlayerPanelState.Spectating
         if specPlayer then
             if specPlayer.Parent then
@@ -11404,7 +10947,7 @@ function UnifiedHeartbeat(dt)
                     LocalPlayer.ReplicationFocus = specRoot
                 end
             else
-                -- Player left
+
                 AdvancedPlayerPanelState.Spectating = nil
                 local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                 if myHum then Camera.CameraSubject = myHum end
@@ -11420,8 +10963,7 @@ function UnifiedHeartbeat(dt)
             ShowWorldHumList(WorldHumState.Page)
         end
     end
-    
-    -- Update Waypoint Distances
+
     if Flags["Waypoints/Enabled"] and (now - lastWaypointUpdate) > waypointUpdateRate then
         lastWaypointUpdate = now
         local camPos = Camera.CFrame.Position
@@ -11440,36 +10982,30 @@ function UnifiedHeartbeat(dt)
             if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
         end
     elseif not Flags["Waypoints/Enabled"] then
-        -- Hide all if disabled
+
         for id, wpData in pairs(ActiveWaypoints) do
             if wpData.Billboard and wpData.Billboard.Enabled then wpData.Billboard.Enabled = false end
             if wpData.PinBg and wpData.PinBg.Enabled then wpData.PinBg.Enabled = false end
         end
     else
-        -- Just enforce ghostMode visibility change if needed (high frequency)
+
         local wpVisible = not ghostMode
         for id, wpData in pairs(ActiveWaypoints) do
             if wpData.Billboard and wpData.Billboard.Enabled ~= wpVisible then wpData.Billboard.Enabled = wpVisible end
             if wpData.PinBg and wpData.PinBg.Enabled ~= wpVisible then wpData.PinBg.Enabled = wpVisible end
         end
     end
-    
-    -- Mutual Exclusivity Enforcement for Lighting
+
     if Flags["Visuals/Fullbright"] and Flags["Visuals/FullDark"] then
-        -- This shouldn't happen if UI logic is correct, but let's be safe
+
         Flags["Visuals/FullDark"] = false
         local updater = UIState.Updaters["Visuals/FullDark"]
         if updater then updater(false) end
     end
 
-
-    
-    -- 1. ESP & Tracker Updates
-    -- Check throttle FIRST before anything else to save perf
     local shouldUpdateEsp = (now - lastEspUpdate) > espUpdateRate
     local shouldUpdateTracker = (now - lastTrackerUpdate) > trackerUpdateRate
-    
-    -- Also force update the LOCKED target every frame for instant dot color feedback
+
     local forceUpdateTarget = nil
     if CachedTarget and (now - CachedTargetTime) < 0.1 then
         forceUpdateTarget = CachedTarget[1]
@@ -11479,16 +11015,15 @@ function UnifiedHeartbeat(dt)
         if shouldUpdateEsp then
             lastEspUpdate = now
         end
-        
-        -- Update ESP for all players
+
         local players = GetPlayersCache()
         local myPos = Camera.CFrame.Position
         local espEnabled = Flags["ESP/Enabled"]
-        
+
         for _, player in ipairs(players) do
             if player ~= LocalPlayer then
                 if not espEnabled then
-                    -- If ESP is disabled, ensure all elements are hidden immediately
+
                     local espData = ESPObjects[player]
                     if espData then
                         if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
@@ -11496,23 +11031,21 @@ function UnifiedHeartbeat(dt)
                     RemovePlayerOutlines(player)
                     continue
                 end
-                -- Optimization: Level of Detail (LoD) updates
-                -- Only update specific target if not in a full update cycle
+
                 local pChar, pRoot = GetCharacter(player)
                 local skip = false
-                
+
                 if not shouldUpdateEsp and player ~= forceUpdateTarget then
                     skip = true
                 end
-                
-                -- Extra throttling for distant players
+
                 if not skip and pRoot and player ~= forceUpdateTarget then
                     local dist = (pRoot.Position - myPos).Magnitude
                     if dist > 1000 then
-                        -- Update very distant players only every ~2 seconds (1 in 10 full updates)
+
                         if (floor(now * 5) % 10) ~= 0 then skip = true end
                     elseif dist > 400 then
-                        -- Update mid-range players only every ~0.8 seconds (1 in 4 full updates)
+
                         if (floor(now * 5) % 4) ~= 0 then skip = true end
                     end
                 end
@@ -11524,40 +11057,33 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    -- Tracker updates (low freq)
     if shouldUpdateTracker then
         lastTrackerUpdate = now
         UpdateNearestPlayer()
         UpdateClosestPlayerTracker()
     end
-    
-    -- 2. Br3ak3r Updates
-    -- Update hover highlight (throttled to ~30fps for responsiveness)
+
     if (now - lastHoverUpdate) > hoverUpdateRate then
         lastHoverUpdate = now
         UpdateBr3ak3rHover()
     end
-    
-    -- Periodic cleanup (throttled)
+
     if (now - lastBr3ak3rCleanup) > br3ak3rCleanupRate then
         lastBr3ak3rCleanup = now
         UpdatePlayerCache()
         pcall(pruneBrokenSet)
         pcall(pruneHighlightedSet)
-        
-        -- MEMORY LEAK FIX: Periodic cache pruning to clear stale references
+
         CleanupDeadConnections()
         CleanupDeadThreads()
         PruneCharCache()
         ClearCandidateReferences()
         ValidateESPObjects()
     end
-    
-    -- Sweep undo stack (very cheap)
+
     sweepUndo(dt)
     sweepHighlightedUndo(dt)
 
-    -- Periodic state enforcement for broken/highlighted parts (StreamingEnabled fix)
     if (now - Br3ak3rState.lastEnforcement) > stateEnforcementRate or ghostModeChanged then
         Br3ak3rState.lastEnforcement = now
 
@@ -11570,7 +11096,6 @@ function UnifiedHeartbeat(dt)
                 if espData.Nametag and espData.Nametag.Enabled then espData.Nametag.Enabled = false end
             end
 
-            -- Ensure pooled objects are disabled during Gh0st mode
             for _, obj in ipairs(PoolFolder:GetChildren()) do
                 PcallSetEnabled(obj, false)
             end
@@ -11585,32 +11110,31 @@ function UnifiedHeartbeat(dt)
         for path, data in pairs(Br3ak3rState.brokenSet) do
             local part = data.instance
             if not part or not part.Parent then
-                -- Throttle re-resolution to once every 2 seconds, but bypass if camera is close
+
                 local isClose = camPos and data.pos and (camPos - data.pos).Magnitude < 100
                 if isClose or not data.nextResolve or now > data.nextResolve then
                     data.nextResolve = now + 2.0
                     part = RobustResolvePart(path, data)
-                    
-                    if part then 
-                        data.instance = part 
+
+                    if part then
+                        data.instance = part
                         enforcementMadeChange = true
                     end
                 end
             end
-            
+
             if part and part.Parent then
-                -- Enforce collision properties (CanCollide, CanTouch, CanQuery)
-                if part.CanCollide ~= false then 
-                    part.CanCollide = false 
+
+                if part.CanCollide ~= false then
+                    part.CanCollide = false
                     enforcementMadeChange = true
                 end
                 if PcallSafeSetProp(part, "CanTouch", false) then enforcementMadeChange = true end
                 if PcallSafeSetProp(part, "CanQuery", false) then enforcementMadeChange = true end
-                
-                -- Enforce transparency properties
+
                 local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
                 local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
-                
+
                 if PcallSafeSetProp(part, "Transparency", targetT) then enforcementMadeChange = true end
                 if PcallSafeSetProp(part, "LocalTransparencyModifier", targetLTM) then enforcementMadeChange = true end
             end
@@ -11619,21 +11143,19 @@ function UnifiedHeartbeat(dt)
             Br3ak3rState.brokenCacheDirty = true
         end
 
-        -- Continuous state enforcement for highlighted parts (ensure visibility)
         for part, data in pairs(H1ghl1ght3rState.highlightedSet) do
             if part.Parent then
                 local targetT = (ghostMode and type(data) == "table") and data.t or 0.5
                 local targetLTM = (ghostMode and type(data) == "table") and data.ltm or 0.5
                 if part.Transparency ~= targetT then part.Transparency = targetT end
                 if part.LocalTransparencyModifier ~= targetLTM then part.LocalTransparencyModifier = targetLTM end
-                
+
                 local hVisible = not ghostMode
                 if data.hl and data.hl.Enabled ~= hVisible then data.hl.Enabled = hVisible end
                 if data.bg and data.bg.Enabled ~= hVisible then data.bg.Enabled = hVisible end
             end
         end
 
-        -- Continuous state enforcement for player outlines (ensure Ghost Mode)
         for player, storage in pairs(PlayerOutlineObjects) do
             local outlineVisible = not ghostMode
             if storage.Highlight and storage.Highlight.Enabled ~= outlineVisible then
@@ -11649,19 +11171,15 @@ function UnifiedHeartbeat(dt)
     end
 end
 
--- Input simulation loop — fires mouse1press/mouse1release when the cursor hovers
--- over a valid target body part. Used for testing game interactions.
--- SAFE_MODE gates this entirely to avoid automated-input detection.
 local shootBotThread = task.spawn(function()
     while Sp3arParvus.Active do
         local enabled = Flags["ShootBot/Enabled"]
         local cps = Flags["ShootBot/CPS"]
-        
-        -- SAFE_MODE: never simulate clicks during routine dev testing
+
         if enabled and not SAFE_MODE and type(isrbxactive) == "function" and isrbxactive() and type(mouse1press) == "function" and type(mouse1release) == "function" then
             local targetPart = Mouse.Target
             if targetPart then
-                -- Ancestor Check: Find the Character model robustly
+
                 local character = targetPart.Parent
                 while character and character ~= game do
                     if character:IsA("Model") and Players:GetPlayerFromCharacter(character) then
@@ -11669,27 +11187,27 @@ local shootBotThread = task.spawn(function()
                     end
                     character = character.Parent
                 end
-                
+
                 local player = character and character ~= game and Players:GetPlayerFromCharacter(character)
-                
+
                 if player and player ~= LocalPlayer and InEnemyTeam(Flags["ShootBot/TeamCheck"], player) and GetCharacter(player) then
                     local targetParts = Flags["ShootBot/TargetParts"]
                     local anySelected = false
                     for _, selected in pairs(targetParts) do
                         if selected then anySelected = true break end
                     end
-                    
+
                     local shouldFire = false
                     if not anySelected then
-                        -- General Targeting (Condition B): Fire on any valid part, tool, or accessory
+
                         shouldFire = true
                     else
-                        -- Specific Targeting (Condition A): Map Mouse.Target to body part group
+
                         local bodyPart = nil
                         if targetPart.Parent == character then
                             bodyPart = targetPart
                         else
-                            -- Accessory support
+
                             local accessory = targetPart:FindFirstAncestorOfClass("Accessory")
                             if accessory then
                                 local handle = accessory:FindFirstChild("Handle") or targetPart
@@ -11698,14 +11216,14 @@ local shootBotThread = task.spawn(function()
                                     bodyPart = weld.Part1
                                 end
                             else
-                                -- Tool support
+
                                 local tool = targetPart:FindFirstAncestorOfClass("Tool")
                                 if tool then
                                     bodyPart = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
                                 end
                             end
                         end
-                        
+
                         if bodyPart then
                             local name = bodyPart.Name
                             if targetParts.Head and name == "Head" then
@@ -11723,7 +11241,7 @@ local shootBotThread = task.spawn(function()
                             end
                         end
                     end
-                    
+
                     if shouldFire then
                         mouse1press()
                         task.wait(1 / cps / 2)
@@ -11739,13 +11257,10 @@ local shootBotThread = task.spawn(function()
 end)
 TrackThread(shootBotThread)
 
--- Single Heartbeat connection
 TrackConnection(RunService.Heartbeat:Connect(UnifiedHeartbeat))
 
--- Initialize Br3ak3r hover highlight
 createHoverHighlight()
 
--- Performance display update loop
 local perfThread = task.spawn(function()
     while Sp3arParvus.Active do
         UpdatePerformanceDisplay()
@@ -11753,8 +11268,6 @@ local perfThread = task.spawn(function()
     end
 end)
 TrackThread(perfThread)
-
--- INITIALIZATION COMPLETE
 
 print(string.format("[Sp3arParvus v%s] Developer tool loaded successfully!", VERSION))
 if SAFE_MODE then
