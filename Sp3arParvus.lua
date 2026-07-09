@@ -27,21 +27,26 @@ if not LocalPlayer then
 end
 print("[Sp3arParvus] LocalPlayer ready: " .. LocalPlayer.Name)
 
--- (with timeout)
-print("[Sp3arParvus] Waiting for Character...")
+-- Character check: non-blocking — the tool must load even in UI-only games
+-- or when the player is in a spawn/loading menu with no character yet.
+print("[Sp3arParvus] Checking for Character (non-blocking)...")
 local character = LocalPlayer.Character
-if not character then
-    character = LocalPlayer.CharacterAdded:Wait()
+if character then
+    -- Already exists, wait briefly for it to be fully parented
+    local charWaitStart = tick()
+    repeat 
+        task.wait(0.1) 
+        character = LocalPlayer.Character
+    until (character and character.Parent) or (tick() - charWaitStart > 3)
+    if character and character.Parent then
+        print("[Sp3arParvus] Character ready!")
+    else
+        warn("[Sp3arParvus] Character exists but not yet parented, continuing anyway...")
+    end
+else
+    -- No character yet (UI-only game, spawn menu, etc.) — skip blocking wait
+    print("[Sp3arParvus] No character at load time — continuing without one. Humanoid will be detected when spawned.")
 end
--- Wait for character to be parented to workspace
-repeat 
-    task.wait(0.1) 
-    character = LocalPlayer.Character
-until (character and character.Parent) or (tick() - initStartTime > MAX_INIT_WAIT)
-if not character or not character.Parent then
-    warn("[Sp3arParvus] Character not fully loaded, continuing anyway...")
-end
-print("[Sp3arParvus] Character ready!")
 
 -- Wait for Camera
 print("[Sp3arParvus] Waiting for Camera...")
@@ -431,18 +436,37 @@ function OnLocalCharacterAdded(newChar)
     if Br3ak3rState then Br3ak3rState.FilterDirty = true end
     -- Invalidate caches
     if CharCache then table.clear(CharCache) end
+    -- Reset HumanoidState so settings are re-captured from the new humanoid
+    HumanoidState.captured = false
+    HumanoidState.presetsApplied = false
     
     -- Pause specifically for camera/PlayerModule setup
     task.wait(1.5) 
     
-    -- Wait for root part
+    -- Wait for root part AND humanoid, with a generous timeout
     local root = nil
+    local humanoid = nil
     local attempts = 0
     repeat
         task.wait(0.2)
         root = newChar:FindFirstChild("HumanoidRootPart") or newChar.PrimaryPart
+        humanoid = newChar:FindFirstChildOfClass("Humanoid")
         attempts = attempts + 1
-    until root or attempts > 15
+    until (root and humanoid) or attempts > 25
+
+    -- If no humanoid yet (deferred spawn / UI state), watch for it via ChildAdded
+    if not humanoid then
+        local humConn
+        humConn = newChar.ChildAdded:Connect(function(child)
+            if child:IsA("Humanoid") then
+                humConn:Disconnect()
+                CaptureHumanoidSettings(child)
+                print("[Sp3arParvus] Humanoid detected late (deferred spawn) and captured.")
+            end
+        end)
+    else
+        CaptureHumanoidSettings(humanoid)
+    end
     
     LocalCharReady = true
     print("[Sp3arParvus] Local character re-cached and ready.")
@@ -2240,7 +2264,7 @@ do
     logoImg.Position = UDim2.new(0.5, 0, 0.47, 0)
     logoImg.BackgroundTransparency = 1
     logoImg.ImageTransparency = 1
-    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png"  -- placeholder until telemetry URL is built
+    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png" 
     logoImg.ScaleType = Enum.ScaleType.Fit
     logoImg.ZIndex = 4
     logoImg.Parent = card
