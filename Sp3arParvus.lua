@@ -88,7 +88,6 @@ local Flags = {
     ["Aim/TeamCheck"] = false,
     ["Aim/VisibilityCheck"] = true,
     ["Aim/AttractionStrength"] = 200,
-    ["Aim/PredictionScale"] = 0.07,   -- seconds-per-stud; 0 = no prediction (hitscan), ~0.07 = projectile
     ["Aim/FOV/Radius"] = 50,
     ["Aim/FOV/ShowCircle"] = true,
     ["Aim/Dampening"] = true,
@@ -3542,16 +3541,16 @@ function WithinReach(Enabled, Distance, Limit)
     return Distance < Limit
 end
 
--- Stable filter table reused every frame — avoids per-call GC churn on the LoS hot path
-local _LoSFilter = {nil, nil}
+OcclusionFilter = {nil, nil}
 
 function ObjectOccluded(Enabled, Origin, Position, Object)
     if not Enabled then return false end
+
     if typeof(Position) ~= "Vector3" then return false end
 
-    _LoSFilter[1] = LocalPlayer.Character
-    _LoSFilter[2] = Object
-    local hit = Raycast(Origin, Position - Origin, _LoSFilter)
+    OcclusionFilter[1] = LocalPlayer.Character
+    OcclusionFilter[2] = Object
+    local hit = Raycast(Origin, Position - Origin, OcclusionFilter)
 
     if hit and hit.Instance and not hit.Instance:IsDescendantOf(Object) then
         return true
@@ -3559,7 +3558,6 @@ function ObjectOccluded(Enabled, Origin, Position, Object)
 
     return false
 end
-
 
 ClosestResult = {nil, nil, nil, 0, 0, nil}
 
@@ -3823,133 +3821,94 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     return nil
 end
 
--- ╔══════════════════════════════════════════════════════════════════════╗
--- ║  AimAt v2 — Slerp + velocity prediction + frame-rate-independent α  ║
--- ╚══════════════════════════════════════════════════════════════════════╝
-function AimAt(Hitbox, dt)
-    if not Hitbox then ClearAimLockState(false); return end
-    if not mousemoverel then return end
+function AimAt(Hitbox)
+    if not Hitbox then
+        ClearAimLockState(false)
+        return
+    end
+    if not mousemoverel then
+        return
+    end
 
     local targetPart = Hitbox[3]
     if not targetPart or not targetPart.Parent then
-        ClearAimLockState(false); return
+        ClearAimLockState(false)
+        return
     end
 
-    -- ── Target / mode switch guard ────────────────────────────────────────
+    local currentMode = Services.UserInputService.MouseBehavior
+    if currentMode ~= AimState.LastMouseMode then
+        AimState.LastMouseMode = currentMode
+        AimState.LastOriginX = nil
+        AimState.LastOriginY = nil
+    end
+
     local currentTarget = Hitbox[1]
-    local currentMode   = Services.UserInputService.MouseBehavior
-    if currentTarget ~= AimState.LastAimTarget or currentMode ~= AimState.LastMouseMode then
-        AimState.LastAimTarget   = currentTarget
-        AimState.LastMouseMode   = currentMode
-        AimState.AcquiringFrames = 0
+    if currentTarget ~= AimState.LastAimTarget then
+        AimState.LastAimTarget = currentTarget
+        AimState.LastOriginX = nil
+        AimState.LastOriginY = nil
     end
 
-    -- ── Camera state ──────────────────────────────────────────────────────
-    local camCF    = Camera.CFrame
-    local camPos   = camCF.Position
-    local rawPos   = targetPart.Position
-    local dist3D   = (rawPos - camPos).Magnitude
-    if dist3D < 1 then return end
+    local targetPos = targetPart.Position
+    local cameraCFrame = Camera.CFrame
+    local cameraPos = cameraCFrame.Position
+    local dist = (targetPos - cameraPos).Magnitude
 
-    -- ── Velocity prediction ───────────────────────────────────────────────
-    -- Time-of-flight estimate; 0 = hitscan/instant, >0 = projectile lead
-    local predScale = Flags["Aim/PredictionScale"] or 0
-    local targetPos = rawPos
-    if predScale > 0 then
-        local char     = Hitbox[2]
-        local rootPart = char and (
-            char:FindFirstChild("HumanoidRootPart") or
-            char:FindFirstChild("Torso")
-        )
-        if rootPart then
-            local vel = rootPart.AssemblyLinearVelocity
-            local tof = dist3D * predScale
-            targetPos = rawPos + vel * tof
+    if dist < 1 then
+        return
+    end
+
+    local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
+    if not OnScreen or ScreenPosition.Z <= 0 then
+        return
+    end
+
+    local viewportSize = Camera.ViewportSize
+    local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
+    if not originValid then
+        return
+    end
+
+    local lastOriginX = AimState.LastOriginX
+    local lastOriginY = AimState.LastOriginY
+    AimState.LastOriginX = originX
+    AimState.LastOriginY = originY
+
+    local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
+    local dx, dy = targetX - originX, targetY - originY
+
+    local mag = sqrt(dx * dx + dy * dy)
+    if mag > Flags["Aim/FOV/Radius"] then
+        return
+    end
+
+    local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
+
+    if Flags["Aim/Dampening"] then
+        local lockThreshold = Flags["Aim/Dampening/Threshold"]
+        if mag < lockThreshold then
+            local dampening = math.max(Flags["Aim/Dampening/Strength"] / 100, mag / lockThreshold)
+            attractionMultiplier = attractionMultiplier * dampening
         end
     end
 
-    -- Validate predicted position is on screen; fall back to raw if not
-    local predScreen, predOnScreen = GetViewportPoint(targetPos)
-    local rawScreen,  rawOnScreen  = GetViewportPoint(rawPos)
+    local BASE_PULL = 0.2
+    local deltaX = dx * BASE_PULL * attractionMultiplier
+    local deltaY = dy * BASE_PULL * attractionMultiplier
 
-    if not rawOnScreen then return end  -- even raw target is off-screen
-
-    local useScreen = (predOnScreen and predScreen) and predScreen or rawScreen
-    local usePos    = (predOnScreen and predScreen) and targetPos   or rawPos
-
-    if useScreen.Z <= 0 then return end
-
-    -- ── FOV gate (viewport-scaled) ────────────────────────────────────────
-    local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
-    if not originValid then return end
-
-    local dx  = useScreen.X - originX
-    local dy  = useScreen.Y - originY
-    local mag = sqrt(dx * dx + dy * dy)
-
-    -- Scale the authored FOV radius to the current resolution
-    local vp            = Camera.ViewportSize
-    local scaleFactor   = math.min(vp.X, vp.Y) / 1080
-    local scaledFOV     = (Flags["Aim/FOV/Radius"] or 50) * scaleFactor
-
-    if mag > scaledFOV then
-        ClearAimLockState(false); return
-    end
-
-    -- ── dt-normalised attraction alpha ────────────────────────────────────
-    -- AttractionStrength 0-500 mapped to a per-second rotation speed.
-    -- math.exp gives a smooth, frame-rate-independent interpolation factor.
-    local safedt      = math.clamp(dt or (1/60), 1e-4, 0.2)
-    local rawStrength = (Flags["Aim/AttractionStrength"] or 200) / 100  -- 0–5
-    local alpha       = 1 - math.exp(-rawStrength * safedt * 60)
-
-    -- Dampening near the lock point
-    if Flags["Aim/Dampening"] and mag < Flags["Aim/Dampening/Threshold"] then
-        local threshold = math.max(Flags["Aim/Dampening/Threshold"], 1)
-        local factor    = math.max(Flags["Aim/Dampening/Strength"] / 100, mag / threshold)
-        alpha           = alpha * factor
-    end
-
-    alpha = math.clamp(alpha, 0, 1)
-
-    -- ── Slerp in world-direction space ────────────────────────────────────
-    local targetDir  = (usePos - camPos).Unit
-    local currentDir = camCF.LookVector
-
-    local dot     = math.clamp(currentDir:Dot(targetDir), -1, 1)
-    local omega   = math.acos(dot)
-    local slerpDir
-
-    if omega < 1e-5 then
-        -- Already aligned — nothing to do this frame
+    if deltaX ~= deltaX or deltaY ~= deltaY then
         return
-    else
-        local sinO = math.sin(omega)
-        slerpDir   = (currentDir * math.sin((1 - alpha) * omega) +
-                      targetDir  * math.sin(alpha       * omega)) / sinO
     end
 
-    -- ── Project slerped direction to screen delta ─────────────────────────
-    -- Compute where "straight ahead" and "slerped ahead" land in screen space,
-    -- then difference them to get the raw pixel move to apply via mousemoverel.
-    local PROJ_DIST   = 10  -- stud offset; cancels out in the difference
-    local straightSP  = Camera:WorldToViewportPoint(camPos + currentDir * PROJ_DIST)
-    local slerpedSP   = Camera:WorldToViewportPoint(camPos + slerpDir   * PROJ_DIST)
+    local maxClampX = viewportSize.X * 0.5
+    local maxClampY = viewportSize.Y * 0.5
 
-    local finalDX = slerpedSP.X - straightSP.X
-    local finalDY = slerpedSP.Y - straightSP.Y
+    deltaX = math.clamp(deltaX, -maxClampX, maxClampX)
+    deltaY = math.clamp(deltaY, -maxClampY, maxClampY)
 
-    -- NaN / Inf safety
-    if finalDX ~= finalDX or finalDY ~= finalDY then return end
-    if math.abs(finalDX) > 1e5 or math.abs(finalDY) > 1e5 then return end
-
-    -- Clamp to half-viewport so a degenerate slerp can't throw the camera
-    finalDX = math.clamp(finalDX, -vp.X * 0.5, vp.X * 0.5)
-    finalDY = math.clamp(finalDY, -vp.Y * 0.5, vp.Y * 0.5)
-
-    mousemoverel(floor(finalDX + 0.5), floor(finalDY + 0.5))
+    mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
 end
-
 
 ESPObjects = {}
 PlayerOutlineObjects = {}
@@ -9580,8 +9539,6 @@ UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamChec
 UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
-UI.CreateNumericInput(AimTab, "Velocity Prediction Scale", "Aim/PredictionScale", Flags["Aim/PredictionScale"], 0, 0.5, 0.01, "s/st")
-
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 UI.CreateToggle(AimTab, "Show FOV Circle", "Aim/FOV/ShowCircle", Flags["Aim/FOV/ShowCircle"])
 UI.CreateToggle(AimTab, "Enable Dampening", "Aim/Dampening", Flags["Aim/Dampening"])
@@ -10807,23 +10764,18 @@ local function UpdateFOVCircle()
     local crosshairX, crosshairY, crosshairValid = GetCrosshairViewportPosition(currentMode)
 
     if crosshairValid then
-        -- Scale the authored radius to the current viewport so the angular
-        -- cone is consistent regardless of resolution (authored at 1080p).
-        local vp          = Camera.ViewportSize
-        local scaleFactor = math.min(vp.X, vp.Y) / 1080
-        local radius      = (Flags["Aim/FOV/Radius"] or 50) * scaleFactor
-        local diameter    = radius * 2
+        local radius = Flags["Aim/FOV/Radius"] or 50
+        local diameter = radius * 2
 
-        FovCircleFrame.Size     = UDim2.fromOffset(diameter, diameter)
+        FovCircleFrame.Size = UDim2.fromOffset(diameter, diameter)
         FovCircleFrame.Position = UDim2.fromOffset(crosshairX, crosshairY)
-        FovCircleFrame.Visible  = not Flags["Settings/GhostMode"]
+        FovCircleFrame.Visible = not Flags["Settings/GhostMode"]
     else
         FovCircleFrame.Visible = false
     end
 end
 
--- dt is provided automatically by RenderStepped — no change needed at the connection site.
-function UpdateAim(dt)
+function UpdateAim()
     pcall(UpdateFOVCircle)
 
     if SAFE_MODE then return end
@@ -10841,7 +10793,7 @@ function UpdateAim(dt)
 
     local target = GetCachedTarget()
     if target then
-        AimAt(target, dt)  -- pass frame delta for frame-rate-independent Slerp alpha
+        AimAt(target)
     else
         ClearAimLockState(false)
     end
