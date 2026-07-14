@@ -8664,6 +8664,18 @@ local MouseButtons = {
         Action = "Ctrl+MidClick / Ctrl+Shift+MidClick",
         Desc = "Ctrl+MiddleClick creates/deletes waypoint. Ctrl+Shift+MiddleClick clears all waypoints.",
         StatusKey = "MouseButton3"
+    },
+    MouseWheelUp = {
+        Key = "MouseWheelUp",
+        Name = "Scroll Break (Clickbreak)",
+        Action = "Ctrl + Shift + Scroll Up",
+        Desc = "While Ctrl+Shift is held, scroll the wheel UP to break the part collision under your cursor (same as Ctrl+Click Br3ak3r). Works even when left-click is unavailable."
+    },
+    MouseWheelDown = {
+        Key = "MouseWheelDown",
+        Name = "Scroll Undo (Unbreak Last)",
+        Action = "Ctrl + Shift + Scroll Down",
+        Desc = "While Ctrl+Shift is held, scroll the wheel DOWN to undo the most recent Br3ak3r break (same as Ctrl+Z). Works even when left-click is unavailable."
     }
 }
 
@@ -8979,6 +8991,54 @@ function InitializeShortcutsPage(page)
     end)
     wheelBtn.MouseLeave:Connect(function()
         TweenService:Create(wheelBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+        hideTooltip()
+    end)
+
+    -- Scroll Up arrow (Ctrl+ScrollUp = Break)
+    local scrollUpBtn = Instance.new("TextButton")
+    scrollUpBtn.Name = "ScrollUp"
+    scrollUpBtn.Text = "▲"
+    scrollUpBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    scrollUpBtn.TextSize = 9
+    scrollUpBtn.TextColor3 = Color3.fromRGB(224, 251, 252)
+    scrollUpBtn.BackgroundColor3 = Color3.fromRGB(0, 95, 115)
+    scrollUpBtn.Size = UDim2.new(0.08, 0, 0.10, 0)
+    scrollUpBtn.Position = UDim2.new(0.46, 0, 0.01, 0)
+    scrollUpBtn.ZIndex = 5
+    scrollUpBtn.Parent = MouseOutline
+    local suCorner = Instance.new("UICorner"); suCorner.CornerRadius = UDim.new(0.3, 0); suCorner.Parent = scrollUpBtn
+    local suStroke = Instance.new("UIStroke"); suStroke.Color = Color3.fromRGB(0, 180, 80); suStroke.Thickness = 1; suStroke.Parent = scrollUpBtn
+
+    scrollUpBtn.MouseEnter:Connect(function()
+        TweenService:Create(scrollUpBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+        showTooltip(scrollUpBtn, MouseButtons.MouseWheelUp)
+    end)
+    scrollUpBtn.MouseLeave:Connect(function()
+        TweenService:Create(scrollUpBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
+        hideTooltip()
+    end)
+
+    -- Scroll Down arrow (Ctrl+ScrollDown = Undo)
+    local scrollDownBtn = Instance.new("TextButton")
+    scrollDownBtn.Name = "ScrollDown"
+    scrollDownBtn.Text = "▼"
+    scrollDownBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    scrollDownBtn.TextSize = 9
+    scrollDownBtn.TextColor3 = Color3.fromRGB(224, 251, 252)
+    scrollDownBtn.BackgroundColor3 = Color3.fromRGB(0, 95, 115)
+    scrollDownBtn.Size = UDim2.new(0.08, 0, 0.10, 0)
+    scrollDownBtn.Position = UDim2.new(0.46, 0, 0.31, 0)
+    scrollDownBtn.ZIndex = 5
+    scrollDownBtn.Parent = MouseOutline
+    local sdCorner = Instance.new("UICorner"); sdCorner.CornerRadius = UDim.new(0.3, 0); sdCorner.Parent = scrollDownBtn
+    local sdStroke = Instance.new("UIStroke"); sdStroke.Color = Color3.fromRGB(0, 180, 80); sdStroke.Thickness = 1; sdStroke.Parent = scrollDownBtn
+
+    scrollDownBtn.MouseEnter:Connect(function()
+        TweenService:Create(scrollDownBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 140, 160)}):Play()
+        showTooltip(scrollDownBtn, MouseButtons.MouseWheelDown)
+    end)
+    scrollDownBtn.MouseLeave:Connect(function()
+        TweenService:Create(scrollDownBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(0, 95, 115)}):Play()
         hideTooltip()
     end)
 
@@ -10234,7 +10294,28 @@ end))
 
 TrackConnection(Services.UserInputService.InputChanged:Connect(function(input, gameProcessed)
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseWheel then
-        ZoomState.UserScrolled = true
+        local ctrlHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+            or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+        local shiftHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+            or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+
+        if ctrlHeld and shiftHeld and Br3ak3rState.CLICKBREAK_ENABLED then
+            if input.Position.Z > 0 then
+                -- Ctrl + Shift + Scroll Up  →  break part under cursor (same as Ctrl+Click)
+                local origin, direction = GetMouseRay()
+                if origin and direction then
+                    local hit = WorldRaycastBr3ak3r(origin, direction, true)
+                    if hit and hit.Instance and hit.Instance:IsA("BasePart") and not hit.Instance:IsA("Terrain") then
+                        markBroken(hit.Instance)
+                    end
+                end
+            elseif input.Position.Z < 0 then
+                -- Ctrl + Shift + Scroll Down  →  undo last break (same as Ctrl+Z)
+                unbreakLast()
+            end
+        else
+            ZoomState.UserScrolled = true
+        end
     end
 end))
 
