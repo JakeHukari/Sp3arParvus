@@ -147,7 +147,8 @@ local Flags = {
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
-    ["Misc/PositionForceValue"] = 3.4,
+    ["Misc/HorizontalPositionForceValue"] = 1.5,
+    ["Misc/VerticalPositionForceValue"] = 3.5,
     ["ESP/NametagOpacity"] = 90,
     ["LocalUI/ScreenUIOpacity"] = 90
 }
@@ -9992,7 +9993,8 @@ UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/S
         ZoomState.UserScrolled = false
     end
 end)
-UI.CreateNumericInput(MiscTab, "Position Force Distance", "Misc/PositionForceValue", Flags["Misc/PositionForceValue"], 0.1, 100, 0.05, "studs")
+UI.CreateNumericInput(MiscTab, "Horizontal Position Force Distance", "Misc/HorizontalPositionForceValue", Flags["Misc/HorizontalPositionForceValue"], 0.1, 100, 0.05, "studs")
+UI.CreateNumericInput(MiscTab, "Vertical Position Force Distance", "Misc/VerticalPositionForceValue", Flags["Misc/VerticalPositionForceValue"], 0.1, 100, 0.05, "studs")
 
 UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
     local url = "https://www.pingbird.xyz/~/sp3arparvus"
@@ -10364,28 +10366,30 @@ local function startMovementLoop(keyCode)
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
         if not rootPart then break end
 
-        local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+        local hForceVal = Flags["Misc/HorizontalPositionForceValue"] or 3.0
+        local vForceVal = Flags["Misc/VerticalPositionForceValue"] or 3.4
         local shiftHeld = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 
         local dt = RunService.Heartbeat:Wait()
-        local speed = forceVal * 4
+        local hSpeed = hForceVal * 4
+        local vSpeed = vForceVal * 4
 
         if keyCode == Enum.KeyCode.Up then
             if shiftHeld then
-                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -speed * dt)
+                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -hSpeed * dt)
             else
-                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, speed * dt, 0)
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, vSpeed * dt, 0)
             end
         elseif keyCode == Enum.KeyCode.Down then
             if shiftHeld then
-                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, speed * dt)
+                rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, hSpeed * dt)
             else
-                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -speed * dt, 0)
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -vSpeed * dt, 0)
             end
         elseif keyCode == Enum.KeyCode.Left then
-            rootPart.CFrame = rootPart.CFrame * CFrame.new(-speed * dt, 0, 0)
+            rootPart.CFrame = rootPart.CFrame * CFrame.new(-hSpeed * dt, 0, 0)
         elseif keyCode == Enum.KeyCode.Right then
-            rootPart.CFrame = rootPart.CFrame * CFrame.new(speed * dt, 0, 0)
+            rootPart.CFrame = rootPart.CFrame * CFrame.new(hSpeed * dt, 0, 0)
         end
     end
 
@@ -10645,11 +10649,12 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then
-                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    local hForceVal = Flags["Misc/HorizontalPositionForceValue"] or 3.0
+                    local vForceVal = Flags["Misc/VerticalPositionForceValue"] or 3.4
                     if shiftHeld then
-                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -forceVal)
+                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, -hForceVal)
                     else
-                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, forceVal, 0)
+                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, vForceVal, 0)
                     end
                     task.spawn(startMovementLoop, Enum.KeyCode.Up)
                 end
@@ -10662,11 +10667,12 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then
-                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
+                    local hForceVal = Flags["Misc/HorizontalPositionForceValue"] or 3.0
+                    local vForceVal = Flags["Misc/VerticalPositionForceValue"] or 3.4
                     if shiftHeld then
-                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, forceVal)
+                        rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 0, hForceVal)
                     else
-                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -forceVal, 0)
+                        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -vForceVal, 0)
                     end
                     task.spawn(startMovementLoop, Enum.KeyCode.Down)
                 end
@@ -10679,8 +10685,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then
-                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
-                    rootPart.CFrame = rootPart.CFrame * CFrame.new(-forceVal, 0, 0)
+                    local hForceVal = Flags["Misc/HorizontalPositionForceValue"] or 3.0
+                    rootPart.CFrame = rootPart.CFrame * CFrame.new(-hForceVal, 0, 0)
                     task.spawn(startMovementLoop, Enum.KeyCode.Left)
                 end
             end
@@ -10692,8 +10698,8 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 local character = LocalPlayer and LocalPlayer.Character
                 local rootPart = character and character:FindFirstChild("HumanoidRootPart")
                 if rootPart then
-                    local forceVal = Flags["Misc/PositionForceValue"] or 3.75
-                    rootPart.CFrame = rootPart.CFrame * CFrame.new(forceVal, 0, 0)
+                    local hForceVal = Flags["Misc/HorizontalPositionForceValue"] or 3.0
+                    rootPart.CFrame = rootPart.CFrame * CFrame.new(hForceVal, 0, 0)
                     task.spawn(startMovementLoop, Enum.KeyCode.Right)
                 end
             end
