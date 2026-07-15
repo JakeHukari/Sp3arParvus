@@ -147,7 +147,7 @@ local Flags = {
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
-    ["Misc/PositionForceValue"] = 3.0,
+    ["Misc/PositionForceValue"] = 3.4,
     ["ESP/NametagOpacity"] = 90,
     ["LocalUI/ScreenUIOpacity"] = 90
 }
