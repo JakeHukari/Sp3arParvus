@@ -8667,15 +8667,15 @@ local MouseButtons = {
     },
     MouseWheelUp = {
         Key = "MouseWheelUp",
-        Name = "Scroll Break (Clickbreak)",
+        Name = "Scroll Undo (Unbreak Last)",
         Action = "Ctrl + Shift + Scroll Up",
-        Desc = "While Ctrl+Shift is held, scroll the wheel UP to break the part collision under your cursor (same as Ctrl+Click Br3ak3r). Works even when left-click is unavailable."
+        Desc = "While Ctrl+Shift is held, scroll the wheel UP to undo the most recent Br3ak3r break (same as Ctrl+Z). Works even when left-click is unavailable."
     },
     MouseWheelDown = {
         Key = "MouseWheelDown",
-        Name = "Scroll Undo (Unbreak Last)",
+        Name = "Scroll Break (Clickbreak)",
         Action = "Ctrl + Shift + Scroll Down",
-        Desc = "While Ctrl+Shift is held, scroll the wheel DOWN to undo the most recent Br3ak3r break (same as Ctrl+Z). Works even when left-click is unavailable."
+        Desc = "While Ctrl+Shift is held, scroll the wheel DOWN to break the part collision under your cursor (same as Ctrl+Click Br3ak3r). Works even when left-click is unavailable."
     }
 }
 
@@ -10300,8 +10300,8 @@ TrackConnection(Services.UserInputService.InputChanged:Connect(function(input, g
             or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 
         if ctrlHeld and shiftHeld and Br3ak3rState.CLICKBREAK_ENABLED then
-            if input.Position.Z > 0 then
-                -- Ctrl + Shift + Scroll Up  →  break part under cursor (same as Ctrl+Click)
+            if input.Position.Z < 0 then
+                -- Ctrl + Shift + Scroll Down  →  break part under cursor (same as Ctrl+Click)
                 local origin, direction = GetMouseRay()
                 if origin and direction then
                     local hit = WorldRaycastBr3ak3r(origin, direction, true)
@@ -10309,11 +10309,12 @@ TrackConnection(Services.UserInputService.InputChanged:Connect(function(input, g
                         markBroken(hit.Instance)
                     end
                 end
-            elseif input.Position.Z < 0 then
-                -- Ctrl + Shift + Scroll Down  →  undo last break (same as Ctrl+Z)
+            elseif input.Position.Z > 0 then
+                -- Ctrl + Shift + Scroll Up  →  undo last break (same as Ctrl+Z)
                 unbreakLast()
             end
         else
+            -- Ctrl+Shift scroll falls through as normal scroll (no zoom unlock expansion)
             ZoomState.UserScrolled = true
         end
     end
@@ -10943,7 +10944,8 @@ function UnifiedHeartbeat(dt)
         end
 
         if Flags["Misc/ScrollUnlocker"] then
-            if Br3ak3rState.CTRL_HELD then
+            if Br3ak3rState.CTRL_HELD and not H1ghl1ght3rState.SHIFT_HELD then
+                -- Ctrl only (no Shift): expand zoom limits for scroll unlocker
                 ZoomState.WasCtrlHeld = true
 
                 if LocalPlayer.CameraMaxZoomDistance ~= 10000 then
