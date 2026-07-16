@@ -9957,6 +9957,356 @@ UI.CreateNumericInput(VisualsTab, "FD: Sky Haze", "Visuals/FullDark/SkyHaze",
 UI.CreateNumericInput(VisualsTab, "FD: Sky Glare", "Visuals/FullDark/SkyGlare",
     Flags["Visuals/FullDark/SkyGlare"], 0, 10, 0.1, "", nil)
 
+-- ── Current World Lighting Live Editor ──────────────────────────────────────
+do
+    -- Local table to hold updater functions so the Refresh button can repopulate all fields
+    local LiveLightingUpdaters = {}
+
+    -- Helper: create a numeric input that reads/writes directly to Services.Lighting
+    -- getter()  -> current numeric value
+    -- setter(v) -> applies v to the world immediately
+    local function MakeLiveLightingNumeric(labelText, key, getter, setter, minV, maxV, stepV, unit)
+        local currentVal = math.clamp(tonumber(getter()) or 0, minV, maxV)
+        UI.CreateNumericInput(VisualsTab, labelText, "LiveLight/" .. key, currentVal, minV, maxV, stepV, unit,
+            function(val)
+                pcall(setter, val)
+            end
+        )
+        LiveLightingUpdaters[key] = function()
+            local v = math.clamp(tonumber(getter()) or 0, minV, maxV)
+            local upd = UIState.Updaters["LiveLight/" .. key]
+            if upd then upd(v) end
+        end
+    end
+
+    -- Helper: create a toggle that reads/writes a boolean property on Services.Lighting
+    local function MakeLiveLightingToggle(labelText, key, getter, setter)
+        local currentVal = getter()
+        UI.CreateToggle(VisualsTab, labelText, "LiveLight/" .. key, currentVal,
+            function(val)
+                pcall(setter, val)
+            end
+        )
+        LiveLightingUpdaters[key] = function()
+            local v = getter()
+            local upd = UIState.Updaters["LiveLight/" .. key]
+            if upd then upd(v) end
+        end
+    end
+
+    UI.CreateSection(VisualsTab, "Current World Lighting")
+
+    -- Refresh button — re-reads all live lighting values from the world and updates every input
+    UI.CreateButton(VisualsTab, "⟳  Refresh Values from World", function()
+        for _, fn in pairs(LiveLightingUpdaters) do
+            pcall(fn)
+        end
+    end)
+
+    -- ── Time & Exposure ────────────────────────────────────────────────────
+    MakeLiveLightingNumeric("Clock Time (0–24 h)", "ClockTime",
+        function() return Services.Lighting.ClockTime end,
+        function(v) Services.Lighting.ClockTime = v end,
+        0, 23.99, 0.25, "h")
+
+    MakeLiveLightingNumeric("Brightness", "Brightness",
+        function() return Services.Lighting.Brightness end,
+        function(v) Services.Lighting.Brightness = v end,
+        0, 10, 0.1, "")
+
+    MakeLiveLightingNumeric("Exposure Compensation", "ExposureCompensation",
+        function() return Services.Lighting.ExposureCompensation end,
+        function(v) Services.Lighting.ExposureCompensation = v end,
+        -5, 5, 0.1, "")
+
+    -- ── Ambient ────────────────────────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Ambient (RGB 0–255)")
+    MakeLiveLightingNumeric("Ambient  R", "Ambient_R",
+        function() return math.floor(Services.Lighting.Ambient.R * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.Ambient
+            Services.Lighting.Ambient = Color3.fromRGB(v, math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Ambient  G", "Ambient_G",
+        function() return math.floor(Services.Lighting.Ambient.G * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.Ambient
+            Services.Lighting.Ambient = Color3.fromRGB(math.floor(c.R*255+0.5), v, math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Ambient  B", "Ambient_B",
+        function() return math.floor(Services.Lighting.Ambient.B * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.Ambient
+            Services.Lighting.Ambient = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
+        end, 0, 255, 1, "")
+
+    UI.CreateSection(VisualsTab, "World Outdoor Ambient (RGB 0–255)")
+    MakeLiveLightingNumeric("Outdoor Ambient  R", "OutdoorAmbient_R",
+        function() return math.floor(Services.Lighting.OutdoorAmbient.R * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.OutdoorAmbient
+            Services.Lighting.OutdoorAmbient = Color3.fromRGB(v, math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Outdoor Ambient  G", "OutdoorAmbient_G",
+        function() return math.floor(Services.Lighting.OutdoorAmbient.G * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.OutdoorAmbient
+            Services.Lighting.OutdoorAmbient = Color3.fromRGB(math.floor(c.R*255+0.5), v, math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Outdoor Ambient  B", "OutdoorAmbient_B",
+        function() return math.floor(Services.Lighting.OutdoorAmbient.B * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.OutdoorAmbient
+            Services.Lighting.OutdoorAmbient = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
+        end, 0, 255, 1, "")
+
+    -- ── Shadows ────────────────────────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Shadows & Fog")
+    MakeLiveLightingToggle("Global Shadows", "GlobalShadows",
+        function() return Services.Lighting.GlobalShadows end,
+        function(v) Services.Lighting.GlobalShadows = v end)
+
+    -- ── Fog ───────────────────────────────────────────────────────────────
+    MakeLiveLightingNumeric("Fog Near (FogStart)", "FogStart",
+        function() return Services.Lighting.FogStart end,
+        function(v) Services.Lighting.FogStart = v end,
+        0, 100000, 10, "m")
+
+    MakeLiveLightingNumeric("Fog Far (FogEnd)", "FogEnd",
+        function() return Services.Lighting.FogEnd end,
+        function(v) Services.Lighting.FogEnd = v end,
+        0, 1000000, 1000, "m")
+
+    UI.CreateSection(VisualsTab, "World Fog Color (RGB 0–255)")
+    MakeLiveLightingNumeric("Fog Color  R", "FogColor_R",
+        function() return math.floor(Services.Lighting.FogColor.R * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.FogColor
+            Services.Lighting.FogColor = Color3.fromRGB(v, math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Fog Color  G", "FogColor_G",
+        function() return math.floor(Services.Lighting.FogColor.G * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.FogColor
+            Services.Lighting.FogColor = Color3.fromRGB(math.floor(c.R*255+0.5), v, math.floor(c.B*255+0.5))
+        end, 0, 255, 1, "")
+    MakeLiveLightingNumeric("Fog Color  B", "FogColor_B",
+        function() return math.floor(Services.Lighting.FogColor.B * 255 + 0.5) end,
+        function(v)
+            local c = Services.Lighting.FogColor
+            Services.Lighting.FogColor = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
+        end, 0, 255, 1, "")
+
+    -- ── Atmosphere (if present) ────────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Atmosphere")
+    MakeLiveLightingNumeric("Atmo Density", "Atmo_Density",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and a.Density or 0
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then a.Density = v end
+        end, 0, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("Atmo Offset", "Atmo_Offset",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and a.Offset or 0
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then a.Offset = v end
+        end, 0, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("Atmo Haze", "Atmo_Haze",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and a.Haze or 0
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then a.Haze = v end
+        end, 0, 10, 0.1, "")
+
+    MakeLiveLightingNumeric("Atmo Glare", "Atmo_Glare",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and a.Glare or 0
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then a.Glare = v end
+        end, 0, 10, 0.1, "")
+
+    MakeLiveLightingNumeric("Atmo Decay R", "Atmo_Decay_R",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and math.floor(a.Color.R * 255 + 0.5) or 128
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then
+                local c = a.Color
+                a.Color = Color3.fromRGB(v, math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+            end
+        end, 0, 255, 1, "")
+
+    MakeLiveLightingNumeric("Atmo Decay G", "Atmo_Decay_G",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and math.floor(a.Color.G * 255 + 0.5) or 128
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then
+                local c = a.Color
+                a.Color = Color3.fromRGB(math.floor(c.R*255+0.5), v, math.floor(c.B*255+0.5))
+            end
+        end, 0, 255, 1, "")
+
+    MakeLiveLightingNumeric("Atmo Decay B", "Atmo_Decay_B",
+        function()
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            return a and math.floor(a.Color.B * 255 + 0.5) or 128
+        end,
+        function(v)
+            local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if a then
+                local c = a.Color
+                a.Color = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
+            end
+        end, 0, 255, 1, "")
+
+    -- ── Bloom (if present) ─────────────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Bloom Effect")
+    MakeLiveLightingNumeric("Bloom Intensity", "Bloom_Intensity",
+        function()
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            return b and b.Intensity or 0
+        end,
+        function(v)
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            if b then b.Intensity = v end
+        end, 0, 10, 0.1, "")
+
+    MakeLiveLightingNumeric("Bloom Size", "Bloom_Size",
+        function()
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            return b and b.Size or 0
+        end,
+        function(v)
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            if b then b.Size = v end
+        end, 0, 56, 0.5, "")
+
+    MakeLiveLightingNumeric("Bloom Threshold", "Bloom_Threshold",
+        function()
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            return b and b.Threshold or 0
+        end,
+        function(v)
+            local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+            if b then b.Threshold = v end
+        end, 0, 1, 0.01, "")
+
+    -- ── ColorCorrection (if present) ───────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Color Correction")
+    MakeLiveLightingNumeric("CC Brightness", "CC_Brightness",
+        function()
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            return cc and cc.Brightness or 0
+        end,
+        function(v)
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            if cc then cc.Brightness = v end
+        end, -1, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("CC Contrast", "CC_Contrast",
+        function()
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            return cc and cc.Contrast or 0
+        end,
+        function(v)
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            if cc then cc.Contrast = v end
+        end, -1, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("CC Saturation", "CC_Saturation",
+        function()
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            return cc and cc.Saturation or 0
+        end,
+        function(v)
+            local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+            if cc then cc.Saturation = v end
+        end, -1, 1, 0.01, "")
+
+    -- ── SunRays (if present) ───────────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Sun Rays")
+    MakeLiveLightingNumeric("SunRays Intensity", "SunRays_Intensity",
+        function()
+            local sr = Services.Lighting:FindFirstChildOfClass("SunRaysEffect")
+            return sr and sr.Intensity or 0
+        end,
+        function(v)
+            local sr = Services.Lighting:FindFirstChildOfClass("SunRaysEffect")
+            if sr then sr.Intensity = v end
+        end, 0, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("SunRays Spread", "SunRays_Spread",
+        function()
+            local sr = Services.Lighting:FindFirstChildOfClass("SunRaysEffect")
+            return sr and sr.Spread or 0
+        end,
+        function(v)
+            local sr = Services.Lighting:FindFirstChildOfClass("SunRaysEffect")
+            if sr then sr.Spread = v end
+        end, 0, 1, 0.01, "")
+
+    -- ── DepthOfField (if present) ──────────────────────────────────────────
+    UI.CreateSection(VisualsTab, "World Depth of Field")
+    MakeLiveLightingNumeric("DOF Far Intensity", "DOF_FarIntensity",
+        function()
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            return d and d.FarIntensity or 0
+        end,
+        function(v)
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            if d then d.FarIntensity = v end
+        end, 0, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("DOF Near Intensity", "DOF_NearIntensity",
+        function()
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            return d and d.NearIntensity or 0
+        end,
+        function(v)
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            if d then d.NearIntensity = v end
+        end, 0, 1, 0.01, "")
+
+    MakeLiveLightingNumeric("DOF Focus Distance", "DOF_FocusDistance",
+        function()
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            return d and d.FocusDistance or 0
+        end,
+        function(v)
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            if d then d.FocusDistance = v end
+        end, 0, 1000, 1, "m")
+
+    MakeLiveLightingNumeric("DOF In Focus Radius", "DOF_InFocusRadius",
+        function()
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            return d and d.InFocusRadius or 0
+        end,
+        function(v)
+            local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+            if d then d.InFocusRadius = v end
+        end, 0, 1000, 1, "m")
+end
+
 UI.CreateSection(VisualsTab, "Closest Player Panel Settings")
 UI.CreateToggle(VisualsTab, "Show Display Name", "LocalUI/ClosestPlayer/ShowDisplayName", Flags["LocalUI/ClosestPlayer/ShowDisplayName"], function(state)
     UpdateClosestPlayerTracker()
