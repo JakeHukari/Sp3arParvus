@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.5                                                  ║
+-- ║  Version: 4.3.0                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.5" -- Shortcuts Page Update, Performance Update, and Closest-Player-Panel Settings Update
+local VERSION = "4.3.0" -- Config System: local profile save/load, per-game presets, startup auto-load priority
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -184,6 +184,405 @@ if SAFE_MODE then
     Flags["ShootBot/Enabled"]   = false
     Flags["Misc/QTeleport"]     = false
 end
+
+-- ╔══════════════════════════════════════════════════════════════════╗
+-- ║  Default Flags Snapshot (captured after SAFE_MODE overrides)     ║
+-- ╚══════════════════════════════════════════════════════════════════╝
+local DEFAULT_FLAGS = {}
+do
+    for k, v in pairs(Flags) do
+        if type(v) == "table" then
+            local copy = {}
+            for k2, v2 in pairs(v) do copy[k2] = v2 end
+            DEFAULT_FLAGS[k] = copy
+        else
+            DEFAULT_FLAGS[k] = v
+        end
+    end
+end
+
+-- ╔══════════════════════════════════════════════════════════════════╗
+-- ║  ConfigManager — Local Profile Save/Load System                  ║
+-- ╚══════════════════════════════════════════════════════════════════╝
+local ConfigManager = {}
+do
+    -- ── Path Constants ────────────────────────────────────────────────
+    local ROOT_DIR        = "Sp3arParvus"
+    local CONFIGS_DIR     = ROOT_DIR .. "/Configs"
+    local UNIVERSAL_DIR   = CONFIGS_DIR .. "/Universal"
+    local PERGAME_DIR     = CONFIGS_DIR .. "/PerGame"
+
+    -- ── File API availability check ───────────────────────────────────
+    local function hasFileAPIs()
+        return type(writefile) == "function"
+           and type(readfile)  == "function"
+           and type(isfile)    == "function"
+           and type(isfolder)  == "function"
+           and type(makefolder) == "function"
+    end
+
+    -- ── Ensure directory structure exists ────────────────────────────
+    local function ensureDirs()
+        if not isfolder(ROOT_DIR)    then makefolder(ROOT_DIR)    end
+        if not isfolder(CONFIGS_DIR) then makefolder(CONFIGS_DIR) end
+        if not isfolder(UNIVERSAL_DIR) then makefolder(UNIVERSAL_DIR) end
+        if not isfolder(PERGAME_DIR)   then makefolder(PERGAME_DIR)   end
+    end
+
+    -- ── JSON helpers (thin wrappers) ──────────────────────────────────
+    local HttpService = game:GetService("HttpService")
+    local function encode(t) return HttpService:JSONEncode(t) end
+    local function decode(s) return HttpService:JSONDecode(s) end
+
+    -- ── Serialize current Flags to a plain table safe for JSON ────────
+    local function serializeFlags()
+        local out = {}
+        for k, v in pairs(Flags) do
+            if type(v) == "table" then
+                local copy = {}
+                for k2, v2 in pairs(v) do copy[k2] = v2 end
+                out[k] = copy
+            elseif type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
+                out[k] = v
+            end
+        end
+        return out
+    end
+
+    -- ── Apply a flags table onto live Flags + update UI updaters ──────
+    local function applyFlags(data)
+        for k, v in pairs(data) do
+            if Flags[k] ~= nil then
+                if type(Flags[k]) == "table" and type(v) == "table" then
+                    for k2, v2 in pairs(v) do
+                        Flags[k][k2] = v2
+                    end
+                else
+                    Flags[k] = v
+                end
+                -- Push change through UI updater if available
+                if UIState and UIState.Updaters and UIState.Updaters[k] then
+                    pcall(UIState.Updaters[k], v)
+                end
+            end
+        end
+    end
+
+    -- ── List helpers ──────────────────────────────────────────────────
+    local function listdir(dir)
+        -- listfiles is the standard exploit API
+        if type(listfiles) == "function" then
+            local ok, result = pcall(listfiles, dir)
+            if ok and result then return result end
+        end
+        return {}
+    end
+
+    local function fileBasename(path)
+        return path:match("([^/\\]+)$") or path
+    end
+
+    local function stripExtension(name)
+        return name:match("(.+)%.[^%.]+$") or name
+    end
+
+    -- ── Public API ────────────────────────────────────────────────────
+
+    function ConfigManager.HasFileAPIs()
+        return hasFileAPIs()
+    end
+
+    -- Save current settings as a Universal profile
+    function ConfigManager.SaveUniversal(profileName)
+        if not hasFileAPIs() then
+            return false, "writefile API unavailable"
+        end
+        if not profileName or profileName:match("^%s*$") then
+            return false, "empty name"
+        end
+        pcall(ensureDirs)
+        local fileName = UNIVERSAL_DIR .. "/" .. profileName .. ".json"
+        local payload = {
+            name      = profileName,
+            autoLoad  = false,
+            isPerGame = false,
+            placeId   = nil,
+            savedAt   = os.time(),
+            version   = VERSION,
+            flags     = serializeFlags()
+        }
+        local ok, err = pcall(writefile, fileName, encode(payload))
+        if ok then
+            return true, nil
+        else
+            return false, tostring(err)
+        end
+    end
+
+    -- Save current settings as a Per-Game profile (tied to current PlaceId)
+    function ConfigManager.SavePerGame(profileName)
+        if not hasFileAPIs() then
+            return false, "writefile API unavailable"
+        end
+        if not profileName or profileName:match("^%s*$") then
+            return false, "empty name"
+        end
+        pcall(ensureDirs)
+        local placeId  = tostring(game.PlaceId)
+        local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
+        local fileName = PERGAME_DIR .. "/" .. placeId .. "_" .. safeProfileName .. ".json"
+        local payload = {
+            name      = profileName,
+            autoLoad  = false,
+            isPerGame = true,
+            placeId   = placeId,
+            savedAt   = os.time(),
+            version   = VERSION,
+            flags     = serializeFlags()
+        }
+        local ok, err = pcall(writefile, fileName, encode(payload))
+        if ok then
+            return true, nil
+        else
+            return false, tostring(err)
+        end
+    end
+
+    -- Load and return a list of profile entries for the given type ("Universal" or "PerGame")
+    function ConfigManager.ListProfiles(profileType)
+        local profiles = {}
+        if not hasFileAPIs() then return profiles end
+        pcall(ensureDirs)
+        local dir = profileType == "PerGame" and PERGAME_DIR or UNIVERSAL_DIR
+        local files = listdir(dir)
+        for _, filePath in ipairs(files) do
+            local baseName = fileBasename(filePath)
+            if baseName:match("%.json$") then
+                local ok, raw = pcall(readfile, filePath)
+                if ok and raw then
+                    local parsed = nil
+                    pcall(function() parsed = decode(raw) end)
+                    if parsed then
+                        table.insert(profiles, {
+                            name      = parsed.name or stripExtension(baseName),
+                            fileName  = filePath,
+                            autoLoad  = parsed.autoLoad == true,
+                            isPerGame = parsed.isPerGame == true,
+                            placeId   = parsed.placeId,
+                        })
+                    end
+                end
+            end
+        end
+        return profiles
+    end
+
+    -- Load (apply) a specific profile by file path
+    function ConfigManager.LoadProfile(filePath)
+        if not hasFileAPIs() then
+            return false, "readfile API unavailable"
+        end
+        local ok, raw = pcall(readfile, filePath)
+        if not ok or not raw then
+            return false, "read error"
+        end
+        local parsed = nil
+        local parseOk = pcall(function() parsed = decode(raw) end)
+        if not parseOk or not parsed or type(parsed.flags) ~= "table" then
+            return false, "parse error"
+        end
+        applyFlags(parsed.flags)
+        return true, parsed.name or "Unknown"
+    end
+
+    -- Delete a profile file
+    function ConfigManager.DeleteProfile(filePath)
+        if not hasFileAPIs() then
+            return false, "file API unavailable"
+        end
+        if type(delfile) ~= "function" then
+            -- Fallback: overwrite with empty string to clear (some executors lack delfile)
+            local ok = pcall(writefile, filePath, "")
+            return ok, ok and nil or "delfile unavailable and writefile fallback failed"
+        end
+        local ok, err = pcall(delfile, filePath)
+        return ok, ok and nil or tostring(err)
+    end
+
+    -- Toggle the autoLoad state of a profile and re-save it
+    function ConfigManager.SetAutoLoad(filePath, state)
+        if not hasFileAPIs() then
+            return false, "file API unavailable"
+        end
+        local ok, raw = pcall(readfile, filePath)
+        if not ok or not raw then return false, "read error" end
+        local parsed = nil
+        pcall(function() parsed = decode(raw) end)
+        if not parsed then return false, "parse error" end
+        parsed.autoLoad = state == true
+        local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
+        return writeOk, writeOk and nil or tostring(writeErr)
+    end
+
+    -- Rename a profile (write new file, delete old)
+    function ConfigManager.RenameProfile(filePath, newName, profileType)
+        if not hasFileAPIs() then
+            return false, "file API unavailable"
+        end
+        if not newName or newName:match("^%s*$") then
+            return false, "empty name"
+        end
+        local ok, raw = pcall(readfile, filePath)
+        if not ok or not raw then return false, "read error" end
+        local parsed = nil
+        pcall(function() parsed = decode(raw) end)
+        if not parsed then return false, "parse error" end
+
+        local oldName = parsed.name or "profile"
+        parsed.name = newName
+
+        local dir = profileType == "PerGame" and PERGAME_DIR or UNIVERSAL_DIR
+        local newFileName
+        if profileType == "PerGame" and parsed.placeId then
+            local safeNewName = newName:gsub("[^%w%-%_%. ]", "")
+            newFileName = dir .. "/" .. parsed.placeId .. "_" .. safeNewName .. ".json"
+        else
+            newFileName = dir .. "/" .. newName .. ".json"
+        end
+
+        local writeOk, writeErr = pcall(writefile, newFileName, encode(parsed))
+        if not writeOk then return false, tostring(writeErr) end
+
+        -- Delete old file
+        pcall(function()
+            if type(delfile) == "function" then
+                delfile(filePath)
+            else
+                writefile(filePath, "")
+            end
+        end)
+
+        return true, oldName
+    end
+
+    -- Reset all Flags to their hardcoded defaults and push UI updates
+    function ConfigManager.ResetToDefaults()
+        for k, v in pairs(DEFAULT_FLAGS) do
+            if type(v) == "table" then
+                if type(Flags[k]) == "table" then
+                    for k2, v2 in pairs(v) do
+                        Flags[k][k2] = v2
+                    end
+                else
+                    local copy = {}
+                    for k2, v2 in pairs(v) do copy[k2] = v2 end
+                    Flags[k] = copy
+                end
+            else
+                Flags[k] = v
+            end
+            if UIState and UIState.Updaters and UIState.Updaters[k] then
+                pcall(UIState.Updaters[k], Flags[k])
+            end
+        end
+    end
+
+    -- ── Startup Auto-Load Logic ───────────────────────────────────────
+    -- Runs synchronously before UI is built. Priority:
+    --   1. Per-Game profile matching current PlaceId with autoLoad=true
+    --   2. Universal profile with autoLoad=true
+    --   3. Fallback to defaults (no-op — already loaded)
+    local function RunStartupAutoLoad()
+        if not hasFileAPIs() then
+            -- Notify is not yet available at this point; defer to a post-UI notification
+            ConfigManager._startupNotify = {
+                kind = "no_api"
+            }
+            return
+        end
+
+        pcall(ensureDirs)
+
+        local currentPlaceId = tostring(game.PlaceId)
+
+        -- 1. Scan Per-Game profiles
+        local perGameProfiles = {}
+        local pgFiles = listdir(PERGAME_DIR)
+        for _, filePath in ipairs(pgFiles) do
+            local baseName = fileBasename(filePath)
+            if baseName:match("%.json$") then
+                local ok, raw = pcall(readfile, filePath)
+                if ok and raw then
+                    local parsed = nil
+                    pcall(function() parsed = decode(raw) end)
+                    if parsed then
+                        table.insert(perGameProfiles, {parsed = parsed, filePath = filePath})
+                    end
+                end
+            end
+        end
+
+        for _, entry in ipairs(perGameProfiles) do
+            local p = entry.parsed
+            if p.autoLoad == true and tostring(p.placeId) == currentPlaceId and type(p.flags) == "table" then
+                applyFlags(p.flags)
+                ConfigManager._startupNotify = {
+                    kind        = "pergame",
+                    profileName = p.name or "Unknown",
+                    placeId     = currentPlaceId
+                }
+                print(string.format("[Sp3arParvus] Config: Per-game profile \"%s\" auto-loaded for PlaceId %s.", p.name or "?", currentPlaceId))
+                return
+            end
+        end
+
+        -- 2. Scan Universal profiles
+        local universalProfiles = {}
+        local uFiles = listdir(UNIVERSAL_DIR)
+        for _, filePath in ipairs(uFiles) do
+            local baseName = fileBasename(filePath)
+            if baseName:match("%.json$") then
+                local ok, raw = pcall(readfile, filePath)
+                if ok and raw then
+                    local parsed = nil
+                    pcall(function() parsed = decode(raw) end)
+                    if parsed then
+                        table.insert(universalProfiles, {parsed = parsed, filePath = filePath})
+                    end
+                end
+            end
+        end
+
+        for _, entry in ipairs(universalProfiles) do
+            local p = entry.parsed
+            if p.autoLoad == true and type(p.flags) == "table" then
+                applyFlags(p.flags)
+                ConfigManager._startupNotify = {
+                    kind        = "universal",
+                    profileName = p.name or "Unknown"
+                }
+                print(string.format("[Sp3arParvus] Config: Universal profile \"%s\" auto-loaded.", p.name or "?"))
+                return
+            end
+        end
+
+        -- 3. Fallback — notify only if profiles exist but none auto-load
+        local totalProfiles = #perGameProfiles + #universalProfiles
+        if totalProfiles > 0 then
+            ConfigManager._startupNotify = {
+                kind  = "defaults_with_profiles",
+                count = totalProfiles
+            }
+            print(string.format("[Sp3arParvus] Config: %d profile(s) found, none with auto-load enabled. Loading defaults.", totalProfiles))
+        else
+            -- Silent — first run
+            print("[Sp3arParvus] Config: No saved profiles found. Using defaults.")
+        end
+    end
+
+    RunStartupAutoLoad()
+end
+
 local ScreenGui = nil
 local FovCircleFrame = nil
 local UI = {}
@@ -9161,8 +9560,687 @@ local MiscTab = UI.CreateTab("Dev Tools")
 local ShortcutsTab = UI.CreateTab("Shortcuts")
 InitializeShortcutsPage(ShortcutsTab)
 
+-- ╔══════════════════════════════════════════════════════════════════╗
+-- ║  Config Tab — Profile Save/Load System UI                        ║
+-- ╚══════════════════════════════════════════════════════════════════╝
+local function BuildConfigTab(page)
+    local THEME = UI_THEME
+
+    -- ── Helper: thin separator ─────────────────────────────────────────
+    local function makeSeparator(parent)
+        local sep = Instance.new("Frame")
+        sep.Size = UDim2.new(1, 0, 0, 1)
+        sep.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        sep.BorderSizePixel  = 0
+        sep.Parent = parent
+    end
+
+    -- ── Helper: make a styled info label ──────────────────────────────
+    local function makeInfoLabel(parent, text, height)
+        height = height or 36
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, height)
+        lbl.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+        lbl.BorderSizePixel = 0
+        lbl.Text = text
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        lbl.TextSize = 11
+        lbl.TextColor3 = THEME.TextDark
+        lbl.TextWrapped = true
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = lbl
+        local p = Instance.new("UIPadding")
+        p.PaddingLeft = UDim.new(0, 10)
+        p.PaddingRight = UDim.new(0, 10)
+        p.PaddingTop = UDim.new(0, 4)
+        p.PaddingBottom = UDim.new(0, 4)
+        p.Parent = lbl
+        return lbl
+    end
+
+    -- ── Helper: make a small icon+text button ─────────────────────────
+    local function makeSmallBtn(parent, text, bgColor, textColor, width)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, width or 60, 0, 26)
+        btn.BackgroundColor3 = bgColor or THEME.Element
+        btn.BorderSizePixel = 0
+        btn.Text = text
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 11
+        btn.TextColor3 = textColor or THEME.Text
+        btn.AutoButtonColor = false
+        btn.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 5); c.Parent = btn
+        TrackConnection(btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = (bgColor or THEME.Element):Lerp(Color3.fromRGB(255,255,255), 0.08)}):Play()
+        end))
+        TrackConnection(btn.MouseLeave:Connect(function()
+            TweenService:Create(btn, TWEENS.FAST, {BackgroundColor3 = bgColor or THEME.Element}):Play()
+        end))
+        return btn
+    end
+
+    -- ── Helper: TextBox row (for inline naming) ────────────────────────
+    local function makeNameInput(parent, placeholderText)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 36)
+        frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        frame.BorderSizePixel = 0
+        frame.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = THEME.Accent
+        stroke.Thickness = 1
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Transparency = 0.7
+        stroke.Parent = frame
+        local tb = Instance.new("TextBox")
+        tb.Size = UDim2.new(1, -20, 1, -4)
+        tb.Position = UDim2.new(0, 10, 0, 2)
+        tb.BackgroundTransparency = 1
+        tb.PlaceholderText = placeholderText or "Profile name..."
+        tb.PlaceholderColor3 = THEME.TextDark
+        tb.Text = ""
+        tb.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        tb.TextSize = 13
+        tb.TextColor3 = THEME.Text
+        tb.TextXAlignment = Enum.TextXAlignment.Left
+        tb.ClearTextOnFocus = false
+        tb.Parent = frame
+        -- Glow on focus
+        TrackConnection(tb:GetPropertyChangedSignal("IsFocused") and tb.Focused:Connect(function()
+            TweenService:Create(stroke, TWEENS.MEDIUM, {Transparency = 0}):Play()
+        end))
+        TrackConnection(tb.FocusLost:Connect(function()
+            TweenService:Create(stroke, TWEENS.MEDIUM, {Transparency = 0.7}):Play()
+        end))
+        return frame, tb
+    end
+
+    -- ── State ───────────────────────────────────────────────────────────
+    local configEnabled = false
+    local apiAvailable  = ConfigManager.HasFileAPIs()
+
+    -- ── Gate toggle row ────────────────────────────────────────────────
+    local gateFrame = Instance.new("Frame")
+    gateFrame.Size = UDim2.new(1, 0, 0, 40)
+    gateFrame.BackgroundColor3 = THEME.Element
+    gateFrame.BorderSizePixel = 0
+    gateFrame.Parent = page
+    local gC = Instance.new("UICorner"); gC.CornerRadius = UDim.new(0, 6); gC.Parent = gateFrame
+    local gStroke = Instance.new("UIStroke")
+    gStroke.Color = THEME.Accent
+    gStroke.Thickness = 1
+    gStroke.Transparency = 0.6
+    gStroke.Parent = gateFrame
+
+    local gLabel = Instance.new("TextLabel")
+    gLabel.Size = UDim2.new(0.75, 0, 1, 0)
+    gLabel.Position = UDim2.new(0, 12, 0, 0)
+    gLabel.BackgroundTransparency = 1
+    gLabel.Text = "⚙  Config System"
+    gLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    gLabel.TextSize = 13
+    gLabel.TextColor3 = THEME.Text
+    gLabel.TextXAlignment = Enum.TextXAlignment.Left
+    gLabel.Parent = gateFrame
+
+    local gSwitch = Instance.new("Frame")
+    gSwitch.Size = UDim2.new(0, 44, 0, 22)
+    gSwitch.AnchorPoint = Vector2.new(1, 0.5)
+    gSwitch.Position = UDim2.new(1, -12, 0.5, 0)
+    gSwitch.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    gSwitch.BorderSizePixel = 0
+    gSwitch.Parent = gateFrame
+    local gsC = Instance.new("UICorner"); gsC.CornerRadius = UDim.new(0, 2); gsC.Parent = gSwitch
+    local gKnob = Instance.new("Frame")
+    gKnob.Size = UDim2.new(0, 18, 0, 18)
+    gKnob.AnchorPoint = Vector2.new(0, 0.5)
+    gKnob.Position = UDim2.new(0, 2, 0.5, 0)
+    gKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    gKnob.BorderSizePixel = 0
+    gKnob.Parent = gSwitch
+    local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 2); gkC.Parent = gKnob
+    local gBtn = Instance.new("TextButton")
+    gBtn.Size = UDim2.new(1, 0, 1, 0)
+    gBtn.BackgroundTransparency = 1
+    gBtn.Text = ""
+    gBtn.Parent = gSwitch
+
+    -- Expandable container (hidden when toggled off)
+    local expandable = Instance.new("Frame")
+    expandable.Size = UDim2.new(1, 0, 0, 0)
+    expandable.BackgroundTransparency = 1
+    expandable.ClipsDescendants = true
+    expandable.Visible = false
+    expandable.Parent = page
+    local exLayout = Instance.new("UIListLayout")
+    exLayout.Padding = UDim.new(0, 5)
+    exLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    exLayout.Parent = expandable
+    TrackConnection(exLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if configEnabled then
+            expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
+        end
+    end))
+
+    -- ─────────────────────────────────────────────────────────────────
+    --  Content of the expandable section
+    -- ─────────────────────────────────────────────────────────────────
+
+    -- API unavailable banner (shown only if executor lacks file APIs)
+    local apiBanner
+    if not apiAvailable then
+        apiBanner = Instance.new("Frame")
+        apiBanner.Size = UDim2.new(1, 0, 0, 48)
+        apiBanner.BackgroundColor3 = Color3.fromRGB(60, 20, 20)
+        apiBanner.BorderSizePixel = 0
+        apiBanner.Parent = expandable
+        local abC = Instance.new("UICorner"); abC.CornerRadius = UDim.new(0, 6); abC.Parent = apiBanner
+        local abStroke = Instance.new("UIStroke")
+        abStroke.Color = Color3.fromRGB(200, 60, 60)
+        abStroke.Thickness = 1
+        abStroke.Parent = apiBanner
+        local abLabel = Instance.new("TextLabel")
+        abLabel.Size = UDim2.fromScale(1, 1)
+        abLabel.BackgroundTransparency = 1
+        abLabel.Text = "⚠  File I/O API is unavailable on this executor.\nConfig saving & loading is disabled."
+        abLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        abLabel.TextSize = 11
+        abLabel.TextColor3 = Color3.fromRGB(230, 100, 100)
+        abLabel.TextWrapped = true
+        abLabel.Parent = apiBanner
+    end
+
+    -- ── SECTION: QUICK ACTIONS ────────────────────────────────────────
+    local function makeSection(parent, label)
+        local s = Instance.new("Frame")
+        s.Size = UDim2.new(1, 0, 0, 26)
+        s.BackgroundTransparency = 1
+        s.Parent = parent
+        local sl = Instance.new("TextLabel")
+        sl.Size = UDim2.new(1, 0, 1, 0)
+        sl.Position = UDim2.new(0, 2, 0, 4)
+        sl.BackgroundTransparency = 1
+        sl.Text = string.upper(label)
+        sl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        sl.TextSize = 11
+        sl.TextColor3 = THEME.Accent
+        sl.TextXAlignment = Enum.TextXAlignment.Left
+        sl.Parent = s
+    end
+
+    makeSection(expandable, "Quick Actions")
+
+    makeInfoLabel(expandable,
+        "Save your current settings as a profile, load existing profiles, or reset everything to the built-in defaults.",
+        46)
+
+    -- Name input row for quick save
+    local _, saveNameBox = makeNameInput(expandable, "Enter profile name here...")
+
+    -- Save Universal button
+    local saveUniversalBtn = Instance.new("TextButton")
+    saveUniversalBtn.Size = UDim2.new(1, 0, 0, 36)
+    saveUniversalBtn.BackgroundColor3 = THEME.Accent
+    saveUniversalBtn.BackgroundTransparency = 0.2
+    saveUniversalBtn.BorderSizePixel = 0
+    saveUniversalBtn.Text = "💾  Save as Universal Pre-set Profile"
+    saveUniversalBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    saveUniversalBtn.TextSize = 13
+    saveUniversalBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    saveUniversalBtn.Parent = expandable
+    local sucC = Instance.new("UICorner"); sucC.CornerRadius = UDim.new(0, 6); sucC.Parent = saveUniversalBtn
+    local sucStroke = Instance.new("UIStroke"); sucStroke.Color = THEME.Accent; sucStroke.Thickness = 1; sucStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; sucStroke.Parent = saveUniversalBtn
+
+    TrackConnection(saveUniversalBtn.MouseButton1Click:Connect(function()
+        TweenService:Create(saveUniversalBtn, TWEENS.INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        task.wait(0.05)
+        TweenService:Create(saveUniversalBtn, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
+
+        if not apiAvailable then
+            UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            return
+        end
+        local name = saveNameBox.Text:match("^%s*(.-)%s*$")
+        if name == "" then
+            UI.Notify("⚠ Invalid Name", "Please enter a profile name before saving.", 4)
+            return
+        end
+        local ok, err = ConfigManager.SaveUniversal(name)
+        if ok then
+            UI.Notify("✅ Profile Saved", "Universal profile \"" .. name .. "\" saved successfully.", 5)
+            saveNameBox.Text = ""
+            task.wait(0.1)
+            -- Refresh the profile lists
+            if _G._SP3AR_ConfigRefresh then pcall(_G._SP3AR_ConfigRefresh) end
+        else
+            if err == "writefile API unavailable" then
+                UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            else
+                UI.Notify("❌ Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
+            end
+        end
+    end))
+
+    -- Save Per-Game button
+    local savePerGameBtn = Instance.new("TextButton")
+    savePerGameBtn.Size = UDim2.new(1, 0, 0, 36)
+    savePerGameBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 160)
+    savePerGameBtn.BackgroundTransparency = 0.1
+    savePerGameBtn.BorderSizePixel = 0
+    savePerGameBtn.Text = "🎮  Save as Per-Game Config  (PlaceId: " .. tostring(game.PlaceId) .. ")"
+    savePerGameBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    savePerGameBtn.TextSize = 12
+    savePerGameBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    savePerGameBtn.Parent = expandable
+    local spgC = Instance.new("UICorner"); spgC.CornerRadius = UDim.new(0, 6); spgC.Parent = savePerGameBtn
+    local spgStroke = Instance.new("UIStroke"); spgStroke.Color = Color3.fromRGB(80, 140, 220); spgStroke.Thickness = 1; spgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; spgStroke.Parent = savePerGameBtn
+
+    TrackConnection(savePerGameBtn.MouseButton1Click:Connect(function()
+        TweenService:Create(savePerGameBtn, TWEENS.INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        task.wait(0.05)
+        TweenService:Create(savePerGameBtn, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
+
+        if not apiAvailable then
+            UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            return
+        end
+        local name = saveNameBox.Text:match("^%s*(.-)%s*$")
+        if name == "" then
+            UI.Notify("⚠ Invalid Name", "Please enter a profile name before saving.", 4)
+            return
+        end
+        local ok, err = ConfigManager.SavePerGame(name)
+        if ok then
+            UI.Notify("✅ Profile Saved", "Per-Game profile \"" .. name .. "\" saved for PlaceId " .. tostring(game.PlaceId) .. ".", 5)
+            saveNameBox.Text = ""
+            task.wait(0.1)
+            if _G._SP3AR_ConfigRefresh then pcall(_G._SP3AR_ConfigRefresh) end
+        else
+            if err == "writefile API unavailable" then
+                UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            else
+                UI.Notify("❌ Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
+            end
+        end
+    end))
+
+    -- Reset to Defaults button (with confirmation)
+    local resetConfirming = false
+    local resetTimer = nil
+    local resetBtn = Instance.new("TextButton")
+    resetBtn.Size = UDim2.new(1, 0, 0, 36)
+    resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    resetBtn.BackgroundTransparency = 0
+    resetBtn.BorderSizePixel = 0
+    resetBtn.Text = "🔄  Reset to Default Config"
+    resetBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    resetBtn.TextSize = 13
+    resetBtn.TextColor3 = THEME.TextDark
+    resetBtn.Parent = expandable
+    local rbC = Instance.new("UICorner"); rbC.CornerRadius = UDim.new(0, 6); rbC.Parent = resetBtn
+    local rbStroke = Instance.new("UIStroke"); rbStroke.Color = Color3.fromRGB(80, 80, 80); rbStroke.Thickness = 1; rbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; rbStroke.Parent = resetBtn
+
+    TrackConnection(resetBtn.MouseButton1Click:Connect(function()
+        if not resetConfirming then
+            resetConfirming = true
+            resetBtn.Text = "⚠  Confirm Reset? (click again)"
+            resetBtn.TextColor3 = Color3.fromRGB(240, 100, 80)
+            TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(200, 60, 60)}):Play()
+            TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(65, 25, 25)}):Play()
+            -- Auto-cancel after 4 seconds
+            resetTimer = task.delay(4, function()
+                resetConfirming = false
+                resetBtn.Text = "🔄  Reset to Default Config"
+                resetBtn.TextColor3 = THEME.TextDark
+                TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(80, 80, 80)}):Play()
+                TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+            end)
+        else
+            -- Confirmed
+            if resetTimer then task.cancel(resetTimer) end
+            resetConfirming = false
+            resetBtn.Text = "🔄  Reset to Default Config"
+            resetBtn.TextColor3 = THEME.TextDark
+            TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(80, 80, 80)}):Play()
+            TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+            ConfigManager.ResetToDefaults()
+            UI.Notify("🔄 Defaults Restored", "All settings have been reset to their hardcoded defaults.", 5)
+        end
+    end))
+
+    -- ── SECTION: PROFILE LISTS ────────────────────────────────────────
+    makeSection(expandable, "Universal Profiles")
+    makeInfoLabel(expandable, "Universal profiles load regardless of which game you're in.", 30)
+
+    -- Universal list container
+    local universalListFrame = Instance.new("Frame")
+    universalListFrame.Size = UDim2.new(1, 0, 0, 0)
+    universalListFrame.BackgroundTransparency = 1
+    universalListFrame.Parent = expandable
+    local ulLayout = Instance.new("UIListLayout")
+    ulLayout.Padding = UDim.new(0, 4)
+    ulLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ulLayout.Parent = universalListFrame
+    TrackConnection(ulLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        universalListFrame.Size = UDim2.new(1, 0, 0, ulLayout.AbsoluteContentSize.Y)
+        expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
+    end))
+
+    makeSection(expandable, "Per-Game Profiles")
+    makeInfoLabel(expandable, "Per-Game profiles only auto-load when a matching game (PlaceId) is detected.", 34)
+
+    -- Per-Game list container
+    local pergameListFrame = Instance.new("Frame")
+    pergameListFrame.Size = UDim2.new(1, 0, 0, 0)
+    pergameListFrame.BackgroundTransparency = 1
+    pergameListFrame.Parent = expandable
+    local pgLayout = Instance.new("UIListLayout")
+    pgLayout.Padding = UDim.new(0, 4)
+    pgLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pgLayout.Parent = pergameListFrame
+    TrackConnection(pgLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        pergameListFrame.Size = UDim2.new(1, 0, 0, pgLayout.AbsoluteContentSize.Y)
+        expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
+    end))
+
+    -- Refresh button at bottom
+    local refreshBtn = Instance.new("TextButton")
+    refreshBtn.Size = UDim2.new(1, 0, 0, 30)
+    refreshBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+    refreshBtn.BorderSizePixel = 0
+    refreshBtn.Text = "↺  Refresh Profile Lists"
+    refreshBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    refreshBtn.TextSize = 12
+    refreshBtn.TextColor3 = THEME.TextDark
+    refreshBtn.Parent = expandable
+    local rBtnC = Instance.new("UICorner"); rBtnC.CornerRadius = UDim.new(0, 6); rBtnC.Parent = refreshBtn
+
+    -- ─────────────────────────────────────────────────────────────────
+    --  Build a single profile row
+    -- ─────────────────────────────────────────────────────────────────
+    local function buildProfileRow(container, profileData, profileType, refreshFn)
+        local isCurrentGame = profileData.isPerGame and tostring(profileData.placeId) == tostring(game.PlaceId)
+
+        local rowFrame = Instance.new("Frame")
+        rowFrame.Size = UDim2.new(1, 0, 0, 68)
+        rowFrame.BackgroundColor3 = Color3.fromRGB(36, 36, 36)
+        rowFrame.BorderSizePixel = 0
+        rowFrame.Parent = container
+        local rowC = Instance.new("UICorner"); rowC.CornerRadius = UDim.new(0, 6); rowC.Parent = rowFrame
+        local rowStroke = Instance.new("UIStroke")
+        rowStroke.Color = profileData.autoLoad and THEME.Accent or Color3.fromRGB(50, 50, 50)
+        rowStroke.Thickness = 1
+        rowStroke.Transparency = profileData.autoLoad and 0.3 or 0.8
+        rowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        rowStroke.Parent = rowFrame
+
+        -- Name + meta row
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -12, 0, 22)
+        nameLabel.Position = UDim2.new(0, 10, 0, 6)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = profileData.name
+            .. (isCurrentGame and "  ⚡ Current Game" or "")
+            .. (profileData.isPerGame and not isCurrentGame and ("  [PlaceId: " .. tostring(profileData.placeId) .. "]") or "")
+        nameLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        nameLabel.TextSize = 12
+        nameLabel.TextColor3 = isCurrentGame and Color3.fromRGB(120, 200, 255) or THEME.Text
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.Parent = rowFrame
+
+        -- Auto-load status label
+        local autoLabel = Instance.new("TextLabel")
+        autoLabel.Size = UDim2.new(1, -12, 0, 14)
+        autoLabel.Position = UDim2.new(0, 10, 0, 28)
+        autoLabel.BackgroundTransparency = 1
+        autoLabel.Text = profileData.autoLoad and "● Auto-Load: ON" or "○ Auto-Load: OFF"
+        autoLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        autoLabel.TextSize = 10
+        autoLabel.TextColor3 = profileData.autoLoad and THEME.Success or THEME.TextDark
+        autoLabel.TextXAlignment = Enum.TextXAlignment.Left
+        autoLabel.Parent = rowFrame
+
+        -- Buttons row
+        local btnRow = Instance.new("Frame")
+        btnRow.Size = UDim2.new(1, -10, 0, 24)
+        btnRow.Position = UDim2.new(0, 5, 0, 42)
+        btnRow.BackgroundTransparency = 1
+        btnRow.Parent = rowFrame
+        local btnLayout = Instance.new("UIListLayout")
+        btnLayout.FillDirection = Enum.FillDirection.Horizontal
+        btnLayout.Padding = UDim.new(0, 4)
+        btnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        btnLayout.Parent = btnRow
+
+        -- Load button
+        local loadBtn = makeSmallBtn(btnRow, "▶ Load", Color3.fromRGB(30, 80, 40), THEME.Success, 68)
+        TrackConnection(loadBtn.MouseButton1Click:Connect(function()
+            local ok, nameOrErr = ConfigManager.LoadProfile(profileData.fileName)
+            if ok then
+                UI.Notify("✅ Profile Loaded", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been applied.", 5)
+            else
+                UI.Notify("❌ Load Failed", "Profile \"" .. profileData.name .. "\" could not be parsed. File may be corrupted.", 6)
+            end
+        end))
+
+        -- Auto-load toggle button
+        local autoState = profileData.autoLoad
+        local autoBtn = makeSmallBtn(btnRow,
+            autoState and "🔁 Auto: ON" or "○ Auto: OFF",
+            autoState and Color3.fromRGB(30, 60, 30) or Color3.fromRGB(45, 45, 45),
+            autoState and THEME.Success or THEME.TextDark,
+            82)
+        TrackConnection(autoBtn.MouseButton1Click:Connect(function()
+            autoState = not autoState
+            local ok, err = ConfigManager.SetAutoLoad(profileData.fileName, autoState)
+            if ok then
+                autoBtn.Text = autoState and "🔁 Auto: ON" or "○ Auto: OFF"
+                autoBtn.BackgroundColor3 = autoState and Color3.fromRGB(30, 60, 30) or Color3.fromRGB(45, 45, 45)
+                autoBtn.TextColor3 = autoState and THEME.Success or THEME.TextDark
+                autoLabel.Text = autoState and "● Auto-Load: ON" or "○ Auto-Load: OFF"
+                autoLabel.TextColor3 = autoState and THEME.Success or THEME.TextDark
+                rowStroke.Color = autoState and THEME.Accent or Color3.fromRGB(50, 50, 50)
+                rowStroke.Transparency = autoState and 0.3 or 0.8
+                if autoState then
+                    UI.Notify("🔁 Auto-Load Enabled", "Profile \"" .. profileData.name .. "\" will now auto-load on startup.", 5)
+                else
+                    UI.Notify("🔁 Auto-Load Disabled", "Profile \"" .. profileData.name .. "\" will no longer auto-load.", 5)
+                end
+            else
+                UI.Notify("⚠ Auto-Load Error", "Could not update auto-load state for \"" .. profileData.name .. "\".", 5)
+            end
+        end))
+
+        -- Rename button (with inline TextBox)
+        local renaming = false
+        local renameBtn = makeSmallBtn(btnRow, "✏ Rename", Color3.fromRGB(45, 45, 60), THEME.Text, 72)
+        local renameBox = nil
+        local renameConfirmBtn = nil
+
+        TrackConnection(renameBtn.MouseButton1Click:Connect(function()
+            if renaming then return end
+            renaming = true
+
+            rowFrame.Size = UDim2.new(1, 0, 0, 100)
+            renameBtn.Text = "✏ Renaming..."
+            renameBtn.TextColor3 = THEME.Accent
+
+            -- Inline rename textbox
+            local rbFrame, rbBox = makeNameInput(rowFrame, "New name...")
+            rbFrame.Position = UDim2.new(0, 5, 0, 70)
+            rbFrame.Size = UDim2.new(0.6, -8, 0, 26)
+            renameBox = rbBox
+
+            local confirmRenameBtn = makeSmallBtn(rowFrame, "✓ OK", Color3.fromRGB(30, 80, 40), THEME.Success, 52)
+            confirmRenameBtn.Position = UDim2.new(0.6, 2, 0, 70)
+            confirmRenameBtn.AnchorPoint = Vector2.new(0, 0)
+
+            local cancelRenameBtn = makeSmallBtn(rowFrame, "✕", Color3.fromRGB(70, 30, 30), THEME.Fail, 32)
+            cancelRenameBtn.Position = UDim2.new(0.6, 58, 0, 70)
+            cancelRenameBtn.AnchorPoint = Vector2.new(0, 0)
+
+            TrackConnection(confirmRenameBtn.MouseButton1Click:Connect(function()
+                local newName = rbBox.Text:match("^%s*(.-)%s*$")
+                if newName == "" then
+                    UI.Notify("⚠ Invalid Name", "Please enter a new name before confirming.", 4)
+                    return
+                end
+                local ok, oldNameOrErr = ConfigManager.RenameProfile(profileData.fileName, newName, profileType)
+                if ok then
+                    UI.Notify("✅ Renamed", "Profile \"" .. (oldNameOrErr or profileData.name) .. "\" renamed to \"" .. newName .. "\".", 5)
+                    task.wait(0.05)
+                    if refreshFn then pcall(refreshFn) end
+                else
+                    UI.Notify("❌ Rename Failed", "Could not rename profile. Check executor permissions.", 6)
+                    renaming = false
+                    rowFrame.Size = UDim2.new(1, 0, 0, 68)
+                    renameBtn.Text = "✏ Rename"
+                    renameBtn.TextColor3 = THEME.Text
+                    rbFrame:Destroy()
+                    confirmRenameBtn:Destroy()
+                    cancelRenameBtn:Destroy()
+                end
+            end))
+
+            TrackConnection(cancelRenameBtn.MouseButton1Click:Connect(function()
+                renaming = false
+                rowFrame.Size = UDim2.new(1, 0, 0, 68)
+                renameBtn.Text = "✏ Rename"
+                renameBtn.TextColor3 = THEME.Text
+                rbFrame:Destroy()
+                confirmRenameBtn:Destroy()
+                cancelRenameBtn:Destroy()
+            end))
+        end))
+
+        -- Delete button (with confirm)
+        local deleteConfirming = false
+        local deleteTimer = nil
+        local deleteBtn = makeSmallBtn(btnRow, "🗑 Delete", Color3.fromRGB(70, 30, 30), THEME.Fail, 68)
+
+        TrackConnection(deleteBtn.MouseButton1Click:Connect(function()
+            if not deleteConfirming then
+                deleteConfirming = true
+                deleteBtn.Text = "⚠ Confirm?"
+                deleteBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+                deleteTimer = task.delay(3, function()
+                    deleteConfirming = false
+                    deleteBtn.Text = "🗑 Delete"
+                    deleteBtn.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+                end)
+            else
+                if deleteTimer then task.cancel(deleteTimer) end
+                deleteConfirming = false
+                local ok, err = ConfigManager.DeleteProfile(profileData.fileName)
+                if ok then
+                    UI.Notify("🗑 Profile Deleted", "Profile \"" .. profileData.name .. "\" has been deleted.", 5)
+                    task.wait(0.05)
+                    if refreshFn then pcall(refreshFn) end
+                else
+                    UI.Notify("❌ Delete Failed", "Could not delete profile \"" .. profileData.name .. "\".", 6)
+                    deleteBtn.Text = "🗑 Delete"
+                    deleteBtn.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+                end
+            end
+        end))
+    end
+
+    -- ─────────────────────────────────────────────────────────────────
+    --  Refresh function — rebuilds both profile lists
+    -- ─────────────────────────────────────────────────────────────────
+    local function refreshLists()
+        -- Clear existing rows
+        for _, child in ipairs(universalListFrame:GetChildren()) do
+            if not child:IsA("UIListLayout") then child:Destroy() end
+        end
+        for _, child in ipairs(pergameListFrame:GetChildren()) do
+            if not child:IsA("UIListLayout") then child:Destroy() end
+        end
+
+        if not apiAvailable then return end
+
+        local uProfiles = ConfigManager.ListProfiles("Universal")
+        local pgProfiles = ConfigManager.ListProfiles("PerGame")
+
+        if #uProfiles == 0 then
+            local emptyLbl = Instance.new("TextLabel")
+            emptyLbl.Size = UDim2.new(1, 0, 0, 28)
+            emptyLbl.BackgroundTransparency = 1
+            emptyLbl.Text = "No universal profiles saved yet."
+            emptyLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+            emptyLbl.TextSize = 11
+            emptyLbl.TextColor3 = THEME.TextDark
+            emptyLbl.Parent = universalListFrame
+        else
+            for _, prof in ipairs(uProfiles) do
+                buildProfileRow(universalListFrame, prof, "Universal", refreshLists)
+            end
+        end
+
+        if #pgProfiles == 0 then
+            local emptyLbl = Instance.new("TextLabel")
+            emptyLbl.Size = UDim2.new(1, 0, 0, 28)
+            emptyLbl.BackgroundTransparency = 1
+            emptyLbl.Text = "No per-game profiles saved yet."
+            emptyLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+            emptyLbl.TextSize = 11
+            emptyLbl.TextColor3 = THEME.TextDark
+            emptyLbl.Parent = pergameListFrame
+        else
+            for _, prof in ipairs(pgProfiles) do
+                buildProfileRow(pergameListFrame, prof, "PerGame", refreshLists)
+            end
+        end
+
+        -- Recompute heights
+        task.wait()
+        expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
+    end
+
+    -- Register global refresh hook so save buttons can trigger it
+    _G._SP3AR_ConfigRefresh = refreshLists
+
+    -- Wire up the refresh button
+    TrackConnection(refreshBtn.MouseButton1Click:Connect(function()
+        refreshLists()
+    end))
+
+    -- ── Gate toggle logic ──────────────────────────────────────────────
+    TrackConnection(gBtn.MouseButton1Click:Connect(function()
+        configEnabled = not configEnabled
+
+        -- Update switch visuals
+        local targetColor  = configEnabled and THEME.Accent or Color3.fromRGB(50, 50, 50)
+        local targetKnobPos = configEnabled and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
+        TweenService:Create(gSwitch, TWEENS.MEDIUM, {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(gKnob,  TWEENS.SMOOTH, {Position = targetKnobPos}):Play()
+        TweenService:Create(gStroke, TWEENS.MEDIUM, {Transparency = configEnabled and 0.2 or 0.6}):Play()
+
+        if configEnabled then
+            expandable.Visible = true
+            refreshLists()
+            expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
+            -- Fire API warning notification if needed
+            if not apiAvailable then
+                UI.Notify("⚠ Config Unavailable", "File I/O API inaccessible on this executor. Config saving/loading is disabled.", 8)
+            end
+        else
+            expandable.Visible = false
+            expandable.Size = UDim2.new(1, 0, 0, 0)
+        end
+    end))
+end
+
+local ConfigTab = UI.CreateTab("Config")
+BuildConfigTab(ConfigTab)
+
 function ShowWorldHumList(page)
     if not page then return end
+
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -11873,3 +12951,39 @@ print(string.format("[Sp3arParvus v%s] Br3ak3r: %s", VERSION, Flags["Br3ak3r/Ena
 print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility", VERSION))
 print(string.format("[Sp3arParvus v%s] Br3ak3r Controls: Ctrl+Click=Break | Ctrl+Z=Undo | Ctrl+B=Toggle", VERSION))
 print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤750 | Yellow≤1875 | Green>1875", VERSION))
+
+-- ── Deferred startup config notification (UI is now ready) ────────────
+do
+    local sn = ConfigManager and ConfigManager._startupNotify
+    if sn then
+        task.delay(0.5, function()
+            -- Small delay so the main load notification displays first
+            if sn.kind == "no_api" then
+                UI.Notify(
+                    "⚠ Config Unavailable",
+                    "File I/O API inaccessible on this executor. Config saving/loading is disabled.",
+                    8
+                )
+            elseif sn.kind == "pergame" then
+                UI.Notify(
+                    "⚡ Per-Game Config Loaded",
+                    string.format("Game %s detected — auto-loading profile \"%s\".", sn.placeId or "?", sn.profileName or "?"),
+                    7
+                )
+            elseif sn.kind == "universal" then
+                UI.Notify(
+                    "🌐 Universal Config Loaded",
+                    string.format("Universal config with auto-load enabled detected — loading profile \"%s\".", sn.profileName or "?"),
+                    7
+                )
+            elseif sn.kind == "defaults_with_profiles" then
+                UI.Notify(
+                    "📂 Config: Defaults Loaded",
+                    string.format("%d profile(s) found, none with auto-load enabled. Loading defaults.", sn.count or 0),
+                    6
+                )
+            end
+        end)
+    end
+end
+
