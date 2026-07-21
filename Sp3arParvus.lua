@@ -9621,88 +9621,6 @@ function InitializeShortcutsPage(page)
     bodyLabel.Parent = bodyFrame
 end
 
-local function InitializeWorldHumPresetsPage(page)
-    UI.CreateSection(page, "World Humanoid Preset Creator")
-
-    local function makeInputRow(parent, labelText, placeholderText, defaultVal)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 0, 36)
-        frame.BackgroundColor3 = UI_THEME.Element
-        frame.BorderSizePixel = 0
-        frame.Parent = parent
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
-
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(0.4, 0, 1, 0)
-        lbl.Position = UDim2.new(0, 12, 0, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Text = labelText
-        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-        lbl.TextSize = 13
-        lbl.TextColor3 = UI_THEME.Text
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Parent = frame
-
-        local boxFrame = Instance.new("Frame")
-        boxFrame.Size = UDim2.new(0.6, -16, 0, 26)
-        boxFrame.Position = UDim2.new(1, -8, 0.5, 0)
-        boxFrame.AnchorPoint = Vector2.new(1, 0.5)
-        boxFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        boxFrame.Parent = frame
-        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = boxFrame
-
-        local box = Instance.new("TextBox")
-        box.Size = UDim2.new(1, -16, 1, 0)
-        box.Position = UDim2.new(0, 8, 0, 0)
-        box.BackgroundTransparency = 1
-        box.PlaceholderText = placeholderText
-        box.Text = defaultVal or ""
-        box.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-        box.TextSize = 13
-        box.TextColor3 = Color3.fromRGB(255, 255, 255)
-        box.TextXAlignment = Enum.TextXAlignment.Left
-        box.ClearTextOnFocus = false
-        box.Parent = boxFrame
-        
-        return frame, box
-    end
-
-    local _, nameBox = makeInputRow(page, "Target Name", "e.g., Zombie", "")
-    local _, modeBox = makeInputRow(page, "Target Mode", "Closest Only, Closest X, All", "Closest Only")
-    local _, countBox = makeInputRow(page, "Target Count (X)", "e.g., 5", "1")
-    local _, speedBox = makeInputRow(page, "WalkSpeed", "Default: 16", "16")
-    local _, jumpBox = makeInputRow(page, "JumpPower", "Default: 50", "50")
-
-    UI.CreateButton(page, "Add Preset", function()
-        local name = nameBox.Text
-        if name == "" then return end
-        
-        local mode = modeBox.Text
-        if mode:lower():match("all") then mode = "All Rendered"
-        elseif mode:lower():match("x") then mode = "Closest X Amount"
-        else mode = "Closest Only" end
-        
-        local count = tonumber(countBox.Text) or 1
-        local speed = tonumber(speedBox.Text) or 16
-        local jump = tonumber(jumpBox.Text) or 50
-
-        table.insert(WorldHumState.Presets, {
-            TargetName = name,
-            TargetMode = mode,
-            TargetCount = count,
-            Properties = {
-                WalkSpeed = speed,
-                JumpPower = jump
-            }
-        })
-        UI.Notify("Preset Added", "Added rule for " .. name, 3)
-    end)
-    
-    UI.CreateButton(page, "Clear All Presets", function()
-        table.clear(WorldHumState.Presets)
-        UI.Notify("Presets Cleared", "All custom World-Humanoid presets removed.", 3)
-    end)
-end
 
 local Window = UI.CreateWindow("Sp3arParvus")
 
@@ -9715,8 +9633,6 @@ local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
-local WorldHumPresetsPage = UI.CreateTab("World Presets")
-InitializeWorldHumPresetsPage(WorldHumPresetsPage)
 local PlayerPage = UI.CreateTab("PlayerPage")
 InitializePlayerPage(PlayerPage)
 local MiscTab = UI.CreateTab("Dev Tools")
@@ -10393,6 +10309,295 @@ function ShowWorldHumList(page)
     WorldHumState.selectedHum = nil
     table.clear(WorldHumState.listEntries)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    local layout = page:FindFirstChildOfClass("UIListLayout")
+    if not layout then
+        layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 5)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = page
+    end
+
+    WorldHumState.PresetDraft = WorldHumState.PresetDraft or {
+        TargetName = "", TargetMode = "Closest Only", TargetCount = 1,
+        Properties = {
+            WalkSpeed = 16, JumpPower = 50, JumpHeight = 7.2, Health = 100, MaxHealth = 100,
+            MaxSlopeAngle = 89, HipHeight = 0, Archivable = true, BreakJointsOnDeath = true,
+            EvaluateStateMachine = true, RequiresNeck = true, AutoRotate = true, PlatformStand = false,
+            Sit = false, UseJumpPower = true, AutoJumpEnabled = true, AutomaticScalingEnabled = true
+        }
+    }
+    local draft = WorldHumState.PresetDraft
+    local draftUpdaters = {}
+
+    local function CreatePresetToggle(pg, text, prop)
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(1, 0, 0, 36)
+        Frame.BackgroundColor3 = UI_THEME.Element
+        Frame.BorderSizePixel = 0
+        Frame.Parent = pg
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = Frame
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(0.7, -30, 1, 0)
+        Label.Position = UDim2.new(0, 12, 0, 0)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        Label.TextSize = 13
+        Label.TextColor3 = UI_THEME.Text
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.Parent = Frame
+
+        local Switch = Instance.new("Frame")
+        Switch.Size = UDim2.new(0, 44, 0, 22)
+        Switch.AnchorPoint = Vector2.new(1, 0.5)
+        Switch.Position = UDim2.new(1, -12, 0.5, 0)
+        Switch.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        Switch.Parent = Frame
+        local swCorner = Instance.new("UICorner"); swCorner.CornerRadius = UDim.new(1, 0); swCorner.Parent = Switch
+
+        local Knob = Instance.new("Frame")
+        Knob.Size = UDim2.new(0, 18, 0, 18)
+        Knob.AnchorPoint = Vector2.new(0, 0.5)
+        Knob.Position = UDim2.new(0, 2, 0.5, 0)
+        Knob.BackgroundColor3 = Color3.new(1, 1, 1)
+        Knob.Parent = Switch
+        local kbCorner = Instance.new("UICorner"); kbCorner.CornerRadius = UDim.new(1, 0); kbCorner.Parent = Knob
+
+        local Button = Instance.new("TextButton")
+        Button.Size = UDim2.new(1, 0, 1, 0)
+        Button.BackgroundTransparency = 1
+        Button.Text = ""
+        Button.Parent = Switch
+
+        local function updateVisuals(state)
+            TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)}):Play()
+            TweenService:Create(Knob, TWEENS.SMOOTH, {Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
+        end
+        draftUpdaters[prop] = updateVisuals
+
+        TrackWorldHumConnection(Button.MouseButton1Click:Connect(function()
+            draft.Properties[prop] = not draft.Properties[prop]
+            updateVisuals(draft.Properties[prop])
+        end))
+        updateVisuals(draft.Properties[prop])
+    end
+
+    local function CreatePresetNumeric(pg, text, prop, min, max, step)
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(1, 0, 0, 48)
+        Frame.BackgroundColor3 = UI_THEME.Element
+        Frame.BorderSizePixel = 0
+        Frame.Parent = pg
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 6); corner.Parent = Frame
+
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(0.6, -42, 1, 0)
+        Label.Position = UDim2.new(0, 12, 0, 0)
+        Label.BackgroundTransparency = 1
+        Label.Text = text
+        Label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        Label.TextSize = 13
+        Label.TextColor3 = UI_THEME.Text
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.Parent = Frame
+
+        local InputFrame = Instance.new("Frame")
+        InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
+        InputFrame.Position = UDim2.new(1, -12, 0.5, 0)
+        InputFrame.AnchorPoint = Vector2.new(1, 0.5)
+        InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        InputFrame.Parent = Frame
+        local ifCorner = Instance.new("UICorner"); ifCorner.CornerRadius = UDim.new(0, 4); ifCorner.Parent = InputFrame
+
+        local Input = Instance.new("TextBox")
+        Input.Size = UDim2.new(1, -20, 1, 0)
+        Input.Position = UDim2.new(0, 10, 0, 0)
+        Input.BackgroundTransparency = 1
+        Input.Text = tostring(math.floor(draft.Properties[prop] * 100) / 100)
+        Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        Input.TextSize = 13
+        Input.TextColor3 = UI_THEME.Accent
+        Input.ClearTextOnFocus = false
+        Input.Parent = InputFrame
+
+        draftUpdaters[prop] = function(v)
+            Input.Text = tostring(math.floor(v * 100) / 100)
+        end
+
+        local function updateValue(val)
+            val = math.clamp(tonumber(val) or draft.Properties[prop], min, max)
+            if step and step > 0 then val = math.floor(val / step + 0.5) * step end
+            draft.Properties[prop] = val
+            Input.Text = tostring(math.floor(val * 100) / 100)
+        end
+        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+    end
+
+    local humanoids = GetNearbyHumanoids()
+    
+    UI.CreateSection(page, "World-Humanoid Preset Creator")
+    
+    local function makeInputRow(pg, labelText, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 36)
+        frame.BackgroundColor3 = UI_THEME.Element
+        frame.BorderSizePixel = 0
+        frame.Parent = pg
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.4, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 12, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = labelText
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.Text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = frame
+
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Size = UDim2.new(0.6, -16, 0, 26)
+        boxFrame.Position = UDim2.new(1, -8, 0.5, 0)
+        boxFrame.AnchorPoint = Vector2.new(1, 0.5)
+        boxFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        boxFrame.Parent = frame
+        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = boxFrame
+
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, -16, 1, 0)
+        box.Position = UDim2.new(0, 8, 0, 0)
+        box.BackgroundTransparency = 1
+        box.Text = defaultVal or ""
+        box.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        box.TextSize = 13
+        box.TextColor3 = Color3.fromRGB(255, 255, 255)
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.ClearTextOnFocus = false
+        box.Parent = boxFrame
+        TrackWorldHumConnection(box.FocusLost:Connect(function() callback(box.Text) end))
+        return box
+    end
+
+    local nameBox = makeInputRow(page, "Target Name", draft.TargetName, function(t) draft.TargetName = t end)
+    local modeBox = makeInputRow(page, "Target Mode", draft.TargetMode, function(t)
+        if t:lower():match("all") then draft.TargetMode = "All Rendered"
+        elseif t:lower():match("x") then draft.TargetMode = "Closest X Amount"
+        else draft.TargetMode = "Closest Only" end
+        t = draft.TargetMode
+    end)
+    local countBox = makeInputRow(page, "Target Count (X)", tostring(draft.TargetCount), function(t) draft.TargetCount = tonumber(t) or 1 end)
+
+    local dropdownContainer = Instance.new("Frame")
+    dropdownContainer.Size = UDim2.new(1, 0, 0, 0)
+    dropdownContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    dropdownContainer.ClipsDescendants = true
+    dropdownContainer.Parent = page
+    local dcLayout = Instance.new("UIListLayout")
+    dcLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    dcLayout.Parent = dropdownContainer
+    
+    local dToggle = Instance.new("TextButton")
+    dToggle.Size = UDim2.new(1, 0, 0, 30)
+    dToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    dToggle.Text = "▼ Select Nearby Humanoid Template"
+    dToggle.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    dToggle.TextSize = 12
+    dToggle.TextColor3 = UI_THEME.Accent
+    dToggle.Parent = page
+    local dCorner = Instance.new("UICorner"); dCorner.CornerRadius = UDim.new(0, 4); dCorner.Parent = dToggle
+    
+    local dropOpen = false
+    TrackWorldHumConnection(dToggle.MouseButton1Click:Connect(function()
+        dropOpen = not dropOpen
+        dToggle.Text = dropOpen and "▲ Hide Nearby Humanoids" or "▼ Select Nearby Humanoid Template"
+        TweenService:Create(dropdownContainer, TWEENS.FAST, {Size = UDim2.new(1, 0, 0, dropOpen and dcLayout.AbsoluteContentSize.Y or 0)}):Play()
+    end))
+
+    local uniqueNames = {}
+    for _, hum in ipairs(humanoids) do
+        local n = hum.Name
+        if hum.Parent and hum.Parent:IsA("Model") then n = hum.Parent.Name end
+        if not uniqueNames[n] then
+            uniqueNames[n] = hum
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 0, 26)
+            btn.BackgroundTransparency = 1
+            btn.Text = "  " .. n
+            btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+            btn.TextSize = 12
+            btn.TextColor3 = UI_THEME.Text
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.Parent = dropdownContainer
+            TrackWorldHumConnection(btn.MouseButton1Click:Connect(function()
+                draft.TargetName = n
+                nameBox.Text = n
+                for prop, _ in pairs(draft.Properties) do
+                    local s, v = pcall(SafeGetProp, hum, prop)
+                    if s and v ~= nil then
+                        draft.Properties[prop] = v
+                        if draftUpdaters[prop] then draftUpdaters[prop](v) end
+                    end
+                end
+                dropOpen = false
+                dToggle.Text = "▼ Select Nearby Humanoid Template"
+                TweenService:Create(dropdownContainer, TWEENS.FAST, {Size = UDim2.new(1, 0, 0, 0)}):Play()
+            end))
+        end
+    end
+    
+    TrackWorldHumConnection(dcLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if dropOpen then dropdownContainer.Size = UDim2.new(1, 0, 0, dcLayout.AbsoluteContentSize.Y) end
+    end))
+
+    UI.CreateSection(page, "Preset Behavior")
+    CreatePresetToggle(page, "Archivable", "Archivable")
+    CreatePresetToggle(page, "Break Joints On Death", "BreakJointsOnDeath")
+    CreatePresetToggle(page, "Evaluate State Machine", "EvaluateStateMachine")
+    CreatePresetToggle(page, "Requires Neck", "RequiresNeck")
+
+    UI.CreateSection(page, "Preset Control")
+    CreatePresetToggle(page, "Auto Rotate", "AutoRotate")
+    CreatePresetToggle(page, "Platform Stand", "PlatformStand")
+    CreatePresetToggle(page, "Sit", "Sit")
+
+    UI.CreateSection(page, "Preset Jump Settings")
+    CreatePresetToggle(page, "Auto Jump Enabled", "AutoJumpEnabled")
+    CreatePresetNumeric(page, "Jump Height", "JumpHeight", 0, 500, 1)
+    CreatePresetNumeric(page, "Jump Power", "JumpPower", 0, 500, 1)
+    CreatePresetToggle(page, "Use Jump Power", "UseJumpPower")
+
+    UI.CreateSection(page, "Preset Game Properties")
+    CreatePresetToggle(page, "Automatic Scaling Enabled", "AutomaticScalingEnabled")
+    CreatePresetNumeric(page, "Health", "Health", 0, 100000, 1)
+    CreatePresetNumeric(page, "Max Health", "MaxHealth", 0, 100000, 1)
+    CreatePresetNumeric(page, "Hip Height", "HipHeight", 0, 100, 1)
+    CreatePresetNumeric(page, "Max Slope Angle", "MaxSlopeAngle", 0, 90, 1)
+    CreatePresetNumeric(page, "Walk Speed", "WalkSpeed", 0, 500, 1)
+
+    UI.CreateButton(page, "Add & Save Preset", function()
+        if draft.TargetName == "" then UI.Notify("Error", "Target Name cannot be empty.", 3) return end
+        
+        local propsCopy = {}
+        for k,v in pairs(draft.Properties) do propsCopy[k] = v end
+
+        table.insert(WorldHumState.Presets, {
+            TargetName = draft.TargetName,
+            TargetMode = draft.TargetMode,
+            TargetCount = draft.TargetCount,
+            Properties = propsCopy
+        })
+        UI.Notify("Preset Added", "Added rule for " .. draft.TargetName, 3)
+    end)
+    
+    UI.CreateButton(page, "Clear All Presets", function()
+        table.clear(WorldHumState.Presets)
+        UI.Notify("Presets Cleared", "All custom World-Humanoid presets removed.", 3)
+    end)
+
 
     local layout = page:FindFirstChildOfClass("UIListLayout")
     if not layout then
