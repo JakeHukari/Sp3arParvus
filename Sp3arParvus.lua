@@ -11047,7 +11047,7 @@ function ShowPresetManager(page)
             local editBtn = Instance.new("TextButton")
             editBtn.Size = UDim2.new(0, 50, 0, 22)
             editBtn.AnchorPoint = Vector2.new(1, 0)
-            editBtn.Position = UDim2.new(1, -10, 0, 5)
+            editBtn.Position = UDim2.new(1, -65, 0, 5)
             editBtn.BackgroundColor3 = Color3.fromRGB(55, 105, 155)
             editBtn.Text = "Edit"
             editBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -11057,6 +11057,22 @@ function ShowPresetManager(page)
             local eC = Instance.new("UICorner"); eC.CornerRadius = UDim.new(0, 4); eC.Parent = editBtn
             TrackWorldHumConnection(editBtn.MouseButton1Click:Connect(function()
                 ShowPresetEditor(page, preset, false)
+            end))
+
+            local deleteBtn = Instance.new("TextButton")
+            deleteBtn.Size = UDim2.new(0, 50, 0, 22)
+            deleteBtn.AnchorPoint = Vector2.new(1, 0)
+            deleteBtn.Position = UDim2.new(1, -10, 0, 5)
+            deleteBtn.BackgroundColor3 = UI_THEME.Fail
+            deleteBtn.Text = "Delete"
+            deleteBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            deleteBtn.TextSize = 11
+            deleteBtn.TextColor3 = Color3.new(1, 1, 1)
+            deleteBtn.Parent = card
+            local dC = Instance.new("UICorner"); dC.CornerRadius = UDim.new(0, 4); dC.Parent = deleteBtn
+            TrackWorldHumConnection(deleteBtn.MouseButton1Click:Connect(function()
+                table.remove(WorldHumState.Presets, i)
+                ShowPresetManager(page)
             end))
         end
     end
