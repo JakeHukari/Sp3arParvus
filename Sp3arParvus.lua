@@ -302,6 +302,22 @@ do
         end
         pcall(ensureDirs)
         local fileName = UNIVERSAL_DIR .. "/" .. profileName .. ".json"
+        local safePresets = {}
+        if WorldHumState.Presets then
+            for _, p in ipairs(WorldHumState.Presets) do
+                local copy = {
+                    Id = p.Id, TargetName = p.TargetName, TargetMode = p.TargetMode,
+                    TargetCount = p.TargetCount, UpdateRate = p.UpdateRate,
+                    Enabled = p.Enabled, HighlightEnabled = p.HighlightEnabled,
+                    Properties = {}
+                }
+                if p.Properties then
+                    for k, v in pairs(p.Properties) do copy.Properties[k] = v end
+                end
+                table.insert(safePresets, copy)
+            end
+        end
+
         local payload = {
             name            = profileName,
             autoLoad        = false,
@@ -314,7 +330,7 @@ do
             blacklist       = AdvancedPlayerPanelState.Blacklist,
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
-            worldHumPresets = WorldHumState.Presets
+            worldHumPresets = safePresets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -336,6 +352,22 @@ do
         local placeId  = tostring(game.PlaceId)
         local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
         local fileName = PERGAME_DIR .. "/" .. placeId .. "_" .. safeProfileName .. ".json"
+        local safePresets = {}
+        if WorldHumState.Presets then
+            for _, p in ipairs(WorldHumState.Presets) do
+                local copy = {
+                    Id = p.Id, TargetName = p.TargetName, TargetMode = p.TargetMode,
+                    TargetCount = p.TargetCount, UpdateRate = p.UpdateRate,
+                    Enabled = p.Enabled, HighlightEnabled = p.HighlightEnabled,
+                    Properties = {}
+                }
+                if p.Properties then
+                    for k, v in pairs(p.Properties) do copy.Properties[k] = v end
+                end
+                table.insert(safePresets, copy)
+            end
+        end
+
         local payload = {
             name            = profileName,
             autoLoad        = false,
@@ -348,7 +380,7 @@ do
             blacklist       = AdvancedPlayerPanelState.Blacklist,
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
-            worldHumPresets = WorldHumState.Presets
+            worldHumPresets = safePresets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -1444,10 +1476,17 @@ end
 
 function ApplyWorldHumanoidSettings()
     local now = os.clock()
-    if (now - lastWorldHumPresetScan) > 2.0 then
-        lastWorldHumPresetScan = now
 
-        if WorldHumState.Presets and #WorldHumState.Presets > 0 then
+    if WorldHumState.Presets and #WorldHumState.Presets > 0 then
+        local needsScan = false
+        for _, preset in ipairs(WorldHumState.Presets) do
+            if preset.Enabled ~= false and (now - (preset.lastUpdate or 0)) >= (preset.UpdateRate or 2.0) then
+                needsScan = true
+                break
+            end
+        end
+
+        if needsScan then
             local nearby = GetNearbyHumanoids()
             local byName = {}
             for _, hum in ipairs(nearby) do
@@ -1464,35 +1503,92 @@ function ApplyWorldHumanoidSettings()
             end
 
             local myPos = (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart) and LocalPlayer.Character.PrimaryPart.Position
+
             for _, preset in ipairs(WorldHumState.Presets) do
-                local name = preset.TargetName
-                local pool = byName[name] or {}
-                if #pool > 0 and myPos then
-                    table.sort(pool, function(a, b)
-                        local ap = (a.Parent and a.Parent.PrimaryPart) and a.Parent.PrimaryPart.Position or (a.RootPart and a.RootPart.Position)
-                        local bp = (b.Parent and b.Parent.PrimaryPart) and b.Parent.PrimaryPart.Position or (b.RootPart and b.RootPart.Position)
-                        if not ap then return false end
-                        if not bp then return true end
-                        return (ap - myPos).Magnitude < (bp - myPos).Magnitude
-                    end)
-                    
-                    local count = #pool
-                    if preset.TargetMode == "Closest Only" then count = 1
-                    elseif preset.TargetMode == "Closest X Amount" then count = math.min(count, tonumber(preset.TargetCount) or 1)
-                    end
-                    
-                    for i = 1, count do
-                        local hum = pool[i]
-                        local path = GetUniquePath(hum)
+                if preset.Enabled ~= false and (now - (preset.lastUpdate or 0)) >= (preset.UpdateRate or 2.0) then
+                    preset.lastUpdate = now
+                    preset.affectedCount = 0
+                    if not preset.affectedPaths then preset.affectedPaths = {} end
+                    table.clear(preset.affectedPaths)
+
+                    local name = preset.TargetName
+                    local pool = byName[name] or {}
+                    if #pool > 0 and myPos then
+                        table.sort(pool, function(a, b)
+                            local ap = (a.Parent and a.Parent.PrimaryPart) and a.Parent.PrimaryPart.Position or (a.RootPart and a.RootPart.Position)
+                            local bp = (b.Parent and b.Parent.PrimaryPart) and b.Parent.PrimaryPart.Position or (b.RootPart and b.RootPart.Position)
+                            if not ap then return false end
+                            if not bp then return true end
+                            return (ap - myPos).Magnitude < (bp - myPos).Magnitude
+                        end)
                         
-                        if not WorldHumState.lockedProperties[path] then
-                            WorldHumState.lockedProperties[path] = {}
+                        local count = #pool
+                        if preset.TargetMode == "Closest Only" then count = 1
+                        elseif preset.TargetMode == "Closest X Amount" then count = math.min(count, tonumber(preset.TargetCount) or 1)
                         end
-                        for prop, val in pairs(preset.Properties) do
-                            WorldHumState.lockedProperties[path][prop] = val
+                        
+                        for i = 1, count do
+                            local hum = pool[i]
+                            local path = GetUniquePath(hum)
+                            preset.affectedPaths[path] = hum
+                            preset.affectedCount = preset.affectedCount + 1
+                            
+                            if not WorldHumState.lockedProperties[path] then
+                                WorldHumState.lockedProperties[path] = {}
+                            end
+                            if preset.Properties then
+                                for prop, val in pairs(preset.Properties) do
+                                    WorldHumState.lockedProperties[path][prop] = val
+                                end
+                            end
+                            WorldHumState.presetsApplied[path] = true
                         end
-                        WorldHumState.presetsApplied[path] = true
                     end
+                end
+            end
+        end
+
+        for _, preset in ipairs(WorldHumState.Presets) do
+            if not preset.highlights then preset.highlights = {} end
+            if preset.HighlightEnabled and preset.Enabled ~= false then
+                for path, hum in pairs(preset.affectedPaths or {}) do
+                    if not preset.highlights[path] then
+                        local model = hum.Parent
+                        if model then
+                            local hl = Instance.new("Highlight")
+                            hl.Enabled = not Flags["Settings/GhostMode"]
+                            hl.Name = "PresetHighlight_" .. (preset.Id or "")
+                            hl.Adornee = model
+                            hl.FillTransparency = 1
+                            hl.OutlineColor = Color3.new(1, 1, 1)
+                            hl.OutlineTransparency = 0
+                            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                            hl.Parent = model
+                            preset.highlights[path] = hl
+                        end
+                    end
+                end
+                for path, hl in pairs(preset.highlights) do
+                    if not (preset.affectedPaths and preset.affectedPaths[path]) then
+                        pcall(function() hl:Destroy() end)
+                        preset.highlights[path] = nil
+                    else
+                        hl.Enabled = not Flags["Settings/GhostMode"]
+                    end
+                end
+            else
+                for path, hl in pairs(preset.highlights) do
+                    pcall(function() hl:Destroy() end)
+                end
+                table.clear(preset.highlights)
+            end
+        end
+    else
+        if WorldHumState.Presets then
+            for _, preset in ipairs(WorldHumState.Presets) do
+                if preset.highlights then
+                    for path, hl in pairs(preset.highlights) do pcall(function() hl:Destroy() end) end
+                    table.clear(preset.highlights)
                 end
             end
         end
@@ -1505,7 +1601,6 @@ function ApplyWorldHumanoidSettings()
                 pcall(SafeSetProp, hum, prop, val)
             end
         else
-
             WorldHumState.lockedProperties[path] = nil
             WorldHumState.presetsApplied[path] = nil
         end
@@ -10297,39 +10392,51 @@ end
 local ConfigTab = UI.CreateTab("Config")
 BuildConfigTab(ConfigTab)
 
-function ShowWorldHumList(page)
-    if not page then return end
-
+local function ShowPresetEditor(page, preset, isNew)
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
         end
     end
-    ClearWorldHumConnections()
-    WorldHumState.selectedHum = nil
-    table.clear(WorldHumState.listEntries)
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
-    local layout = page:FindFirstChildOfClass("UIListLayout")
-    if not layout then
-        layout = Instance.new("UIListLayout")
-        layout.Padding = UDim.new(0, 5)
-        layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Parent = page
-    end
-
-    WorldHumState.PresetDraft = WorldHumState.PresetDraft or {
-        TargetName = "", TargetMode = "Closest Only", TargetCount = 1,
-        Properties = {
+    local draft = {
+        TargetName = preset and preset.TargetName or "",
+        TargetMode = preset and preset.TargetMode or "Closest Only",
+        TargetCount = preset and preset.TargetCount or 1,
+        UpdateRate = preset and preset.UpdateRate or 2.0,
+        Properties = {}
+    }
+    
+    if preset and preset.Properties then
+        for k, v in pairs(preset.Properties) do draft.Properties[k] = v end
+    else
+        draft.Properties = {
             WalkSpeed = 16, JumpPower = 50, JumpHeight = 7.2, Health = 100, MaxHealth = 100,
             MaxSlopeAngle = 89, HipHeight = 0, Archivable = true, BreakJointsOnDeath = true,
             EvaluateStateMachine = true, RequiresNeck = true, AutoRotate = true, PlatformStand = false,
             Sit = false, UseJumpPower = true, AutoJumpEnabled = true, AutomaticScalingEnabled = true
         }
-    }
-    local draft = WorldHumState.PresetDraft
+    end
+
     local draftUpdaters = {}
+
+    local headerFrame = Instance.new("Frame")
+    headerFrame.Size = UDim2.new(1, 0, 0, 24)
+    headerFrame.BackgroundTransparency = 1
+    headerFrame.Parent = page
+
+    local backBtn = Instance.new("TextButton")
+    backBtn.Size = UDim2.new(0, 80, 0, 24)
+    backBtn.BackgroundColor3 = UI_THEME.Element
+    backBtn.Text = "← Back"
+    backBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    backBtn.TextSize = 12
+    backBtn.TextColor3 = UI_THEME.Text
+    backBtn.Parent = headerFrame
+    local bC = Instance.new("UICorner"); bC.CornerRadius = UDim.new(0, 4); bC.Parent = backBtn
+    TrackWorldHumConnection(backBtn.MouseButton1Click:Connect(function()
+        ShowPresetManager(page)
+    end))
 
     local function CreatePresetToggle(pg, text, prop)
         local Frame = Instance.new("Frame")
@@ -10436,10 +10543,6 @@ function ShowWorldHumList(page)
         TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
     end
 
-    local humanoids = GetNearbyHumanoids()
-    
-    UI.CreateSection(page, "World-Humanoid Preset Creator")
-    
     local function makeInputRow(pg, labelText, defaultVal, callback)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 36)
@@ -10482,6 +10585,7 @@ function ShowWorldHumList(page)
         return box
     end
 
+    UI.CreateSection(page, "Preset Core Settings")
     local nameBox = makeInputRow(page, "Target Name", draft.TargetName, function(t) draft.TargetName = t end)
     local modeBox = makeInputRow(page, "Target Mode", draft.TargetMode, function(t)
         if t:lower():match("all") then draft.TargetMode = "All Rendered"
@@ -10490,6 +10594,7 @@ function ShowWorldHumList(page)
         t = draft.TargetMode
     end)
     local countBox = makeInputRow(page, "Target Count (X)", tostring(draft.TargetCount), function(t) draft.TargetCount = tonumber(t) or 1 end)
+    local rateBox = makeInputRow(page, "Update Rate (Sec)", tostring(draft.UpdateRate), function(t) draft.UpdateRate = math.clamp(tonumber(t) or 2.0, 0.1, 60.0) end)
 
     local dropdownContainer = Instance.new("Frame")
     dropdownContainer.Size = UDim2.new(1, 0, 0, 0)
@@ -10517,6 +10622,7 @@ function ShowWorldHumList(page)
         TweenService:Create(dropdownContainer, TWEENS.FAST, {Size = UDim2.new(1, 0, 0, dropOpen and dcLayout.AbsoluteContentSize.Y or 0)}):Play()
     end))
 
+    local humanoids = GetNearbyHumanoids()
     local uniqueNames = {}
     for _, hum in ipairs(humanoids) do
         local n = hum.Name
@@ -10578,26 +10684,207 @@ function ShowWorldHumList(page)
     CreatePresetNumeric(page, "Max Slope Angle", "MaxSlopeAngle", 0, 90, 1)
     CreatePresetNumeric(page, "Walk Speed", "WalkSpeed", 0, 500, 1)
 
-    UI.CreateButton(page, "Add & Save Preset", function()
+    UI.CreateButton(page, "Save Configuration", function()
         if draft.TargetName == "" then UI.Notify("Error", "Target Name cannot be empty.", 3) return end
         
-        local propsCopy = {}
-        for k,v in pairs(draft.Properties) do propsCopy[k] = v end
-
-        table.insert(WorldHumState.Presets, {
-            TargetName = draft.TargetName,
-            TargetMode = draft.TargetMode,
-            TargetCount = draft.TargetCount,
-            Properties = propsCopy
-        })
-        UI.Notify("Preset Added", "Added rule for " .. draft.TargetName, 3)
+        if isNew then
+            table.insert(WorldHumState.Presets, {
+                Id = HttpService:GenerateGUID(false),
+                TargetName = draft.TargetName,
+                TargetMode = draft.TargetMode,
+                TargetCount = draft.TargetCount,
+                UpdateRate = draft.UpdateRate,
+                Enabled = true,
+                HighlightEnabled = false,
+                Properties = draft.Properties
+            })
+            UI.Notify("Preset Created", "Added preset for " .. draft.TargetName, 3)
+        else
+            preset.TargetName = draft.TargetName
+            preset.TargetMode = draft.TargetMode
+            preset.TargetCount = draft.TargetCount
+            preset.UpdateRate = draft.UpdateRate
+            preset.Properties = draft.Properties
+            preset.lastUpdate = 0
+            UI.Notify("Preset Updated", "Saved changes for " .. draft.TargetName, 3)
+        end
+        ShowPresetManager(page)
     end)
+end
+
+function ShowPresetManager(page)
+    if not page then return end
+
+    for _, child in ipairs(page:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+    ClearWorldHumConnections()
     
-    UI.CreateButton(page, "Clear All Presets", function()
-        table.clear(WorldHumState.Presets)
-        UI.Notify("Presets Cleared", "All custom World-Humanoid presets removed.", 3)
+    local headerFrame = Instance.new("Frame")
+    headerFrame.Size = UDim2.new(1, 0, 0, 24)
+    headerFrame.BackgroundTransparency = 1
+    headerFrame.Parent = page
+
+    local backBtn = Instance.new("TextButton")
+    backBtn.Size = UDim2.new(0, 80, 0, 24)
+    backBtn.BackgroundColor3 = UI_THEME.Element
+    backBtn.Text = "← Back"
+    backBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    backBtn.TextSize = 12
+    backBtn.TextColor3 = UI_THEME.Text
+    backBtn.Parent = headerFrame
+    local bC = Instance.new("UICorner"); bC.CornerRadius = UDim.new(0, 4); bC.Parent = backBtn
+    TrackWorldHumConnection(backBtn.MouseButton1Click:Connect(function()
+        ShowWorldHumList(page)
+    end))
+
+    UI.CreateButton(page, "+ Create New Pre-set", function()
+        ShowPresetEditor(page, nil, true)
     end)
 
+    UI.CreateSection(page, "Active Pre-sets")
+
+    local function createToggleBlock(parent, text, state, callback)
+        local block = Instance.new("Frame")
+        block.Size = UDim2.new(0.5, -5, 0, 30)
+        block.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        block.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = block
+        
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.7, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 8, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        lbl.TextSize = 12
+        lbl.TextColor3 = UI_THEME.Text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = block
+
+        local Switch = Instance.new("Frame")
+        Switch.Size = UDim2.new(0, 34, 0, 18)
+        Switch.AnchorPoint = Vector2.new(1, 0.5)
+        Switch.Position = UDim2.new(1, -8, 0.5, 0)
+        Switch.BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(60, 60, 60)
+        Switch.Parent = block
+        local swC = Instance.new("UICorner"); swC.CornerRadius = UDim.new(1, 0); swC.Parent = Switch
+        
+        local Knob = Instance.new("Frame")
+        Knob.Size = UDim2.new(0, 14, 0, 14)
+        Knob.AnchorPoint = Vector2.new(0, 0.5)
+        Knob.Position = state and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
+        Knob.BackgroundColor3 = Color3.new(1, 1, 1)
+        Knob.Parent = Switch
+        local knC = Instance.new("UICorner"); knC.CornerRadius = UDim.new(1, 0); knC.Parent = Knob
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 1, 0)
+        btn.BackgroundTransparency = 1
+        btn.Text = ""
+        btn.Parent = Switch
+        
+        local currentState = state
+        TrackWorldHumConnection(btn.MouseButton1Click:Connect(function()
+            currentState = not currentState
+            TweenService:Create(Switch, TWEENS.FAST, {BackgroundColor3 = currentState and UI_THEME.Accent or Color3.fromRGB(60, 60, 60)}):Play()
+            TweenService:Create(Knob, TWEENS.FAST, {Position = currentState and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
+            callback(currentState)
+        end))
+        return block
+    end
+
+    if not WorldHumState.Presets or #WorldHumState.Presets == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 30)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "No active pre-sets."
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.TextDark
+        lbl.Parent = page
+    else
+        for i, preset in ipairs(WorldHumState.Presets) do
+            local card = Instance.new("Frame")
+            card.Size = UDim2.new(1, 0, 0, 95)
+            card.BackgroundColor3 = UI_THEME.Element
+            card.BorderSizePixel = 0
+            card.Parent = page
+            local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 6); cC.Parent = card
+
+            local nameLbl = Instance.new("TextLabel")
+            nameLbl.Size = UDim2.new(1, -60, 0, 22)
+            nameLbl.Position = UDim2.new(0, 10, 0, 5)
+            nameLbl.BackgroundTransparency = 1
+            nameLbl.Text = preset.TargetName .. " (" .. preset.TargetMode .. ")"
+            nameLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            nameLbl.TextSize = 14
+            nameLbl.TextColor3 = UI_THEME.Text
+            nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+            nameLbl.Parent = card
+
+            local countLbl = Instance.new("TextLabel")
+            countLbl.Size = UDim2.new(1, -20, 0, 18)
+            countLbl.Position = UDim2.new(0, 10, 0, 25)
+            countLbl.BackgroundTransparency = 1
+            countLbl.Text = "Affected: " .. (preset.affectedCount or 0) .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
+            countLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+            countLbl.TextSize = 11
+            countLbl.TextColor3 = UI_THEME.TextDark
+            countLbl.TextXAlignment = Enum.TextXAlignment.Left
+            countLbl.Parent = card
+
+            local toggleContainer = Instance.new("Frame")
+            toggleContainer.Size = UDim2.new(1, -20, 0, 30)
+            toggleContainer.Position = UDim2.new(0, 10, 0, 50)
+            toggleContainer.BackgroundTransparency = 1
+            toggleContainer.Parent = card
+            local tcLayout = Instance.new("UIListLayout")
+            tcLayout.FillDirection = Enum.FillDirection.Horizontal
+            tcLayout.Padding = UDim.new(0, 10)
+            tcLayout.Parent = toggleContainer
+
+            createToggleBlock(toggleContainer, "Enabled", preset.Enabled ~= false, function(s)
+                preset.Enabled = s
+                preset.lastUpdate = 0
+            end)
+            
+            createToggleBlock(toggleContainer, "Highlight All", preset.HighlightEnabled == true, function(s)
+                preset.HighlightEnabled = s
+            end)
+
+            local editBtn = Instance.new("TextButton")
+            editBtn.Size = UDim2.new(0, 50, 0, 22)
+            editBtn.AnchorPoint = Vector2.new(1, 0)
+            editBtn.Position = UDim2.new(1, -10, 0, 5)
+            editBtn.BackgroundColor3 = Color3.fromRGB(55, 105, 155)
+            editBtn.Text = "Edit"
+            editBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            editBtn.TextSize = 11
+            editBtn.TextColor3 = Color3.new(1, 1, 1)
+            editBtn.Parent = card
+            local eC = Instance.new("UICorner"); eC.CornerRadius = UDim.new(0, 4); eC.Parent = editBtn
+            TrackWorldHumConnection(editBtn.MouseButton1Click:Connect(function()
+                ShowPresetEditor(page, preset, false)
+            end))
+        end
+    end
+end
+
+function ShowWorldHumList(page)
+    if not page then return end
+
+    for _, child in ipairs(page:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+    ClearWorldHumConnections()
+    WorldHumState.selectedHum = nil
+    table.clear(WorldHumState.listEntries)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
     local layout = page:FindFirstChildOfClass("UIListLayout")
     if not layout then
@@ -10607,6 +10894,19 @@ function ShowWorldHumList(page)
         layout.SortOrder = Enum.SortOrder.LayoutOrder
         layout.Parent = page
     end
+
+    local manageBtn = Instance.new("TextButton")
+    manageBtn.Size = UDim2.new(1, 0, 0, 36)
+    manageBtn.BackgroundColor3 = Color3.fromRGB(50, 90, 150)
+    manageBtn.Text = "⚙ Manage Pre-sets"
+    manageBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    manageBtn.TextSize = 14
+    manageBtn.TextColor3 = Color3.new(1, 1, 1)
+    manageBtn.Parent = page
+    local mC = Instance.new("UICorner"); mC.CornerRadius = UDim.new(0, 6); mC.Parent = manageBtn
+    TrackWorldHumConnection(manageBtn.MouseButton1Click:Connect(function()
+        ShowPresetManager(page)
+    end))
 
     UI.CreateSection(page, "Nearby Humanoids")
 
