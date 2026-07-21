@@ -9713,7 +9713,7 @@ local function BuildConfigTab(page)
         local abLabel = Instance.new("TextLabel")
         abLabel.Size = UDim2.fromScale(1, 1)
         abLabel.BackgroundTransparency = 1
-        abLabel.Text = "⚠  File I/O API is unavailable on this executor.\nConfig saving & loading is disabled."
+        abLabel.Text = "File I/O API is unavailable on this executor.\nConfig saving & loading is disabled."
         abLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
         abLabel.TextSize = 11
         abLabel.TextColor3 = Color3.fromRGB(230, 100, 100)
@@ -9754,7 +9754,7 @@ local function BuildConfigTab(page)
     saveUniversalBtn.BackgroundColor3 = THEME.Accent
     saveUniversalBtn.BackgroundTransparency = 0.2
     saveUniversalBtn.BorderSizePixel = 0
-    saveUniversalBtn.Text = "💾  Save as Universal Pre-set Profile"
+    saveUniversalBtn.Text = "Save as Universal Pre-set Profile"
     saveUniversalBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     saveUniversalBtn.TextSize = 13
     saveUniversalBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -9768,26 +9768,26 @@ local function BuildConfigTab(page)
         TweenService:Create(saveUniversalBtn, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
 
         if not apiAvailable then
-            UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            UI.Notify("Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
             return
         end
         local name = saveNameBox.Text:match("^%s*(.-)%s*$")
         if name == "" then
-            UI.Notify("⚠ Invalid Name", "Please enter a profile name before saving.", 4)
+            UI.Notify("Invalid Name", "Please enter a profile name before saving.", 4)
             return
         end
         local ok, err = ConfigManager.SaveUniversal(name)
         if ok then
-            UI.Notify("✅ Profile Saved", "Universal profile \"" .. name .. "\" saved successfully.", 5)
+            UI.Notify("Profile Saved", "Universal profile \"" .. name .. "\" saved successfully.", 5)
             saveNameBox.Text = ""
             task.wait(0.1)
             -- Refresh the profile lists
             if _G._SP3AR_ConfigRefresh then pcall(_G._SP3AR_ConfigRefresh) end
         else
             if err == "writefile API unavailable" then
-                UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+                UI.Notify("Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
             else
-                UI.Notify("❌ Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
+                UI.Notify("Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
             end
         end
     end))
@@ -9798,7 +9798,7 @@ local function BuildConfigTab(page)
     savePerGameBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 160)
     savePerGameBtn.BackgroundTransparency = 0.1
     savePerGameBtn.BorderSizePixel = 0
-    savePerGameBtn.Text = "🎮  Save as Per-Game Config  (PlaceId: " .. tostring(game.PlaceId) .. ")"
+    savePerGameBtn.Text = "Save as Per-Game Config  (PlaceId: " .. tostring(game.PlaceId) .. ")"
     savePerGameBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     savePerGameBtn.TextSize = 12
     savePerGameBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -9812,25 +9812,25 @@ local function BuildConfigTab(page)
         TweenService:Create(savePerGameBtn, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
 
         if not apiAvailable then
-            UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+            UI.Notify("Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
             return
         end
         local name = saveNameBox.Text:match("^%s*(.-)%s*$")
         if name == "" then
-            UI.Notify("⚠ Invalid Name", "Please enter a profile name before saving.", 4)
+            UI.Notify("Invalid Name", "Please enter a profile name before saving.", 4)
             return
         end
         local ok, err = ConfigManager.SavePerGame(name)
         if ok then
-            UI.Notify("✅ Profile Saved", "Per-Game profile \"" .. name .. "\" saved for PlaceId " .. tostring(game.PlaceId) .. ".", 5)
+            UI.Notify("Profile Saved", "Per-Game profile \"" .. name .. "\" saved for PlaceId " .. tostring(game.PlaceId) .. ".", 5)
             saveNameBox.Text = ""
             task.wait(0.1)
             if _G._SP3AR_ConfigRefresh then pcall(_G._SP3AR_ConfigRefresh) end
         else
             if err == "writefile API unavailable" then
-                UI.Notify("⚠ Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
+                UI.Notify("Config Unavailable", "writefile API is inaccessible. Saving configs is unavailable on this executor.", 7)
             else
-                UI.Notify("❌ Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
+                UI.Notify("Save Failed", "Could not write profile \"" .. name .. "\". Check executor permissions.", 6)
             end
         end
     end))
@@ -9843,7 +9843,7 @@ local function BuildConfigTab(page)
     resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     resetBtn.BackgroundTransparency = 0
     resetBtn.BorderSizePixel = 0
-    resetBtn.Text = "🔄  Reset to Default Config"
+    resetBtn.Text = "Reset to Default Config"
     resetBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     resetBtn.TextSize = 13
     resetBtn.TextColor3 = THEME.TextDark
@@ -9854,14 +9854,14 @@ local function BuildConfigTab(page)
     TrackConnection(resetBtn.MouseButton1Click:Connect(function()
         if not resetConfirming then
             resetConfirming = true
-            resetBtn.Text = "⚠  Confirm Reset? (click again)"
+            resetBtn.Text = "Confirm Reset? (click again)"
             resetBtn.TextColor3 = Color3.fromRGB(240, 100, 80)
             TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(200, 60, 60)}):Play()
             TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(65, 25, 25)}):Play()
             -- Auto-cancel after 4 seconds
             resetTimer = task.delay(4, function()
                 resetConfirming = false
-                resetBtn.Text = "🔄  Reset to Default Config"
+                resetBtn.Text = "Reset to Default Config"
                 resetBtn.TextColor3 = THEME.TextDark
                 TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(80, 80, 80)}):Play()
                 TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
@@ -9870,12 +9870,12 @@ local function BuildConfigTab(page)
             -- Confirmed
             if resetTimer then task.cancel(resetTimer) end
             resetConfirming = false
-            resetBtn.Text = "🔄  Reset to Default Config"
+            resetBtn.Text = "Reset to Default Config"
             resetBtn.TextColor3 = THEME.TextDark
             TweenService:Create(rbStroke, TWEENS.MEDIUM, {Color = Color3.fromRGB(80, 80, 80)}):Play()
             TweenService:Create(resetBtn, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
             ConfigManager.ResetToDefaults()
-            UI.Notify("🔄 Defaults Restored", "All settings have been reset to their hardcoded defaults.", 5)
+            UI.Notify("Defaults Restored", "All settings have been reset to their hardcoded defaults.", 5)
         end
     end))
 
@@ -9919,7 +9919,7 @@ local function BuildConfigTab(page)
     refreshBtn.Size = UDim2.new(1, 0, 0, 30)
     refreshBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
     refreshBtn.BorderSizePixel = 0
-    refreshBtn.Text = "↺  Refresh Profile Lists"
+    refreshBtn.Text = "Refresh Profile Lists"
     refreshBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     refreshBtn.TextSize = 12
     refreshBtn.TextColor3 = THEME.TextDark
@@ -9951,7 +9951,7 @@ local function BuildConfigTab(page)
         nameLabel.Position = UDim2.new(0, 10, 0, 6)
         nameLabel.BackgroundTransparency = 1
         nameLabel.Text = profileData.name
-            .. (isCurrentGame and "  ⚡ Current Game" or "")
+            .. (isCurrentGame and "  [Current Game]" or "")
             .. (profileData.isPerGame and not isCurrentGame and ("  [PlaceId: " .. tostring(profileData.placeId) .. "]") or "")
         nameLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         nameLabel.TextSize = 12
@@ -9985,28 +9985,28 @@ local function BuildConfigTab(page)
         btnLayout.Parent = btnRow
 
         -- Load button
-        local loadBtn = makeSmallBtn(btnRow, "▶ Load", Color3.fromRGB(30, 80, 40), THEME.Success, 68)
+        local loadBtn = makeSmallBtn(btnRow, "Load", Color3.fromRGB(30, 80, 40), THEME.Success, 58)
         TrackConnection(loadBtn.MouseButton1Click:Connect(function()
             local ok, nameOrErr = ConfigManager.LoadProfile(profileData.fileName)
             if ok then
-                UI.Notify("✅ Profile Loaded", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been applied.", 5)
+                UI.Notify("Profile Loaded", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been applied.", 5)
             else
-                UI.Notify("❌ Load Failed", "Profile \"" .. profileData.name .. "\" could not be parsed. File may be corrupted.", 6)
+                UI.Notify("Load Failed", "Profile \"" .. profileData.name .. "\" could not be parsed. File may be corrupted.", 6)
             end
         end))
 
         -- Auto-load toggle button
         local autoState = profileData.autoLoad
         local autoBtn = makeSmallBtn(btnRow,
-            autoState and "🔁 Auto: ON" or "○ Auto: OFF",
+            autoState and "Auto: ON" or "Auto: OFF",
             autoState and Color3.fromRGB(30, 60, 30) or Color3.fromRGB(45, 45, 45),
             autoState and THEME.Success or THEME.TextDark,
-            82)
+            76)
         TrackConnection(autoBtn.MouseButton1Click:Connect(function()
             autoState = not autoState
             local ok, err = ConfigManager.SetAutoLoad(profileData.fileName, autoState)
             if ok then
-                autoBtn.Text = autoState and "🔁 Auto: ON" or "○ Auto: OFF"
+                autoBtn.Text = autoState and "Auto: ON" or "Auto: OFF"
                 autoBtn.BackgroundColor3 = autoState and Color3.fromRGB(30, 60, 30) or Color3.fromRGB(45, 45, 45)
                 autoBtn.TextColor3 = autoState and THEME.Success or THEME.TextDark
                 autoLabel.Text = autoState and "● Auto-Load: ON" or "○ Auto-Load: OFF"
@@ -10014,18 +10014,18 @@ local function BuildConfigTab(page)
                 rowStroke.Color = autoState and THEME.Accent or Color3.fromRGB(50, 50, 50)
                 rowStroke.Transparency = autoState and 0.3 or 0.8
                 if autoState then
-                    UI.Notify("🔁 Auto-Load Enabled", "Profile \"" .. profileData.name .. "\" will now auto-load on startup.", 5)
+                    UI.Notify("Auto-Load Enabled", "Profile \"" .. profileData.name .. "\" will now auto-load on startup.", 5)
                 else
-                    UI.Notify("🔁 Auto-Load Disabled", "Profile \"" .. profileData.name .. "\" will no longer auto-load.", 5)
+                    UI.Notify("Auto-Load Disabled", "Profile \"" .. profileData.name .. "\" will no longer auto-load.", 5)
                 end
             else
-                UI.Notify("⚠ Auto-Load Error", "Could not update auto-load state for \"" .. profileData.name .. "\".", 5)
+                UI.Notify("Auto-Load Error", "Could not update auto-load state for \"" .. profileData.name .. "\".", 5)
             end
         end))
 
         -- Rename button (with inline TextBox)
         local renaming = false
-        local renameBtn = makeSmallBtn(btnRow, "✏ Rename", Color3.fromRGB(45, 45, 60), THEME.Text, 72)
+        local renameBtn = makeSmallBtn(btnRow, "Rename", Color3.fromRGB(45, 45, 60), THEME.Text, 62)
         local renameBox = nil
         local renameConfirmBtn = nil
 
@@ -10034,7 +10034,7 @@ local function BuildConfigTab(page)
             renaming = true
 
             rowFrame.Size = UDim2.new(1, 0, 0, 100)
-            renameBtn.Text = "✏ Renaming..."
+            renameBtn.Text = "Renaming..."
             renameBtn.TextColor3 = THEME.Accent
 
             -- Inline rename textbox
@@ -10043,30 +10043,46 @@ local function BuildConfigTab(page)
             rbFrame.Size = UDim2.new(0.6, -8, 0, 26)
             renameBox = rbBox
 
-            local confirmRenameBtn = makeSmallBtn(rowFrame, "✓ OK", Color3.fromRGB(30, 80, 40), THEME.Success, 52)
+            local confirmRenameBtn = makeSmallBtn(rowFrame, "OK", Color3.fromRGB(30, 80, 40), THEME.Success, 46)
             confirmRenameBtn.Position = UDim2.new(0.6, 2, 0, 70)
             confirmRenameBtn.AnchorPoint = Vector2.new(0, 0)
 
-            local cancelRenameBtn = makeSmallBtn(rowFrame, "✕", Color3.fromRGB(70, 30, 30), THEME.Fail, 32)
-            cancelRenameBtn.Position = UDim2.new(0.6, 58, 0, 70)
+            local cancelRenameBtn = makeSmallBtn(rowFrame, "Cancel", Color3.fromRGB(70, 30, 30), THEME.Fail, 52)
+            cancelRenameBtn.Position = UDim2.new(0.6, 52, 0, 70)
             cancelRenameBtn.AnchorPoint = Vector2.new(0, 0)
 
             TrackConnection(confirmRenameBtn.MouseButton1Click:Connect(function()
                 local newName = rbBox.Text:match("^%s*(.-)%s*$")
                 if newName == "" then
-                    UI.Notify("⚠ Invalid Name", "Please enter a new name before confirming.", 4)
+                    UI.Notify("Invalid Name", "Please enter a new name before confirming.", 4)
                     return
                 end
                 local ok, oldNameOrErr = ConfigManager.RenameProfile(profileData.fileName, newName, profileType)
                 if ok then
-                    UI.Notify("✅ Renamed", "Profile \"" .. (oldNameOrErr or profileData.name) .. "\" renamed to \"" .. newName .. "\".", 5)
-                    task.wait(0.2)
-                    if refreshFn then refreshFn() end
-                else
-                    UI.Notify("❌ Rename Failed", "Could not rename profile. Check executor permissions.", 6)
+                    UI.Notify("Renamed", "Profile \"" .. (oldNameOrErr or profileData.name) .. "\" renamed to \"" .. newName .. "\".", 5)
+                    -- Update the row display in-place immediately
+                    profileData.name = newName
+                    nameLabel.Text = newName
+                        .. (isCurrentGame and "  [Current Game]" or "")
+                        .. (profileData.isPerGame and not isCurrentGame and ("  [PlaceId: " .. tostring(profileData.placeId) .. "]") or "")
+                    -- Collapse the rename UI
                     renaming = false
                     rowFrame.Size = UDim2.new(1, 0, 0, 68)
-                    renameBtn.Text = "✏ Rename"
+                    renameBtn.Text = "Rename"
+                    renameBtn.TextColor3 = THEME.Text
+                    rbFrame:Destroy()
+                    confirmRenameBtn:Destroy()
+                    cancelRenameBtn:Destroy()
+                    -- Deferred full refresh so the filesystem listing catches up
+                    task.defer(function()
+                        task.wait(0.3)
+                        if refreshFn then pcall(refreshFn) end
+                    end)
+                else
+                    UI.Notify("Rename Failed", "Could not rename profile. Check executor permissions.", 6)
+                    renaming = false
+                    rowFrame.Size = UDim2.new(1, 0, 0, 68)
+                    renameBtn.Text = "Rename"
                     renameBtn.TextColor3 = THEME.Text
                     rbFrame:Destroy()
                     confirmRenameBtn:Destroy()
@@ -10077,7 +10093,7 @@ local function BuildConfigTab(page)
             TrackConnection(cancelRenameBtn.MouseButton1Click:Connect(function()
                 renaming = false
                 rowFrame.Size = UDim2.new(1, 0, 0, 68)
-                renameBtn.Text = "✏ Rename"
+                renameBtn.Text = "Rename"
                 renameBtn.TextColor3 = THEME.Text
                 rbFrame:Destroy()
                 confirmRenameBtn:Destroy()
@@ -10088,27 +10104,27 @@ local function BuildConfigTab(page)
         -- Overwrite button
         local overwriteConfirming = false
         local overwriteTimer = nil
-        local overwriteBtn = makeSmallBtn(btnRow, "💾 Overwrite", Color3.fromRGB(50, 50, 20), Color3.fromRGB(220, 200, 80), 84)
+        local overwriteBtn = makeSmallBtn(btnRow, "Overwrite", Color3.fromRGB(50, 50, 20), Color3.fromRGB(220, 200, 80), 72)
         TrackConnection(overwriteBtn.MouseButton1Click:Connect(function()
             if not overwriteConfirming then
                 overwriteConfirming = true
-                overwriteBtn.Text = "⚠ Confirm?"
+                overwriteBtn.Text = "Confirm?"
                 overwriteBtn.BackgroundColor3 = Color3.fromRGB(90, 80, 10)
                 overwriteTimer = task.delay(3, function()
                     overwriteConfirming = false
-                    overwriteBtn.Text = "💾 Overwrite"
+                    overwriteBtn.Text = "Overwrite"
                     overwriteBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 20)
                 end)
             else
                 if overwriteTimer then task.cancel(overwriteTimer) end
                 overwriteConfirming = false
-                overwriteBtn.Text = "💾 Overwrite"
+                overwriteBtn.Text = "Overwrite"
                 overwriteBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 20)
                 local ok, nameOrErr = ConfigManager.OverwriteProfile(profileData.fileName)
                 if ok then
-                    UI.Notify("💾 Profile Updated", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been overwritten with current settings.", 5)
+                    UI.Notify("Profile Updated", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been overwritten with current settings.", 5)
                 else
-                    UI.Notify("❌ Overwrite Failed", "Could not overwrite profile \"" .. profileData.name .. "\". Check executor permissions.", 6)
+                    UI.Notify("Overwrite Failed", "Could not overwrite profile \"" .. profileData.name .. "\". Check executor permissions.", 6)
                 end
             end
         end))
@@ -10116,16 +10132,16 @@ local function BuildConfigTab(page)
         -- Delete button (with confirm)
         local deleteConfirming = false
         local deleteTimer = nil
-        local deleteBtn = makeSmallBtn(btnRow, "🗑 Delete", Color3.fromRGB(70, 30, 30), THEME.Fail, 68)
+        local deleteBtn = makeSmallBtn(btnRow, "Delete", Color3.fromRGB(70, 30, 30), THEME.Fail, 56)
 
         TrackConnection(deleteBtn.MouseButton1Click:Connect(function()
             if not deleteConfirming then
                 deleteConfirming = true
-                deleteBtn.Text = "⚠ Confirm?"
+                deleteBtn.Text = "Confirm?"
                 deleteBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
                 deleteTimer = task.delay(3, function()
                     deleteConfirming = false
-                    deleteBtn.Text = "🗑 Delete"
+                    deleteBtn.Text = "Delete"
                     deleteBtn.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
                 end)
             else
@@ -10133,12 +10149,12 @@ local function BuildConfigTab(page)
                 deleteConfirming = false
                 local ok, err = ConfigManager.DeleteProfile(profileData.fileName)
                 if ok then
-                    UI.Notify("🗑 Profile Deleted", "Profile \"" .. profileData.name .. "\" has been deleted.", 5)
+                    UI.Notify("Profile Deleted", "Profile \"" .. profileData.name .. "\" has been deleted.", 5)
                     task.wait(0.2)
                     if refreshFn then refreshFn() end
                 else
-                    UI.Notify("❌ Delete Failed", "Could not delete profile \"" .. profileData.name .. "\".", 6)
-                    deleteBtn.Text = "🗑 Delete"
+                    UI.Notify("Delete Failed", "Could not delete profile \"" .. profileData.name .. "\".", 6)
+                    deleteBtn.Text = "Delete"
                     deleteBtn.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
                 end
             end
@@ -10209,7 +10225,7 @@ local function BuildConfigTab(page)
     -- Fire API warning notification immediately if file I/O is unavailable
     if not apiAvailable then
         task.delay(1, function()
-            UI.Notify("⚠ Config Unavailable", "File I/O API inaccessible on this executor. Config saving/loading is disabled.", 8)
+            UI.Notify("Config Unavailable", "File I/O API inaccessible on this executor. Config saving/loading is disabled.", 8)
         end)
     end
     -- Populate profile lists now that all containers exist
