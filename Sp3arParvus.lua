@@ -201,6 +201,10 @@ do
     end
 end
 
+local UIState
+local AdvancedPlayerPanelState
+local WorldHumState
+
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  ConfigManager — Local Profile Save/Load System                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
@@ -723,7 +727,7 @@ local UI_THEME = {
     Fail = Color3.fromRGB(220, 50, 50)
 }
 
-local UIState = {
+UIState = {
     MainFrame = nil,
     PriorityLabel = nil,
     Tabs = {},
@@ -745,7 +749,7 @@ local PROPERTY_CATEGORIES = {
     Transform = {"Position", "Size", "Rotation", "CFrame"}
 }
 
-local AdvancedPlayerPanelState = {
+AdvancedPlayerPanelState = {
     Visible = false,
     CurrentView = "List",
     SelectedPlayer = nil,
@@ -927,7 +931,7 @@ local HumanoidState = {
     captured = false,
     presetsApplied = false
 }
-local WorldHumState = {
+WorldHumState = {
     selectedHum = nil,
     Page = nil,
     SubPage = "List",
