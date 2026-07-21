@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.7                                                  ║
+-- ║  Version: 4.2.8                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.7" -- Config System: local profile save/load, per-game presets, startup auto-load priority
+local VERSION = "4.2.8" -- Player-page & Humanoid data added to config saves & world-humanoid-preset-creator
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -909,6 +909,7 @@ local HumanoidState = {
 local WorldHumState = {
     selectedHum = nil,
     Page = nil,
+    SubPage = "List",
     lockedProperties = {},
     connections = {},
     updaters = {},
@@ -1435,7 +1436,7 @@ function UpdateHumanoidUI()
 end
 
 local _nearbyOverlapParams = OverlapParams.new()
-_nearbyOverlapParams.MaxParts = 500
+_nearbyOverlapParams.MaxParts = 0
 
 function GetNearbyHumanoids()
     local humanoids = {}
@@ -10393,6 +10394,7 @@ local ConfigTab = UI.CreateTab("Config")
 BuildConfigTab(ConfigTab)
 
 local function ShowPresetEditor(page, preset, isNew)
+    WorldHumState.SubPage = "Editor"
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -10714,6 +10716,7 @@ end
 
 function ShowPresetManager(page)
     if not page then return end
+    WorldHumState.SubPage = "Manager"
 
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
@@ -10873,8 +10876,61 @@ function ShowPresetManager(page)
     end
 end
 
+function UpdateWorldHumListInPlace()
+    local page = WorldHumState.Page
+    if not page then return end
+
+    local humanoids = GetNearbyHumanoids()
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
+    local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+    local existingHums = {}
+    for _, entry in ipairs(WorldHumState.listEntries) do
+        existingHums[entry.hum] = entry
+    end
+
+    local humDataList = {}
+    for _, hum in ipairs(humanoids) do
+        local model = hum.Parent
+        local root = hum.RootPart or (model and model.PrimaryPart)
+        local dist = root and (root.Position - myPos).Magnitude or 999999
+        table.insert(humDataList, {hum = hum, dist = dist})
+    end
+
+    table.sort(humDataList, function(a, b)
+        return a.dist < b.dist
+    end)
+
+    local matchedHums = {}
+    local anyChanges = false
+
+    for _, data in ipairs(humDataList) do
+        local hum = data.hum
+        matchedHums[hum] = true
+        if existingHums[hum] then
+            existingHums[hum].label.Text = math.floor(data.dist) .. " studs away"
+            existingHums[hum].card.LayoutOrder = math.floor(data.dist)
+        else
+            anyChanges = true
+        end
+    end
+
+    for _, entry in ipairs(WorldHumState.listEntries) do
+        if not matchedHums[entry.hum] then
+            anyChanges = true
+            break
+        end
+    end
+
+    if anyChanges then
+        ShowWorldHumList(page)
+    end
+end
+
 function ShowWorldHumList(page)
     if not page then return end
+    WorldHumState.SubPage = "List"
 
     for _, child in ipairs(page:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
@@ -13259,10 +13315,10 @@ function UnifiedHeartbeat(dt)
         end
     end
 
-    if UIState.CurrentTab == "WorldHumanoids" and not WorldHumState.selectedHum then
+    if UIState.CurrentTab == "WorldHumanoids" and WorldHumState.SubPage == "List" and not WorldHumState.selectedHum then
         if (now - lastWorldHumListUpdate) > 4.0 then
             lastWorldHumListUpdate = now
-            ShowWorldHumList(WorldHumState.Page)
+            UpdateWorldHumListInPlace()
         end
     end
 
