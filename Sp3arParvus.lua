@@ -424,6 +424,23 @@ do
         return writeOk, writeOk and nil or tostring(writeErr)
     end
 
+    -- Overwrite an existing profile's flags in-place (preserves name, autoLoad, placeId, etc.)
+    function ConfigManager.OverwriteProfile(filePath)
+        if not hasFileAPIs() then
+            return false, "file API unavailable"
+        end
+        local ok, raw = pcall(readfile, filePath)
+        if not ok or not raw then return false, "read error" end
+        local parsed = nil
+        pcall(function() parsed = decode(raw) end)
+        if not parsed then return false, "parse error" end
+        parsed.flags   = serializeFlags()
+        parsed.savedAt = os.time()
+        parsed.version = VERSION
+        local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
+        return writeOk, writeOk and (parsed.name or "Unknown") or tostring(writeErr)
+    end
+
     -- Rename a profile (write new file, delete old)
     function ConfigManager.RenameProfile(filePath, newName, profileType)
         if not hasFileAPIs() then
@@ -9659,70 +9676,21 @@ local function BuildConfigTab(page)
     end
 
     -- ── State ───────────────────────────────────────────────────────────
-    local configEnabled = false
     local apiAvailable  = ConfigManager.HasFileAPIs()
 
-    -- ── Gate toggle row ────────────────────────────────────────────────
-    local gateFrame = Instance.new("Frame")
-    gateFrame.Size = UDim2.new(1, 0, 0, 40)
-    gateFrame.BackgroundColor3 = THEME.Element
-    gateFrame.BorderSizePixel = 0
-    gateFrame.Parent = page
-    local gC = Instance.new("UICorner"); gC.CornerRadius = UDim.new(0, 6); gC.Parent = gateFrame
-    local gStroke = Instance.new("UIStroke")
-    gStroke.Color = THEME.Accent
-    gStroke.Thickness = 1
-    gStroke.Transparency = 0.6
-    gStroke.Parent = gateFrame
-
-    local gLabel = Instance.new("TextLabel")
-    gLabel.Size = UDim2.new(0.75, 0, 1, 0)
-    gLabel.Position = UDim2.new(0, 12, 0, 0)
-    gLabel.BackgroundTransparency = 1
-    gLabel.Text = "⚙  Config System"
-    gLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    gLabel.TextSize = 13
-    gLabel.TextColor3 = THEME.Text
-    gLabel.TextXAlignment = Enum.TextXAlignment.Left
-    gLabel.Parent = gateFrame
-
-    local gSwitch = Instance.new("Frame")
-    gSwitch.Size = UDim2.new(0, 44, 0, 22)
-    gSwitch.AnchorPoint = Vector2.new(1, 0.5)
-    gSwitch.Position = UDim2.new(1, -12, 0.5, 0)
-    gSwitch.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    gSwitch.BorderSizePixel = 0
-    gSwitch.Parent = gateFrame
-    local gsC = Instance.new("UICorner"); gsC.CornerRadius = UDim.new(0, 2); gsC.Parent = gSwitch
-    local gKnob = Instance.new("Frame")
-    gKnob.Size = UDim2.new(0, 18, 0, 18)
-    gKnob.AnchorPoint = Vector2.new(0, 0.5)
-    gKnob.Position = UDim2.new(0, 2, 0.5, 0)
-    gKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    gKnob.BorderSizePixel = 0
-    gKnob.Parent = gSwitch
-    local gkC = Instance.new("UICorner"); gkC.CornerRadius = UDim.new(0, 2); gkC.Parent = gKnob
-    local gBtn = Instance.new("TextButton")
-    gBtn.Size = UDim2.new(1, 0, 1, 0)
-    gBtn.BackgroundTransparency = 1
-    gBtn.Text = ""
-    gBtn.Parent = gSwitch
-
-    -- Expandable container (hidden when toggled off)
+    -- ── Content frame (always visible) ───────────────────────────────────
     local expandable = Instance.new("Frame")
     expandable.Size = UDim2.new(1, 0, 0, 0)
     expandable.BackgroundTransparency = 1
-    expandable.ClipsDescendants = true
-    expandable.Visible = false
+    expandable.ClipsDescendants = false
+    expandable.Visible = true
     expandable.Parent = page
     local exLayout = Instance.new("UIListLayout")
     exLayout.Padding = UDim.new(0, 5)
     exLayout.SortOrder = Enum.SortOrder.LayoutOrder
     exLayout.Parent = expandable
     TrackConnection(exLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        if configEnabled then
-            expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
-        end
+        expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
     end))
 
     -- ─────────────────────────────────────────────────────────────────
@@ -10092,8 +10060,8 @@ local function BuildConfigTab(page)
                 local ok, oldNameOrErr = ConfigManager.RenameProfile(profileData.fileName, newName, profileType)
                 if ok then
                     UI.Notify("✅ Renamed", "Profile \"" .. (oldNameOrErr or profileData.name) .. "\" renamed to \"" .. newName .. "\".", 5)
-                    task.wait(0.05)
-                    if refreshFn then pcall(refreshFn) end
+                    task.wait(0.2)
+                    if refreshFn then refreshFn() end
                 else
                     UI.Notify("❌ Rename Failed", "Could not rename profile. Check executor permissions.", 6)
                     renaming = false
@@ -10117,6 +10085,34 @@ local function BuildConfigTab(page)
             end))
         end))
 
+        -- Overwrite button
+        local overwriteConfirming = false
+        local overwriteTimer = nil
+        local overwriteBtn = makeSmallBtn(btnRow, "💾 Overwrite", Color3.fromRGB(50, 50, 20), Color3.fromRGB(220, 200, 80), 84)
+        TrackConnection(overwriteBtn.MouseButton1Click:Connect(function()
+            if not overwriteConfirming then
+                overwriteConfirming = true
+                overwriteBtn.Text = "⚠ Confirm?"
+                overwriteBtn.BackgroundColor3 = Color3.fromRGB(90, 80, 10)
+                overwriteTimer = task.delay(3, function()
+                    overwriteConfirming = false
+                    overwriteBtn.Text = "💾 Overwrite"
+                    overwriteBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 20)
+                end)
+            else
+                if overwriteTimer then task.cancel(overwriteTimer) end
+                overwriteConfirming = false
+                overwriteBtn.Text = "💾 Overwrite"
+                overwriteBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 20)
+                local ok, nameOrErr = ConfigManager.OverwriteProfile(profileData.fileName)
+                if ok then
+                    UI.Notify("💾 Profile Updated", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been overwritten with current settings.", 5)
+                else
+                    UI.Notify("❌ Overwrite Failed", "Could not overwrite profile \"" .. profileData.name .. "\". Check executor permissions.", 6)
+                end
+            end
+        end))
+
         -- Delete button (with confirm)
         local deleteConfirming = false
         local deleteTimer = nil
@@ -10138,8 +10134,8 @@ local function BuildConfigTab(page)
                 local ok, err = ConfigManager.DeleteProfile(profileData.fileName)
                 if ok then
                     UI.Notify("🗑 Profile Deleted", "Profile \"" .. profileData.name .. "\" has been deleted.", 5)
-                    task.wait(0.05)
-                    if refreshFn then pcall(refreshFn) end
+                    task.wait(0.2)
+                    if refreshFn then refreshFn() end
                 else
                     UI.Notify("❌ Delete Failed", "Could not delete profile \"" .. profileData.name .. "\".", 6)
                     deleteBtn.Text = "🗑 Delete"
@@ -10209,30 +10205,15 @@ local function BuildConfigTab(page)
         refreshLists()
     end))
 
-    -- ── Gate toggle logic ──────────────────────────────────────────────
-    TrackConnection(gBtn.MouseButton1Click:Connect(function()
-        configEnabled = not configEnabled
-
-        -- Update switch visuals
-        local targetColor  = configEnabled and THEME.Accent or Color3.fromRGB(50, 50, 50)
-        local targetKnobPos = configEnabled and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
-        TweenService:Create(gSwitch, TWEENS.MEDIUM, {BackgroundColor3 = targetColor}):Play()
-        TweenService:Create(gKnob,  TWEENS.SMOOTH, {Position = targetKnobPos}):Play()
-        TweenService:Create(gStroke, TWEENS.MEDIUM, {Transparency = configEnabled and 0.2 or 0.6}):Play()
-
-        if configEnabled then
-            expandable.Visible = true
-            refreshLists()
-            expandable.Size = UDim2.new(1, 0, 0, exLayout.AbsoluteContentSize.Y)
-            -- Fire API warning notification if needed
-            if not apiAvailable then
-                UI.Notify("⚠ Config Unavailable", "File I/O API inaccessible on this executor. Config saving/loading is disabled.", 8)
-            end
-        else
-            expandable.Visible = false
-            expandable.Size = UDim2.new(1, 0, 0, 0)
-        end
-    end))
+    -- ── Initial population ─────────────────────────────────────────────
+    -- Fire API warning notification immediately if file I/O is unavailable
+    if not apiAvailable then
+        task.delay(1, function()
+            UI.Notify("⚠ Config Unavailable", "File I/O API inaccessible on this executor. Config saving/loading is disabled.", 8)
+        end)
+    end
+    -- Populate profile lists now that all containers exist
+    task.defer(refreshLists)
 end
 
 local ConfigTab = UI.CreateTab("Config")
