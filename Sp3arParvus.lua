@@ -1409,10 +1409,12 @@ function CaptureHumanoidSettings(humanoid)
 
             if flagMapping[prop] then
                 local flag = flagMapping[prop]
-                Flags[flag] = val
-                local updater = UIState.Updaters[flag]
-                if updater then
-                    updater(val)
+                if not USER_MODIFIED_FLAGS[flag] then
+                    Flags[flag] = val
+                    local updater = UIState.Updaters[flag]
+                    if updater then
+                        updater(val)
+                    end
                 end
             end
         end)
@@ -1435,8 +1437,9 @@ function ApplyHumanoidSettings()
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
         local isLocked = Flags[flag .. "/Locked"] == true
+        local isConfigured = USER_MODIFIED_FLAGS[flag] == true
 
-        if isEnforced or isLocked then
+        if isEnforced or isLocked or isConfigured then
             local val = Flags[flag]
             if val ~= nil then
                 pcall(SafeSetProp, humanoid, prop, val)
@@ -1451,7 +1454,7 @@ function UpdateHumanoidUI()
     if not humanoid then return end
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        if Flags[flag .. "/Locked"] then continue end
+        if Flags[flag .. "/Locked"] or USER_MODIFIED_FLAGS[flag] then continue end
 
         local success, val = pcall(SafeGetProp, humanoid, prop)
 
