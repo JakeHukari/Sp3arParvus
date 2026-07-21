@@ -3573,7 +3573,10 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         TweenService:Create(Knob, TWEENS.SMOOTH, {Position = targetPos}):Play()
     end
 
-    UIState.Updaters[flag] = updateVisuals
+    UIState.Updaters[flag] = function(state)
+        updateVisuals(state)
+        if callback then callback(state) end
+    end
 
     TrackConnection(Button.MouseButton1Click:Connect(function()
         Flags[flag] = not Flags[flag]
@@ -3661,6 +3664,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
                 val = math.floor(val / step + 0.5) * step
             end
             Input.Text = tostring(val)
+            if callback then callback(val) end
         end
     end
 
