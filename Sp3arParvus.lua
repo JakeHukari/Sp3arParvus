@@ -10522,8 +10522,8 @@ local function ShowPresetEditor(page, preset, isNew)
         local ifCorner = Instance.new("UICorner"); ifCorner.CornerRadius = UDim.new(0, 4); ifCorner.Parent = InputFrame
 
         local Input = Instance.new("TextBox")
-        Input.Size = UDim2.new(1, -20, 1, 0)
-        Input.Position = UDim2.new(0, 10, 0, 0)
+        Input.Size = UDim2.new(1, -50, 1, 0)
+        Input.Position = UDim2.new(0, 25, 0, 0)
         Input.BackgroundTransparency = 1
         Input.Text = tostring(math.floor(draft.Properties[prop] * 100) / 100)
         Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -10543,6 +10543,27 @@ local function ShowPresetEditor(page, preset, isNew)
             Input.Text = tostring(math.floor(val * 100) / 100)
         end
         TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+
+        local mBtn = Instance.new("TextButton")
+        mBtn.Size = UDim2.new(0, 25, 1, 0)
+        mBtn.BackgroundTransparency = 1
+        mBtn.Text = "-"
+        mBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        mBtn.TextSize = 16
+        mBtn.TextColor3 = UI_THEME.TextDark
+        mBtn.Parent = InputFrame
+        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or 0) - (step or 1)) end))
+
+        local pBtn = Instance.new("TextButton")
+        pBtn.Size = UDim2.new(0, 25, 1, 0)
+        pBtn.Position = UDim2.new(1, -25, 0, 0)
+        pBtn.BackgroundTransparency = 1
+        pBtn.Text = "+"
+        pBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        pBtn.TextSize = 16
+        pBtn.TextColor3 = UI_THEME.TextDark
+        pBtn.Parent = InputFrame
+        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or 0) + (step or 1)) end))
     end
 
     local function makeInputRow(pg, labelText, defaultVal, callback)
@@ -10587,16 +10608,148 @@ local function ShowPresetEditor(page, preset, isNew)
         return box
     end
 
+    local function makeDropdownRow(pg, labelText, options, defaultVal, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 36)
+        frame.BackgroundColor3 = UI_THEME.Element
+        frame.BorderSizePixel = 0
+        frame.Parent = pg
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.4, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 12, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = labelText
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.Text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = frame
+
+        local btnFrame = Instance.new("Frame")
+        btnFrame.Size = UDim2.new(0.6, -16, 0, 26)
+        btnFrame.Position = UDim2.new(1, -8, 0.5, 0)
+        btnFrame.AnchorPoint = Vector2.new(1, 0.5)
+        btnFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        btnFrame.Parent = frame
+        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btnFrame
+
+        local currentIndex = 1
+        for i, v in ipairs(options) do
+            if v == defaultVal then currentIndex = i break end
+        end
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 1, 0)
+        btn.BackgroundTransparency = 1
+        btn.Text = options[currentIndex]
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 13
+        btn.TextColor3 = UI_THEME.Accent
+        btn.Parent = btnFrame
+
+        TrackWorldHumConnection(btn.MouseButton1Click:Connect(function()
+            currentIndex = (currentIndex % #options) + 1
+            btn.Text = options[currentIndex]
+            callback(options[currentIndex])
+        end))
+        return btn
+    end
+
+    local function makeNumericRow(pg, labelText, defaultVal, min, max, step, callback)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 36)
+        frame.BackgroundColor3 = UI_THEME.Element
+        frame.BorderSizePixel = 0
+        frame.Parent = pg
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.4, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 12, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = labelText
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.Text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = frame
+
+        local InputFrame = Instance.new("Frame")
+        InputFrame.Size = UDim2.new(0.6, -16, 0, 26)
+        InputFrame.Position = UDim2.new(1, -8, 0.5, 0)
+        InputFrame.AnchorPoint = Vector2.new(1, 0.5)
+        InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        InputFrame.Parent = frame
+        local ifCorner = Instance.new("UICorner"); ifCorner.CornerRadius = UDim.new(0, 4); ifCorner.Parent = InputFrame
+
+        local Input = Instance.new("TextBox")
+        Input.Size = UDim2.new(1, -50, 1, 0)
+        Input.Position = UDim2.new(0, 25, 0, 0)
+        Input.BackgroundTransparency = 1
+        Input.Text = tostring(math.floor(defaultVal * 100) / 100)
+        Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        Input.TextSize = 13
+        Input.TextColor3 = UI_THEME.Accent
+        Input.ClearTextOnFocus = false
+        Input.Parent = InputFrame
+
+        local currentVal = defaultVal
+
+        local function updateValue(val)
+            val = math.clamp(tonumber(val) or currentVal, min, max)
+            if step and step > 0 then val = math.floor(val / step + 0.5) * step end
+            currentVal = val
+            Input.Text = tostring(math.floor(val * 100) / 100)
+            callback(val)
+        end
+
+        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+
+        local mBtn = Instance.new("TextButton")
+        mBtn.Size = UDim2.new(0, 25, 1, 0)
+        mBtn.BackgroundTransparency = 1
+        mBtn.Text = "-"
+        mBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        mBtn.TextSize = 16
+        mBtn.TextColor3 = UI_THEME.TextDark
+        mBtn.Parent = InputFrame
+        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue(currentVal - step) end))
+
+        local pBtn = Instance.new("TextButton")
+        pBtn.Size = UDim2.new(0, 25, 1, 0)
+        pBtn.Position = UDim2.new(1, -25, 0, 0)
+        pBtn.BackgroundTransparency = 1
+        pBtn.Text = "+"
+        pBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        pBtn.TextSize = 16
+        pBtn.TextColor3 = UI_THEME.TextDark
+        pBtn.Parent = InputFrame
+        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue(currentVal + step) end))
+
+        return InputFrame
+    end
+
     UI.CreateSection(page, "Preset Core Settings")
+    
+    local infoLbl = Instance.new("TextLabel")
+    infoLbl.Size = UDim2.new(1, -10, 0, 50)
+    infoLbl.Position = UDim2.new(0, 5, 0, 0)
+    infoLbl.BackgroundTransparency = 1
+    infoLbl.Text = "Core Settings define how this pre-set finds targets.\n• Target Mode: How it selects humanoids (e.g. Closest Only).\n• Target Count: Max number of humanoids to affect.\n• Update Rate: How often (seconds) properties are applied."
+    infoLbl.TextWrapped = true
+    infoLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+    infoLbl.TextSize = 11
+    infoLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+    infoLbl.TextYAlignment = Enum.TextYAlignment.Top
+    infoLbl.Parent = page
+
     local nameBox = makeInputRow(page, "Target Name", draft.TargetName, function(t) draft.TargetName = t end)
-    local modeBox = makeInputRow(page, "Target Mode", draft.TargetMode, function(t)
-        if t:lower():match("all") then draft.TargetMode = "All Rendered"
-        elseif t:lower():match("x") then draft.TargetMode = "Closest X Amount"
-        else draft.TargetMode = "Closest Only" end
-        t = draft.TargetMode
-    end)
-    local countBox = makeInputRow(page, "Target Count (X)", tostring(draft.TargetCount), function(t) draft.TargetCount = tonumber(t) or 1 end)
-    local rateBox = makeInputRow(page, "Update Rate (Sec)", tostring(draft.UpdateRate), function(t) draft.UpdateRate = math.clamp(tonumber(t) or 2.0, 0.1, 60.0) end)
+    local modeBox = makeDropdownRow(page, "Target Mode", {"Closest Only", "Closest X Amount", "All Rendered"}, draft.TargetMode, function(t) draft.TargetMode = t end)
+    local countBox = makeNumericRow(page, "Target Count (X)", draft.TargetCount, 1, 500, 1, function(v) draft.TargetCount = v end)
+    local rateBox = makeNumericRow(page, "Update Rate (Sec)", draft.UpdateRate, 0.1, 60.0, 0.1, function(v) draft.UpdateRate = v end)
 
     local dropdownContainer = Instance.new("Frame")
     dropdownContainer.Size = UDim2.new(1, 0, 0, 0)
