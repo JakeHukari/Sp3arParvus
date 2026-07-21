@@ -244,6 +244,10 @@ do
                 out[k] = copy
             elseif type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
                 out[k] = v
+            elseif typeof(v) == "Color3" then
+                out[k] = {__type = "Color3", R = v.R, G = v.G, B = v.B}
+            elseif typeof(v) == "EnumItem" then
+                out[k] = {__type = "EnumItem", EnumType = tostring(v.EnumType), Name = v.Name}
             end
         end
         return out
@@ -252,6 +256,17 @@ do
     -- ── Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
+            if type(v) == "table" and v.__type == "Color3" then
+                v = Color3.new(v.R, v.G, v.B)
+            elseif type(v) == "table" and v.__type == "EnumItem" then
+                local enumTypeStr = tostring(v.EnumType):match("Enum%.([^%.]+)") or tostring(v.EnumType)
+                local ok, result = pcall(function() return Enum[enumTypeStr][v.Name] end)
+                if ok and result then
+                    v = result
+                else
+                    continue
+                end
+            end
             if Flags[k] ~= nil then
                 if type(Flags[k]) == "table" and type(v) == "table" then
                     for k2, v2 in pairs(v) do
@@ -331,8 +346,7 @@ do
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
             priorityList    = AdvancedPlayerPanelState.PriorityList,
-            worldHumPresets = safePresets,
-            lockedWorldHums = WorldHumState.lockedProperties
+            worldHumPresets = safePresets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -383,8 +397,7 @@ do
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
             priorityList    = AdvancedPlayerPanelState.PriorityList,
-            worldHumPresets = safePresets,
-            lockedWorldHums = WorldHumState.lockedProperties
+            worldHumPresets = safePresets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -462,9 +475,6 @@ do
             AdvancedPlayerPanelState.PriorityList = parsed.priorityList
         end
         WorldHumState.Presets = type(parsed.worldHumPresets) == "table" and parsed.worldHumPresets or {}
-        if type(parsed.lockedWorldHums) == "table" then
-            WorldHumState.lockedProperties = parsed.lockedWorldHums
-        end
         
         pcall(RebuildAdvancedPlayerPanel)
         
@@ -534,7 +544,6 @@ do
         parsed.teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist
         parsed.priorityList    = AdvancedPlayerPanelState.PriorityList
         parsed.worldHumPresets = WorldHumState.Presets
-        parsed.lockedWorldHums = WorldHumState.lockedProperties
         parsed.savedAt = os.time()
         parsed.version = VERSION
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
@@ -10424,12 +10433,7 @@ local function ShowPresetEditor(page, preset, isNew)
     if preset and preset.Properties then
         for k, v in pairs(preset.Properties) do draft.Properties[k] = v end
     else
-        draft.Properties = {
-            WalkSpeed = 16, JumpPower = 50, JumpHeight = 7.2, Health = 100, MaxHealth = 100,
-            MaxSlopeAngle = 89, HipHeight = 0, Archivable = true, BreakJointsOnDeath = true,
-            EvaluateStateMachine = true, RequiresNeck = true, AutoRotate = true, PlatformStand = false,
-            Sit = false, UseJumpPower = true, AutoJumpEnabled = true, AutomaticScalingEnabled = true
-        }
+        draft.Properties = {}
     end
 
     local draftUpdaters = {}
@@ -10494,13 +10498,24 @@ local function ShowPresetEditor(page, preset, isNew)
         Button.Parent = Switch
 
         local function updateVisuals(state)
-            TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)}):Play()
-            TweenService:Create(Knob, TWEENS.SMOOTH, {Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
+            if state == nil then
+                TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+                TweenService:Create(Knob, TWEENS.SMOOTH, {Position = UDim2.new(0.5, -9, 0.5, 0)}):Play()
+            else
+                TweenService:Create(Switch, TWEENS.MEDIUM, {BackgroundColor3 = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)}):Play()
+                TweenService:Create(Knob, TWEENS.SMOOTH, {Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)}):Play()
+            end
         end
         draftUpdaters[prop] = updateVisuals
 
         TrackWorldHumConnection(Button.MouseButton1Click:Connect(function()
-            draft.Properties[prop] = not draft.Properties[prop]
+            if draft.Properties[prop] == nil then
+                draft.Properties[prop] = true
+            elseif draft.Properties[prop] == true then
+                draft.Properties[prop] = false
+            else
+                draft.Properties[prop] = nil
+            end
             updateVisuals(draft.Properties[prop])
         end))
         updateVisuals(draft.Properties[prop])
@@ -10537,7 +10552,7 @@ local function ShowPresetEditor(page, preset, isNew)
         Input.Size = UDim2.new(1, -50, 1, 0)
         Input.Position = UDim2.new(0, 25, 0, 0)
         Input.BackgroundTransparency = 1
-        Input.Text = tostring(math.floor(draft.Properties[prop] * 100) / 100)
+        Input.Text = draft.Properties[prop] ~= nil and tostring(math.floor(draft.Properties[prop] * 100) / 100) or ""
         Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         Input.TextSize = 13
         Input.TextColor3 = UI_THEME.Accent
@@ -10545,11 +10560,16 @@ local function ShowPresetEditor(page, preset, isNew)
         Input.Parent = InputFrame
 
         draftUpdaters[prop] = function(v)
-            Input.Text = tostring(math.floor(v * 100) / 100)
+            Input.Text = v ~= nil and tostring(math.floor(v * 100) / 100) or ""
         end
 
         local function updateValue(val)
-            val = math.clamp(tonumber(val) or draft.Properties[prop], min, max)
+            if type(val) == "string" and val:match("^%s*$") then
+                draft.Properties[prop] = nil
+                Input.Text = ""
+                return
+            end
+            val = math.clamp(tonumber(val) or (draft.Properties[prop] or min), min, max)
             if step and step > 0 then val = math.floor(val / step + 0.5) * step end
             draft.Properties[prop] = val
             Input.Text = tostring(math.floor(val * 100) / 100)
@@ -10564,7 +10584,7 @@ local function ShowPresetEditor(page, preset, isNew)
         mBtn.TextSize = 16
         mBtn.TextColor3 = UI_THEME.TextDark
         mBtn.Parent = InputFrame
-        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or 0) - (step or 1)) end))
+        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or min) - (step or 1)) end))
 
         local pBtn = Instance.new("TextButton")
         pBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -10575,7 +10595,7 @@ local function ShowPresetEditor(page, preset, isNew)
         pBtn.TextSize = 16
         pBtn.TextColor3 = UI_THEME.TextDark
         pBtn.Parent = InputFrame
-        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or 0) + (step or 1)) end))
+        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or min) + (step or 1)) end))
     end
 
     local function makeInputRow(pg, labelText, defaultVal, callback)
@@ -10808,13 +10828,6 @@ local function ShowPresetEditor(page, preset, isNew)
             TrackWorldHumConnection(btn.MouseButton1Click:Connect(function()
                 draft.TargetName = n
                 nameBox.Text = n
-                for prop, _ in pairs(draft.Properties) do
-                    local s, v = pcall(SafeGetProp, hum, prop)
-                    if s and v ~= nil then
-                        draft.Properties[prop] = v
-                        if draftUpdaters[prop] then draftUpdaters[prop](v) end
-                    end
-                end
                 dropOpen = false
                 dToggle.Text = "▼ Select Nearby Humanoid Template"
                 TweenService:Create(dropdownContainer, TWEENS.FAST, {Size = UDim2.new(1, 0, 0, 0)}):Play()
