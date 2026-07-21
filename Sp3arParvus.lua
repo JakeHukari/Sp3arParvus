@@ -9649,7 +9649,7 @@ local function BuildConfigTab(page)
         tb.ClearTextOnFocus = false
         tb.Parent = frame
         -- Glow on focus
-        TrackConnection(tb:GetPropertyChangedSignal("IsFocused") and tb.Focused:Connect(function()
+        TrackConnection(tb.Focused:Connect(function()
             TweenService:Create(stroke, TWEENS.MEDIUM, {Transparency = 0}):Play()
         end))
         TrackConnection(tb.FocusLost:Connect(function()
