@@ -762,6 +762,10 @@
               <span class="dot" style="background:#f87171"></span>
               Dev Tools
             </div>
+            <div class="explorer-item" data-tab="config" onclick="switchTab('config', this)">
+              <span class="dot" style="background:#f472b6"></span>
+              Config
+            </div>
           </div>
         </div>
 
@@ -783,6 +787,7 @@
           <button class="tab-btn" data-tab="world" onclick="switchTab('world', this)">WorldHumanoids</button>
           <button class="tab-btn" data-tab="playerpage" onclick="switchTab('playerpage', this)">PlayerPage</button>
           <button class="tab-btn" data-tab="devtools" onclick="switchTab('devtools', this)">DevTools</button>
+          <button class="tab-btn" data-tab="config" onclick="switchTab('config', this)">Config</button>
         </div>
 
         <!-- Tab Panels -->
@@ -920,6 +925,23 @@
               <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
                 <div class="text-red-400 font-bold text-sm mb-1">D3v Tool HUD</div>
                 <div class="text-gray-500 text-xs">Real-time World Time, LPC, and Mouse Coordinates overlay.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Config -->
+          <div class="tab-panel" id="panel-config">
+            <div class="screenshot-frame mb-4">
+              <img src="UI-Images/Config.png" alt="Config save and load system" loading="lazy" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-pink-400 font-bold text-sm mb-1">Universal &amp; Per-Game Profiles</div>
+                <div class="text-gray-500 text-xs">Save your settings universally across all games, or tie a specific configuration directly to a Roblox PlaceId.</div>
+              </div>
+              <div class="bg-dark-100 rounded-lg p-4 border border-white/5">
+                <div class="text-pink-400 font-bold text-sm mb-1">Auto-Load System</div>
+                <div class="text-gray-500 text-xs">Toggle "Auto-Load" on any profile. Sp3arParvus will automatically detect your current game and load the appropriate configuration upon execution.</div>
               </div>
             </div>
           </div>
