@@ -330,7 +330,9 @@ do
             blacklist       = AdvancedPlayerPanelState.Blacklist,
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
-            worldHumPresets = safePresets
+            priorityList    = AdvancedPlayerPanelState.PriorityList,
+            worldHumPresets = safePresets,
+            lockedWorldHums = WorldHumState.lockedProperties
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -380,7 +382,9 @@ do
             blacklist       = AdvancedPlayerPanelState.Blacklist,
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
-            worldHumPresets = safePresets
+            priorityList    = AdvancedPlayerPanelState.PriorityList,
+            worldHumPresets = safePresets,
+            lockedWorldHums = WorldHumState.lockedProperties
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -454,7 +458,13 @@ do
         AdvancedPlayerPanelState.Blacklist = fixNumberKeys(parsed.blacklist)
         AdvancedPlayerPanelState.TeamWhitelist = fixNumberKeys(parsed.teamWhitelist)
         AdvancedPlayerPanelState.TeamBlacklist = fixNumberKeys(parsed.teamBlacklist)
+        if type(parsed.priorityList) == "table" then
+            AdvancedPlayerPanelState.PriorityList = parsed.priorityList
+        end
         WorldHumState.Presets = type(parsed.worldHumPresets) == "table" and parsed.worldHumPresets or {}
+        if type(parsed.lockedWorldHums) == "table" then
+            WorldHumState.lockedProperties = parsed.lockedWorldHums
+        end
         
         pcall(RebuildAdvancedPlayerPanel)
         
@@ -522,7 +532,9 @@ do
         parsed.blacklist       = AdvancedPlayerPanelState.Blacklist
         parsed.teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist
         parsed.teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist
+        parsed.priorityList    = AdvancedPlayerPanelState.PriorityList
         parsed.worldHumPresets = WorldHumState.Presets
+        parsed.lockedWorldHums = WorldHumState.lockedProperties
         parsed.savedAt = os.time()
         parsed.version = VERSION
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
@@ -630,7 +642,7 @@ do
         for _, entry in ipairs(perGameProfiles) do
             local p = entry.parsed
             if p.autoLoad == true and tostring(p.placeId) == currentPlaceId and type(p.flags) == "table" then
-                applyFlags(p.flags)
+                ConfigManager._startupPayload = entry.filePath
                 ConfigManager._startupNotify = {
                     kind        = "pergame",
                     profileName = p.name or "Unknown",
@@ -661,7 +673,7 @@ do
         for _, entry in ipairs(universalProfiles) do
             local p = entry.parsed
             if p.autoLoad == true and type(p.flags) == "table" then
-                applyFlags(p.flags)
+                ConfigManager._startupPayload = entry.filePath
                 ConfigManager._startupNotify = {
                     kind        = "universal",
                     profileName = p.name or "Unknown"
@@ -10844,7 +10856,7 @@ local function ShowPresetEditor(page, preset, isNew)
         
         if isNew then
             table.insert(WorldHumState.Presets, {
-                Id = HttpService:GenerateGUID(false),
+                Id = game:GetService("HttpService"):GenerateGUID(false),
                 TargetName = draft.TargetName,
                 TargetMode = draft.TargetMode,
                 TargetCount = draft.TargetCount,
@@ -13811,6 +13823,11 @@ print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤750
 
 -- ── Deferred startup config notification (UI is now ready) ────────────
 do
+    local sf = ConfigManager and ConfigManager._startupPayload
+    if sf then
+        pcall(ConfigManager.LoadProfile, sf)
+    end
+
     local sn = ConfigManager and ConfigManager._startupNotify
     if sn then
         task.delay(0.5, function()
