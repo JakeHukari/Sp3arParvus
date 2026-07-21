@@ -204,6 +204,7 @@ end
 local UIState
 local AdvancedPlayerPanelState
 local WorldHumState
+local USER_MODIFIED_FLAGS = {}
 
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  ConfigManager — Local Profile Save/Load System                  ║
@@ -242,16 +243,18 @@ do
     local function serializeFlags()
         local out = {}
         for k, v in pairs(Flags) do
-            if type(v) == "table" then
-                local copy = {}
-                for k2, v2 in pairs(v) do copy[k2] = v2 end
-                out[k] = copy
-            elseif type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
-                out[k] = v
-            elseif typeof(v) == "Color3" then
-                out[k] = {__type = "Color3", R = v.R, G = v.G, B = v.B}
-            elseif typeof(v) == "EnumItem" then
-                out[k] = {__type = "EnumItem", EnumType = tostring(v.EnumType), Name = v.Name}
+            if USER_MODIFIED_FLAGS[k] then
+                if type(v) == "table" then
+                    local copy = {}
+                    for k2, v2 in pairs(v) do copy[k2] = v2 end
+                    out[k] = copy
+                elseif type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
+                    out[k] = v
+                elseif typeof(v) == "Color3" then
+                    out[k] = {__type = "Color3", R = v.R, G = v.G, B = v.B}
+                elseif typeof(v) == "EnumItem" then
+                    out[k] = {__type = "EnumItem", EnumType = tostring(v.EnumType), Name = v.Name}
+                end
             end
         end
         return out
@@ -260,6 +263,7 @@ do
     -- ── Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
+            USER_MODIFIED_FLAGS[k] = true
             if type(v) == "table" and v.__type == "Color3" then
                 v = Color3.new(v.R, v.G, v.B)
             elseif type(v) == "table" and v.__type == "EnumItem" then
@@ -615,6 +619,7 @@ do
                 pcall(UIState.Updaters[k], Flags[k])
             end
         end
+        USER_MODIFIED_FLAGS = {}
     end
 
     -- ── Startup Auto-Load Logic ───────────────────────────────────────
@@ -3528,6 +3533,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
 
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
+            USER_MODIFIED_FLAGS[flag .. "/Locked"] = true
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
             LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
@@ -3580,6 +3586,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
 
     TrackConnection(Button.MouseButton1Click:Connect(function()
         Flags[flag] = not Flags[flag]
+        USER_MODIFIED_FLAGS[flag] = true
         local state = Flags[flag]
         updateVisuals(state)
         if callback then callback(state) end
@@ -3623,6 +3630,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
 
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
+            USER_MODIFIED_FLAGS[flag .. "/Locked"] = true
             LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
             LockBtn.Text = Flags[flag .. "/Locked"] and "🔒" or "🔓"
         end))
@@ -3653,6 +3661,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
             val = math.floor(val / step + 0.5) * step
         end
         Flags[flag] = val
+        USER_MODIFIED_FLAGS[flag] = true
         Input.Text = tostring(val)
         if callback then callback(val) end
     end
