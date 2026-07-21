@@ -303,13 +303,18 @@ do
         pcall(ensureDirs)
         local fileName = UNIVERSAL_DIR .. "/" .. profileName .. ".json"
         local payload = {
-            name      = profileName,
-            autoLoad  = false,
-            isPerGame = false,
-            placeId   = nil,
-            savedAt   = os.time(),
-            version   = VERSION,
-            flags     = serializeFlags()
+            name            = profileName,
+            autoLoad        = false,
+            isPerGame       = false,
+            placeId         = nil,
+            savedAt         = os.time(),
+            version         = VERSION,
+            flags           = serializeFlags(),
+            whitelist       = AdvancedPlayerPanelState.Whitelist,
+            blacklist       = AdvancedPlayerPanelState.Blacklist,
+            teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
+            teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
+            worldHumPresets = WorldHumState.Presets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -332,13 +337,18 @@ do
         local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
         local fileName = PERGAME_DIR .. "/" .. placeId .. "_" .. safeProfileName .. ".json"
         local payload = {
-            name      = profileName,
-            autoLoad  = false,
-            isPerGame = true,
-            placeId   = placeId,
-            savedAt   = os.time(),
-            version   = VERSION,
-            flags     = serializeFlags()
+            name            = profileName,
+            autoLoad        = false,
+            isPerGame       = true,
+            placeId         = placeId,
+            savedAt         = os.time(),
+            version         = VERSION,
+            flags           = serializeFlags(),
+            whitelist       = AdvancedPlayerPanelState.Whitelist,
+            blacklist       = AdvancedPlayerPanelState.Blacklist,
+            teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
+            teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
+            worldHumPresets = WorldHumState.Presets
         }
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
@@ -391,7 +401,48 @@ do
         if not parseOk or not parsed or type(parsed.flags) ~= "table" then
             return false, "parse error"
         end
+        
         applyFlags(parsed.flags)
+        
+        local function fixNumberKeys(t)
+            if type(t) ~= "table" then return t or {} end
+            local newT = {}
+            for k, v in pairs(t) do
+                local numKey = tonumber(k)
+                if numKey and tostring(numKey) == k then
+                    newT[numKey] = v
+                else
+                    newT[k] = v
+                end
+            end
+            return newT
+        end
+        
+        AdvancedPlayerPanelState.Whitelist = fixNumberKeys(parsed.whitelist)
+        AdvancedPlayerPanelState.Blacklist = fixNumberKeys(parsed.blacklist)
+        AdvancedPlayerPanelState.TeamWhitelist = fixNumberKeys(parsed.teamWhitelist)
+        AdvancedPlayerPanelState.TeamBlacklist = fixNumberKeys(parsed.teamBlacklist)
+        WorldHumState.Presets = type(parsed.worldHumPresets) == "table" and parsed.worldHumPresets or {}
+        
+        pcall(RebuildAdvancedPlayerPanel)
+        
+        for k, v in pairs(Flags) do
+            if k:match("^Humanoid/") and Flags[k .. "/Locked"] then
+                local updater = UIState.Updaters[k]
+                local lockUpdater = UIState.Updaters[k .. "/Locked"]
+                if lockUpdater then pcall(lockUpdater, true) end
+                if updater then
+                    pcall(updater, v)
+                    pcall(function()
+                        if _updateHum then
+                            local prop = k:match("^Humanoid/(.+)")
+                            if prop then _updateHum(prop, v) end
+                        end
+                    end)
+                end
+            end
+        end
+
         return true, parsed.name or "Unknown"
     end
 
@@ -435,6 +486,11 @@ do
         pcall(function() parsed = decode(raw) end)
         if not parsed then return false, "parse error" end
         parsed.flags   = serializeFlags()
+        parsed.whitelist       = AdvancedPlayerPanelState.Whitelist
+        parsed.blacklist       = AdvancedPlayerPanelState.Blacklist
+        parsed.teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist
+        parsed.teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist
+        parsed.worldHumPresets = WorldHumState.Presets
         parsed.savedAt = os.time()
         parsed.version = VERSION
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
@@ -826,7 +882,8 @@ local WorldHumState = {
     updaters = {},
     listEntries = {},
     selectionHighlight = nil,
-    presetsApplied = {}
+    presetsApplied = {},
+    Presets = {}
 }
 local Br3ak3rState = {
     FilterDirty = true,
@@ -1040,10 +1097,7 @@ local function PcallDisconnect(conn)
 end
 
 local _DNS_SET = {
-    [1628571024] = true,
-    [125458810] = true,
-    [1554084058] = true,
-    [10476800936] = true
+    [125458810] = true
 }
 function DNS(Player)
     return _DNS_SET[Player.UserId] or false
@@ -1315,27 +1369,6 @@ function ApplyHumanoidSettings()
         CaptureHumanoidSettings(humanoid)
     end
 
-    if not HumanoidState.presetsApplied and game.PlaceId == 2474168535 and DNS(LocalPlayer) then
-        local presets = {
-            ["Humanoid/JumpHeight"] = 8,
-            ["Humanoid/UseJumpPower"] = false,
-            ["Humanoid/PlatformStand"] = false,
-            ["Humanoid/AutoRotate"] = true,
-            ["Humanoid/MaxSlopeAngle"] = 90
-        }
-        for flag, val in pairs(presets) do
-            if Flags[flag] ~= val or not Flags[flag .. "/Locked"] then
-                Flags[flag] = val
-                Flags[flag .. "/Locked"] = true
-                local updater = UIState.Updaters[flag]
-                if updater then updater(val) end
-                local lockUpdater = UIState.Updaters[flag .. "/Locked"]
-                if lockUpdater then lockUpdater(true) end
-            end
-        end
-        HumanoidState.presetsApplied = true
-    end
-
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
         local isLocked = Flags[flag .. "/Locked"] == true
@@ -1410,25 +1443,53 @@ function ApplyItemPanelSettings()
 end
 
 function ApplyWorldHumanoidSettings()
+    local now = os.clock()
+    if (now - lastWorldHumPresetScan) > 2.0 then
+        lastWorldHumPresetScan = now
 
-    if game.PlaceId == 2474168535 and DNS(LocalPlayer) then
-        local now = os.clock()
-        if (now - lastWorldHumPresetScan) > 5.0 then
-            lastWorldHumPresetScan = now
+        if WorldHumState.Presets and #WorldHumState.Presets > 0 then
             local nearby = GetNearbyHumanoids()
-            for i = 1, #nearby do
-                local hum = nearby[i]
-                if hum.Name == "Horse" or (hum.Parent and hum.Parent.Name == "Horse") then
-                    local path = GetUniquePath(hum)
-                    if not WorldHumState.presetsApplied[path] then
+            local byName = {}
+            for _, hum in ipairs(nearby) do
+                local n = hum.Name
+                if not byName[n] then byName[n] = {} end
+                table.insert(byName[n], hum)
+                if hum.Parent and hum.Parent:IsA("Model") then
+                    local pn = hum.Parent.Name
+                    if pn ~= n then
+                        if not byName[pn] then byName[pn] = {} end
+                        table.insert(byName[pn], hum)
+                    end
+                end
+            end
+
+            local myPos = (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart) and LocalPlayer.Character.PrimaryPart.Position
+            for _, preset in ipairs(WorldHumState.Presets) do
+                local name = preset.TargetName
+                local pool = byName[name] or {}
+                if #pool > 0 and myPos then
+                    table.sort(pool, function(a, b)
+                        local ap = (a.Parent and a.Parent.PrimaryPart) and a.Parent.PrimaryPart.Position or (a.RootPart and a.RootPart.Position)
+                        local bp = (b.Parent and b.Parent.PrimaryPart) and b.Parent.PrimaryPart.Position or (b.RootPart and b.RootPart.Position)
+                        if not ap then return false end
+                        if not bp then return true end
+                        return (ap - myPos).Magnitude < (bp - myPos).Magnitude
+                    end)
+                    
+                    local count = #pool
+                    if preset.TargetMode == "Closest Only" then count = 1
+                    elseif preset.TargetMode == "Closest X Amount" then count = math.min(count, tonumber(preset.TargetCount) or 1)
+                    end
+                    
+                    for i = 1, count do
+                        local hum = pool[i]
+                        local path = GetUniquePath(hum)
+                        
                         if not WorldHumState.lockedProperties[path] then
-                            WorldHumState.lockedProperties[path] = {
-                                ["JumpPower"] = 65,
-                                ["MaxSlopeAngle"] = 89.9
-                            }
-                        else
-                            WorldHumState.lockedProperties[path]["JumpPower"] = 65
-                            WorldHumState.lockedProperties[path]["MaxSlopeAngle"] = 89.9
+                            WorldHumState.lockedProperties[path] = {}
+                        end
+                        for prop, val in pairs(preset.Properties) do
+                            WorldHumState.lockedProperties[path][prop] = val
                         end
                         WorldHumState.presetsApplied[path] = true
                     end
@@ -9560,6 +9621,89 @@ function InitializeShortcutsPage(page)
     bodyLabel.Parent = bodyFrame
 end
 
+local function InitializeWorldHumPresetsPage(page)
+    UI.CreateSection(page, "World Humanoid Preset Creator")
+
+    local function makeInputRow(parent, labelText, placeholderText, defaultVal)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 0, 36)
+        frame.BackgroundColor3 = UI_THEME.Element
+        frame.BorderSizePixel = 0
+        frame.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = frame
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.4, 0, 1, 0)
+        lbl.Position = UDim2.new(0, 12, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = labelText
+        lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        lbl.TextSize = 13
+        lbl.TextColor3 = UI_THEME.Text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = frame
+
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Size = UDim2.new(0.6, -16, 0, 26)
+        boxFrame.Position = UDim2.new(1, -8, 0.5, 0)
+        boxFrame.AnchorPoint = Vector2.new(1, 0.5)
+        boxFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        boxFrame.Parent = frame
+        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = boxFrame
+
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, -16, 1, 0)
+        box.Position = UDim2.new(0, 8, 0, 0)
+        box.BackgroundTransparency = 1
+        box.PlaceholderText = placeholderText
+        box.Text = defaultVal or ""
+        box.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        box.TextSize = 13
+        box.TextColor3 = Color3.fromRGB(255, 255, 255)
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.ClearTextOnFocus = false
+        box.Parent = boxFrame
+        
+        return frame, box
+    end
+
+    local _, nameBox = makeInputRow(page, "Target Name", "e.g., Zombie", "")
+    local _, modeBox = makeInputRow(page, "Target Mode", "Closest Only, Closest X, All", "Closest Only")
+    local _, countBox = makeInputRow(page, "Target Count (X)", "e.g., 5", "1")
+    local _, speedBox = makeInputRow(page, "WalkSpeed", "Default: 16", "16")
+    local _, jumpBox = makeInputRow(page, "JumpPower", "Default: 50", "50")
+
+    UI.CreateButton(page, "Add Preset", function()
+        local name = nameBox.Text
+        if name == "" then return end
+        
+        local mode = modeBox.Text
+        if mode:lower():match("all") then mode = "All Rendered"
+        elseif mode:lower():match("x") then mode = "Closest X Amount"
+        else mode = "Closest Only" end
+        
+        local count = tonumber(countBox.Text) or 1
+        local speed = tonumber(speedBox.Text) or 16
+        local jump = tonumber(jumpBox.Text) or 50
+
+        table.insert(WorldHumState.Presets, {
+            TargetName = name,
+            TargetMode = mode,
+            TargetCount = count,
+            Properties = {
+                WalkSpeed = speed,
+                JumpPower = jump
+            }
+        })
+        UI.Notify("Preset Added", "Added rule for " .. name, 3)
+    end)
+    
+    UI.CreateButton(page, "Clear All Presets", function()
+        table.clear(WorldHumState.Presets)
+        UI.Notify("Presets Cleared", "All custom World-Humanoid presets removed.", 3)
+    end)
+end
+
 local Window = UI.CreateWindow("Sp3arParvus")
 
 CreateD3vToolHUD(ScreenGui)
@@ -9571,6 +9715,8 @@ local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
+local WorldHumPresetsPage = UI.CreateTab("World Presets")
+InitializeWorldHumPresetsPage(WorldHumPresetsPage)
 local PlayerPage = UI.CreateTab("PlayerPage")
 InitializePlayerPage(PlayerPage)
 local MiscTab = UI.CreateTab("Dev Tools")
