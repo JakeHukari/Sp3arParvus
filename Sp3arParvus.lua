@@ -205,6 +205,8 @@ local UIState
 local AdvancedPlayerPanelState
 local WorldHumState
 local USER_MODIFIED_FLAGS = {}
+local PROFILE_LOADED_FLAGS = {}  -- flags loaded from a profile (kept separate from user-touched flags)
+local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
 
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  ConfigManager — Local Profile Save/Load System                  ║
@@ -263,7 +265,10 @@ do
     -- ── Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
-            USER_MODIFIED_FLAGS[k] = true
+            -- Mark as profile-loaded (NOT user-touched) to prevent cross-contamination
+            -- between profiles when using Overwrite. USER_MODIFIED_FLAGS is reserved for
+            -- flags the user explicitly changes via the UI in this session.
+            PROFILE_LOADED_FLAGS[k] = true
             if type(v) == "table" and v.__type == "Color3" then
                 v = Color3.new(v.R, v.G, v.B)
             elseif type(v) == "table" and v.__type == "EnumItem" then
@@ -283,8 +288,15 @@ do
                 else
                     Flags[k] = v
                 end
-                -- Push change through UI updater if available
-                if UIState and UIState.Updaters and UIState.Updaters[k] then
+            elseif type(v) ~= "table" then
+                -- Allow writing flags not yet initialized in Flags (e.g. Humanoid flags that
+                -- only get set after CaptureHumanoidSettings runs on character spawn).
+                Flags[k] = v
+            end
+            -- Push change through UI updater if available.
+            -- Skip raw table values (e.g. TargetGroups) — those UIs rebuild themselves.
+            if UIState and UIState.Updaters and UIState.Updaters[k] then
+                if type(v) ~= "table" then
                     pcall(UIState.Updaters[k], v)
                 end
             end
@@ -324,7 +336,8 @@ do
             return false, "empty name"
         end
         pcall(ensureDirs)
-        local fileName = UNIVERSAL_DIR .. "/" .. profileName .. ".json"
+        local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
+        local fileName = UNIVERSAL_DIR .. "/" .. safeProfileName .. ".json"
         local safePresets = {}
         if WorldHumState.Presets then
             for _, p in ipairs(WorldHumState.Presets) do
@@ -461,8 +474,10 @@ do
         
         applyFlags(parsed.flags)
         
+        -- Returns fixed table (number-keyed JSON strings → real ints),
+        -- or nil if the field is absent/non-table (preserving existing state).
         local function fixNumberKeys(t)
-            if type(t) ~= "table" then return t or {} end
+            if type(t) ~= "table" then return nil end
             local newT = {}
             for k, v in pairs(t) do
                 local numKey = tonumber(k)
@@ -475,10 +490,11 @@ do
             return newT
         end
         
-        AdvancedPlayerPanelState.Whitelist = fixNumberKeys(parsed.whitelist)
-        AdvancedPlayerPanelState.Blacklist = fixNumberKeys(parsed.blacklist)
-        AdvancedPlayerPanelState.TeamWhitelist = fixNumberKeys(parsed.teamWhitelist)
-        AdvancedPlayerPanelState.TeamBlacklist = fixNumberKeys(parsed.teamBlacklist)
+        -- Only replace player-panel state when the saved field is actually present
+        local wl = fixNumberKeys(parsed.whitelist);    if wl then AdvancedPlayerPanelState.Whitelist = wl end
+        local bl = fixNumberKeys(parsed.blacklist);    if bl then AdvancedPlayerPanelState.Blacklist = bl end
+        local twl = fixNumberKeys(parsed.teamWhitelist); if twl then AdvancedPlayerPanelState.TeamWhitelist = twl end
+        local tbl = fixNumberKeys(parsed.teamBlacklist); if tbl then AdvancedPlayerPanelState.TeamBlacklist = tbl end
         if type(parsed.priorityList) == "table" then
             AdvancedPlayerPanelState.PriorityList = parsed.priorityList
         end
@@ -486,19 +502,32 @@ do
         
         pcall(RebuildAdvancedPlayerPanel)
         
-        for k, v in pairs(Flags) do
-            if k:match("^Humanoid/") and Flags[k .. "/Locked"] then
-                local updater = UIState.Updaters[k]
-                local lockUpdater = UIState.Updaters[k .. "/Locked"]
-                if lockUpdater then pcall(lockUpdater, true) end
-                if updater then
-                    pcall(updater, v)
-                    pcall(function()
-                        if _updateHum then
-                            local prop = k:match("^Humanoid/(.+)")
-                            if prop then _updateHum(prop, v) end
-                        end
-                    end)
+        -- Sync Humanoid UI and apply values to the live humanoid immediately.
+        -- Iterate parsed.flags (not Flags, which may have nil Humanoid entries before spawn).
+        do
+            local char = LocalPlayer.Character
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            for k, savedVal in pairs(parsed.flags) do
+                if k:match("^Humanoid/") and not k:match("/Locked$") then
+                    local currentVal = Flags[k] ~= nil and Flags[k] or savedVal
+                    local isLocked   = (parsed.flags[k .. "/Locked"] == true)
+                                    or (Flags[k .. "/Locked"] == true)
+
+                    -- Sync lock-button icon (updater registered in CreateToggle/CreateNumericInput)
+                    if isLocked then
+                        local lockUpd = UIState and UIState.Updaters and UIState.Updaters[k .. "/Locked"]
+                        if lockUpd then pcall(lockUpd, true) end
+                    end
+
+                    -- Sync value display in the UI widget
+                    local valUpd = UIState and UIState.Updaters and UIState.Updaters[k]
+                    if valUpd then pcall(valUpd, currentVal) end
+
+                    -- Push value to the live humanoid right away
+                    if hum and _updateHum then
+                        local prop = k:match("^Humanoid/(.+)")
+                        if prop then pcall(_updateHum, prop, currentVal) end
+                    end
                 end
             end
         end
@@ -545,7 +574,48 @@ do
         local parsed = nil
         pcall(function() parsed = decode(raw) end)
         if not parsed then return false, "parse error" end
-        parsed.flags   = serializeFlags()
+
+        -- Build updated flags cleanly:
+        --   1. Start with the profile's original keys, updated with current live values.
+        --   2. Add any flags the user *explicitly* touched this session (USER_MODIFIED_FLAGS).
+        -- This prevents flags loaded from OTHER profiles (PROFILE_LOADED_FLAGS) from
+        -- bleeding into this profile when overwriting.
+        local function encodeVal(v)
+            if type(v) == "boolean" or type(v) == "number" or type(v) == "string" then
+                return v
+            elseif type(v) == "table" then
+                local copy = {}
+                for k2, v2 in pairs(v) do copy[k2] = v2 end
+                return copy
+            elseif typeof(v) == "Color3" then
+                return {__type = "Color3", R = v.R, G = v.G, B = v.B}
+            elseif typeof(v) == "EnumItem" then
+                return {__type = "EnumItem", EnumType = tostring(v.EnumType), Name = v.Name}
+            end
+            return nil
+        end
+
+        local originalFlags = type(parsed.flags) == "table" and parsed.flags or {}
+        local newFlags = {}
+
+        -- Step 1: Update original profile flags with current live values
+        for k in pairs(originalFlags) do
+            local liveVal = Flags[k]
+            local encoded = liveVal ~= nil and encodeVal(liveVal)
+            newFlags[k] = encoded ~= nil and encoded or originalFlags[k]
+        end
+
+        -- Step 2: Merge in flags the user explicitly interacted with this session
+        for k in pairs(USER_MODIFIED_FLAGS) do
+            if not newFlags[k] and Flags[k] ~= nil then
+                local encoded = encodeVal(Flags[k])
+                if encoded ~= nil then
+                    newFlags[k] = encoded
+                end
+            end
+        end
+
+        parsed.flags           = newFlags
         parsed.whitelist       = AdvancedPlayerPanelState.Whitelist
         parsed.blacklist       = AdvancedPlayerPanelState.Blacklist
         parsed.teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist
@@ -620,6 +690,7 @@ do
             end
         end
         USER_MODIFIED_FLAGS = {}
+        PROFILE_LOADED_FLAGS = {}
     end
 
     -- ── Startup Auto-Load Logic ───────────────────────────────────────
@@ -1409,7 +1480,7 @@ function CaptureHumanoidSettings(humanoid)
 
             if flagMapping[prop] then
                 local flag = flagMapping[prop]
-                if not USER_MODIFIED_FLAGS[flag] then
+                if not USER_MODIFIED_FLAGS[flag] and not PROFILE_LOADED_FLAGS[flag] then
                     Flags[flag] = val
                     local updater = UIState.Updaters[flag]
                     if updater then
@@ -1437,7 +1508,7 @@ function ApplyHumanoidSettings()
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
         local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
         local isLocked = Flags[flag .. "/Locked"] == true
-        local isConfigured = USER_MODIFIED_FLAGS[flag] == true
+        local isConfigured = USER_MODIFIED_FLAGS[flag] == true or PROFILE_LOADED_FLAGS[flag] == true
 
         if isEnforced or isLocked or isConfigured then
             local val = Flags[flag]
@@ -1454,7 +1525,7 @@ function UpdateHumanoidUI()
     if not humanoid then return end
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        if Flags[flag .. "/Locked"] or USER_MODIFIED_FLAGS[flag] then continue end
+        if Flags[flag .. "/Locked"] or USER_MODIFIED_FLAGS[flag] or PROFILE_LOADED_FLAGS[flag] then continue end
 
         local success, val = pcall(SafeGetProp, humanoid, prop)
 
@@ -3534,6 +3605,14 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
 
+        -- Allow config load to sync the lock icon when a profile is applied
+        UIState.Updaters[flag .. "/Locked"] = function(state)
+            local locked = state == true
+            Flags[flag .. "/Locked"] = locked
+            LockBtn.TextColor3 = locked and UI_THEME.Accent or UI_THEME.TextDark
+            LockBtn.Text = locked and "🔒" or "🔓"
+        end
+
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             USER_MODIFIED_FLAGS[flag .. "/Locked"] = true
@@ -3572,7 +3651,8 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Button.Text = ""
     Button.Parent = Switch
 
-    Flags[flag] = default
+    -- Guard: only set the default if no value was pre-loaded from a config
+    if Flags[flag] == nil then Flags[flag] = default end
 
     local function updateVisuals(state)
         local targetColor = state and UI_THEME.Accent or Color3.fromRGB(50, 50, 50)
@@ -3631,6 +3711,14 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         LockBtn.TextColor3 = Flags[flag .. "/Locked"] and UI_THEME.Accent or UI_THEME.TextDark
         LockBtn.Parent = Frame
 
+        -- Allow config load to sync the lock icon when a profile is applied
+        UIState.Updaters[flag .. "/Locked"] = function(state)
+            local locked = state == true
+            Flags[flag .. "/Locked"] = locked
+            LockBtn.TextColor3 = locked and UI_THEME.Accent or UI_THEME.TextDark
+            LockBtn.Text = locked and "🔒" or "🔓"
+        end
+
         TrackConnection(LockBtn.MouseButton1Click:Connect(function()
             Flags[flag .. "/Locked"] = not Flags[flag .. "/Locked"]
             USER_MODIFIED_FLAGS[flag .. "/Locked"] = true
@@ -3651,7 +3739,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Input.Size = UDim2.new(1, -50, 1, 0)
     Input.Position = UDim2.new(0, 25, 0, 0)
     Input.BackgroundTransparency = 1
-    Input.Text = tostring(default)
+    Input.Text = tostring(Flags[flag] ~= nil and Flags[flag] or default)
     Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     Input.TextSize = 13
     Input.TextColor3 = UI_THEME.Accent
@@ -3708,7 +3796,8 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         updateValue(Flags[flag] + (step or 1))
     end))
 
-    Flags[flag] = default
+    -- Guard: only set the default if no value was pre-loaded from a config
+    if Flags[flag] == nil then Flags[flag] = default end
 end
 
 function UI.CreateButton(page, text, callback)
@@ -12325,7 +12414,9 @@ UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Wayp
     RefreshWaypointUI()
 end)
 
-local function _updateHum(prop, val)
+-- Assign the module-level _updateHum upvalue (forward-declared at the top of the file).
+-- ConfigManager.LoadProfile references it by upvalue, so it must NOT be local here.
+_updateHum = function(prop, val)
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
