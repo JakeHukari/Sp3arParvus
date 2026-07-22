@@ -245,7 +245,7 @@ do
     local function serializeFlags()
         local out = {}
         for k, v in pairs(Flags) do
-            if USER_MODIFIED_FLAGS[k] then
+            if USER_MODIFIED_FLAGS[k] or PROFILE_LOADED_FLAGS[k] then
                 if type(v) == "table" then
                     local copy = {}
                     for k2, v2 in pairs(v) do copy[k2] = v2 end
@@ -472,6 +472,7 @@ do
             return false, "parse error"
         end
         
+        PROFILE_LOADED_FLAGS = {}
         applyFlags(parsed.flags)
         
         -- Returns fixed table (number-keyed JSON strings → real ints),
