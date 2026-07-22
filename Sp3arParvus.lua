@@ -1,10 +1,10 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.8                                                  ║
+-- ║  Version: 4.2.9                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.8" -- Player-page & Humanoid data added to config saves & world-humanoid-preset-creator
+local VERSION = "4.2.9" -- Fixed config loading issues
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
