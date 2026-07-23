@@ -1608,46 +1608,59 @@ function ApplyWorldHumanoidSettings()
                 end
             end
 
-            local myPos = (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart) and LocalPlayer.Character.PrimaryPart.Position
+            -- BUGFIX: Resolve myPos BEFORE the preset loop.
+            -- If our character's PrimaryPart is not yet ready (e.g. mid-respawn),
+            -- we must NOT stamp preset.lastUpdate or clear preset.affectedPaths.
+            -- Doing so would consume the update timer and zero the affected list
+            -- without ever populating it, leaving Affected: 0 until the *next*
+            -- cycle (2+ seconds later) — by which time a newly-spawned NPC may
+            -- no longer be the closest target.
+            local myPos = (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart)
+                and LocalPlayer.Character.PrimaryPart.Position
 
-            for _, preset in ipairs(WorldHumState.Presets) do
-                if preset.Enabled ~= false and (now - (preset.lastUpdate or 0)) >= (preset.UpdateRate or 2.0) then
-                    preset.lastUpdate = now
-                    preset.affectedCount = 0
-                    if not preset.affectedPaths then preset.affectedPaths = {} end
-                    table.clear(preset.affectedPaths)
+            if not myPos then
+                -- Character is not ready yet (mid-respawn). Skip this scan cycle
+                -- entirely so that preset cooldown timers are not consumed.
+            else
+                for _, preset in ipairs(WorldHumState.Presets) do
+                    if preset.Enabled ~= false and (now - (preset.lastUpdate or 0)) >= (preset.UpdateRate or 2.0) then
+                        preset.lastUpdate = now
+                        preset.affectedCount = 0
+                        if not preset.affectedPaths then preset.affectedPaths = {} end
+                        table.clear(preset.affectedPaths)
 
-                    local name = preset.TargetName
-                    local pool = byName[name] or {}
-                    if #pool > 0 and myPos then
-                        table.sort(pool, function(a, b)
-                            local ap = (a.Parent and a.Parent.PrimaryPart) and a.Parent.PrimaryPart.Position or (a.RootPart and a.RootPart.Position)
-                            local bp = (b.Parent and b.Parent.PrimaryPart) and b.Parent.PrimaryPart.Position or (b.RootPart and b.RootPart.Position)
-                            if not ap then return false end
-                            if not bp then return true end
-                            return (ap - myPos).Magnitude < (bp - myPos).Magnitude
-                        end)
-                        
-                        local count = #pool
-                        if preset.TargetMode == "Closest Only" then count = 1
-                        elseif preset.TargetMode == "Closest X Amount" then count = math.min(count, tonumber(preset.TargetCount) or 1)
-                        end
-                        
-                        for i = 1, count do
-                            local hum = pool[i]
-                            local path = GetUniquePath(hum)
-                            preset.affectedPaths[path] = hum
-                            preset.affectedCount = preset.affectedCount + 1
-                            
-                            if not WorldHumState.lockedProperties[path] then
-                                WorldHumState.lockedProperties[path] = {}
+                        local name = preset.TargetName
+                        local pool = byName[name] or {}
+                        if #pool > 0 then
+                            table.sort(pool, function(a, b)
+                                local ap = (a.Parent and a.Parent.PrimaryPart) and a.Parent.PrimaryPart.Position or (a.RootPart and a.RootPart.Position)
+                                local bp = (b.Parent and b.Parent.PrimaryPart) and b.Parent.PrimaryPart.Position or (b.RootPart and b.RootPart.Position)
+                                if not ap then return false end
+                                if not bp then return true end
+                                return (ap - myPos).Magnitude < (bp - myPos).Magnitude
+                            end)
+
+                            local count = #pool
+                            if preset.TargetMode == "Closest Only" then count = 1
+                            elseif preset.TargetMode == "Closest X Amount" then count = math.min(count, tonumber(preset.TargetCount) or 1)
                             end
-                            if preset.Properties then
-                                for prop, val in pairs(preset.Properties) do
-                                    WorldHumState.lockedProperties[path][prop] = val
+
+                            for i = 1, count do
+                                local hum = pool[i]
+                                local path = GetUniquePath(hum)
+                                preset.affectedPaths[path] = hum
+                                preset.affectedCount = preset.affectedCount + 1
+
+                                if not WorldHumState.lockedProperties[path] then
+                                    WorldHumState.lockedProperties[path] = {}
                                 end
+                                if preset.Properties then
+                                    for prop, val in pairs(preset.Properties) do
+                                        WorldHumState.lockedProperties[path][prop] = val
+                                    end
+                                end
+                                WorldHumState.presetsApplied[path] = true
                             end
-                            WorldHumState.presetsApplied[path] = true
                         end
                     end
                 end
