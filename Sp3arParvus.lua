@@ -1018,7 +1018,8 @@ WorldHumState = {
     listEntries = {},
     selectionHighlight = nil,
     presetsApplied = {},
-    Presets = {}
+    Presets = {},
+    presetCountLabels = {} -- [presetId] = TextLabel, kept live for Manager page refresh
 }
 local Br3ak3rState = {
     FilterDirty = true,
@@ -1440,6 +1441,7 @@ function ClearWorldHumConnections()
     table.clear(WorldHumState.connections)
     table.clear(WorldHumState.updaters)
     table.clear(WorldHumState.presetsApplied)
+    table.clear(WorldHumState.presetCountLabels)
 end
 
 function CaptureHumanoidSettings(humanoid)
@@ -1662,6 +1664,11 @@ function ApplyWorldHumanoidSettings()
                                 WorldHumState.presetsApplied[path] = true
                             end
                         end
+                    end
+                    -- Live-refresh the Affected count label in the Manager page
+                    local lbl = preset.Id and WorldHumState.presetCountLabels[preset.Id]
+                    if lbl and lbl.Parent then
+                        lbl.Text = "Affected: " .. (preset.affectedCount or 0) .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
                     end
                 end
             end
@@ -11139,6 +11146,10 @@ function ShowPresetManager(page)
             countLbl.TextColor3 = UI_THEME.TextDark
             countLbl.TextXAlignment = Enum.TextXAlignment.Left
             countLbl.Parent = card
+            -- Register for live refresh from ApplyWorldHumanoidSettings
+            if preset.Id then
+                WorldHumState.presetCountLabels[preset.Id] = countLbl
+            end
 
             local toggleContainer = Instance.new("Frame")
             toggleContainer.Size = UDim2.new(1, -20, 0, 30)
