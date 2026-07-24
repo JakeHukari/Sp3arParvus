@@ -1629,6 +1629,23 @@ function ApplyWorldHumanoidSettings()
                         preset.lastUpdate = now
                         preset.affectedCount = 0
                         if not preset.affectedPaths then preset.affectedPaths = {} end
+
+                        -- Evict the PREVIOUS cycle's lockedProperties entries that
+                        -- belong to this preset before clearing affectedPaths.
+                        -- Without this, switching targets (e.g. player spawns a
+                        -- closer horse) leaves the old horse's path in lockedProperties
+                        -- forever — the enforcement loop keeps applying the preset to
+                        -- the original horse instead of the new closest one.
+                        for oldPath, _ in pairs(preset.affectedPaths) do
+                            local lp = WorldHumState.lockedProperties[oldPath]
+                            if lp and lp.__hum ~= nil then
+                                -- Only evict preset-owned entries (those written by the
+                                -- scanner). Editor-side manual locks don't set __hum.
+                                WorldHumState.lockedProperties[oldPath] = nil
+                                WorldHumState.presetsApplied[oldPath] = nil
+                            end
+                        end
+
                         table.clear(preset.affectedPaths)
 
                         local name = preset.TargetName
