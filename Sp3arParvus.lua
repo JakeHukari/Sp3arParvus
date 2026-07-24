@@ -509,6 +509,10 @@ do
             local char = LocalPlayer.Character
             local hum  = char and char:FindFirstChildOfClass("Humanoid")
             for k, savedVal in pairs(parsed.flags) do
+                -- Skip Humanoid/Health: it is a live runtime value. Writing it back on load
+                -- (or re-applying it every 0.1 s via ApplyHumanoidSettings) causes repeated
+                -- HealthChanged events that loop the damage indicator animation.
+                if k == "Humanoid/Health" then continue end
                 if k:match("^Humanoid/") and not k:match("/Locked$") then
                     local currentVal = Flags[k] ~= nil and Flags[k] or savedVal
                     local isLocked   = (parsed.flags[k .. "/Locked"] == true)
@@ -532,6 +536,7 @@ do
                 end
             end
         end
+
 
         return true, parsed.name or "Unknown"
     end
@@ -1404,7 +1409,11 @@ local HUMANOID_PROPERTY_MAPPING = {
     ["Humanoid/JumpPower"] = "JumpPower",
     ["Humanoid/UseJumpPower"] = "UseJumpPower",
     ["Humanoid/AutomaticScalingEnabled"] = "AutomaticScalingEnabled",
-    ["Humanoid/Health"] = "Health",
+    -- "Humanoid/Health" intentionally excluded: it is a live runtime property that
+    -- fluctuates as the player takes/regenerates damage. Periodically re-applying a
+    -- stale stored value (every ~0.1 s via ApplyHumanoidSettings) would cause the game
+    -- to fire HealthChanged events in a loop, making any damage indicator animation
+    -- repeat continuously while the player's health regenerates.
     ["Humanoid/MaxHealth"] = "MaxHealth",
     ["Humanoid/HipHeight"] = "HipHeight",
     ["Humanoid/MaxSlopeAngle"] = "MaxSlopeAngle",
@@ -1452,7 +1461,10 @@ function CaptureHumanoidSettings(humanoid)
         "Archivable", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck",
         "AutoRotate", "PlatformStand", "Sit", "Jump", "AutoJumpEnabled",
         "JumpHeight", "JumpPower", "UseJumpPower", "AutomaticScalingEnabled",
-        "Health", "MaxHealth", "HipHeight", "MaxSlopeAngle", "WalkSpeed"
+        -- "Health" intentionally excluded: it is a live runtime value that changes as
+        -- the player takes/regenerates damage. Capturing and re-applying it would cause
+        -- the damage indicator to loop while health regenerates back to the stored value.
+        "MaxHealth", "HipHeight", "MaxSlopeAngle", "WalkSpeed"
     }
 
     local flagMapping = {
@@ -1469,7 +1481,7 @@ function CaptureHumanoidSettings(humanoid)
         JumpPower = "Humanoid/JumpPower",
         UseJumpPower = "Humanoid/UseJumpPower",
         AutomaticScalingEnabled = "Humanoid/AutomaticScalingEnabled",
-        Health = "Humanoid/Health",
+        -- Health intentionally omitted: see properties list comment above.
         MaxHealth = "Humanoid/MaxHealth",
         HipHeight = "Humanoid/HipHeight",
         MaxSlopeAngle = "Humanoid/MaxSlopeAngle",
@@ -14039,7 +14051,7 @@ do
                 )
             elseif sn.kind == "pergame" then
                 UI.Notify(
-                    "⚡ Per-Game Config Loaded",
+                    "🌎 Per-Game Config Loaded",
                     string.format("Game %s detected — auto-loading profile \"%s\".", sn.placeId or "?", sn.profileName or "?"),
                     7
                 )
@@ -14051,7 +14063,7 @@ do
                 )
             elseif sn.kind == "defaults_with_profiles" then
                 UI.Notify(
-                    "📂 Config: Defaults Loaded",
+                    "📄 Config: Defaults Loaded",
                     string.format("%d profile(s) found, none with auto-load enabled. Loading defaults.", sn.count or 0),
                     6
                 )
