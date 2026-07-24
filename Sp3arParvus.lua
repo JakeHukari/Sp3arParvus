@@ -1656,6 +1656,10 @@ function ApplyWorldHumanoidSettings()
                                 if not WorldHumState.lockedProperties[path] then
                                     WorldHumState.lockedProperties[path] = {}
                                 end
+                                -- Cache the direct hum reference so the enforcement loop
+                                -- never needs to call GetInstanceFromPath (which can fail
+                                -- when sibling indices shift as NPCs spawn/despawn).
+                                WorldHumState.lockedProperties[path].__hum = hum
                                 if preset.Properties then
                                     for prop, val in pairs(preset.Properties) do
                                         WorldHumState.lockedProperties[path][prop] = val
@@ -1665,12 +1669,16 @@ function ApplyWorldHumanoidSettings()
                             end
                         end
                     end
-                    -- Live-refresh the Affected count label in the Manager page
-                    local lbl = preset.Id and WorldHumState.presetCountLabels[preset.Id]
-                    if lbl and lbl.Parent then
-                        lbl.Text = "Affected: " .. (preset.affectedCount or 0) .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
-                    end
                 end
+            end
+        end
+
+        -- Live-refresh Affected count labels every tick (not just when needsScan fires).
+        -- Placed outside the needsScan gate so the display stays current between scan cycles.
+        for _, preset in ipairs(WorldHumState.Presets) do
+            local lbl = preset.Id and WorldHumState.presetCountLabels[preset.Id]
+            if lbl and lbl.Parent then
+                lbl.Text = "Affected: " .. (preset.affectedCount or 0) .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
             end
         end
 
@@ -1721,10 +1729,19 @@ function ApplyWorldHumanoidSettings()
     end
 
     for path, props in pairs(WorldHumState.lockedProperties) do
-        local hum = GetInstanceFromPath(path)
-        if hum and hum:IsA("Humanoid") then
+        -- Prefer the cached direct reference stored by the preset scanner.
+        -- Fall back to GetInstanceFromPath for editor-side locks (which don't
+        -- set __hum). This avoids the fragile sibling-index lookup for NPCs
+        -- whose parent containers change size as other models spawn/despawn.
+        local hum = props.__hum
+        if not (hum and hum.Parent) then
+            hum = GetInstanceFromPath(path)
+        end
+        if hum and hum:IsA("Humanoid") and hum.Parent then
             for prop, val in pairs(props) do
-                pcall(SafeSetProp, hum, prop, val)
+                if prop ~= "__hum" then
+                    pcall(SafeSetProp, hum, prop, val)
+                end
             end
         else
             WorldHumState.lockedProperties[path] = nil
