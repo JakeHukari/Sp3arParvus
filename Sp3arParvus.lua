@@ -3810,7 +3810,7 @@ function UI.CreateToggle(page, text, flag, default, callback, lockable)
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.AnchorPoint = Vector2.new(0, 0.5)
     Knob.Position = default and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
-    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Knob.BackgroundColor3 = UI_THEME.Background
     Knob.BorderSizePixel = 0
     Knob.Parent = Switch
 
@@ -3982,7 +3982,7 @@ function UI.CreateButton(page, text, callback)
     Button.Text = text
     Button.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     Button.TextSize = 13
-    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextColor3 = UI_THEME.Background
     Button.Parent = page
 
     local corner = Instance.new("UICorner")
@@ -10295,7 +10295,7 @@ local function BuildConfigTab(page)
     saveUniversalBtn.Text = "Save as Universal Pre-set Profile"
     saveUniversalBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     saveUniversalBtn.TextSize = 13
-    saveUniversalBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    saveUniversalBtn.TextColor3 = THEME.Background
     saveUniversalBtn.Parent = expandable
     local sucC = Instance.new("UICorner"); sucC.CornerRadius = UDim.new(0, 6); sucC.Parent = saveUniversalBtn
     local sucStroke = Instance.new("UIStroke"); sucStroke.Color = THEME.Accent; sucStroke.Thickness = 1; sucStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; sucStroke.Parent = saveUniversalBtn
@@ -10961,7 +10961,7 @@ local function BuildConfigTab(page)
         masterCheck.Size = UDim2.fromScale(1, 1); masterCheck.BackgroundTransparency = 1
         masterCheck.Text = SaveModifierState.Categories[catKey] and "✓" or ""
         masterCheck.FontFace = Font.fromName("Montserrat", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal)
-        masterCheck.TextSize = 10; masterCheck.TextColor3 = Color3.fromRGB(255, 255, 255)
+        masterCheck.TextSize = 10; masterCheck.TextColor3 = THEME.Background
         masterCheck.Parent = masterTog
 
         -- Title
@@ -11078,7 +11078,7 @@ local function BuildConfigTab(page)
                 eCheck.Size = UDim2.fromScale(1, 1); eCheck.BackgroundTransparency = 1
                 eCheck.Text = isSel and "✓" or ""; eCheck.TextSize = 8
                 eCheck.FontFace = Font.fromName("Montserrat", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal)
-                eCheck.TextColor3 = Color3.fromRGB(255, 255, 255); eCheck.Parent = eTog
+                eCheck.TextColor3 = THEME.Background; eCheck.Parent = eTog
 
                 local eLbl = Instance.new("TextLabel")
                 eLbl.Size = UDim2.new(1, -20, 1, 0); eLbl.Position = UDim2.new(0, 20, 0, 0)
@@ -12103,7 +12103,7 @@ function ShowWorldHumList(page)
         editBtn.Text = "Edit"
         editBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         editBtn.TextSize = 12
-        editBtn.TextColor3 = Color3.new(1, 1, 1)
+        editBtn.TextColor3 = UI_THEME.Background
         editBtn.Visible = false
         editBtn.ZIndex = 2
         editBtn.Parent = card
