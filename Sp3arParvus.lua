@@ -11065,14 +11065,15 @@ local function BuildConfigTab(page)
                 local isSel = catOn and (stateTable[eKey] ~= false)
                 if isSel then selCnt += 1 end
 
-                local rowFrame = Instance.new("Frame")
+                local rowFrame = Instance.new("TextButton")
                 rowFrame.Size = UDim2.new(1, 0, 0, 28); rowFrame.BackgroundTransparency = 1
-                rowFrame.BorderSizePixel = 0; rowFrame.Parent = entriesFrame
+                rowFrame.BorderSizePixel = 0; rowFrame.Text = ""; rowFrame.AutoButtonColor = false; rowFrame.Parent = entriesFrame
+                rowFrame.Selectable = false; rowFrame.Active = true
 
-                local eTog = Instance.new("TextButton")
+                local eTog = Instance.new("Frame")
                 eTog.Size = UDim2.new(0, 14, 0, 14); eTog.Position = UDim2.new(0, 0, 0.5, -7)
                 eTog.BackgroundColor3 = isSel and THEME.Accent or Color3.fromRGB(48, 48, 55)
-                eTog.BorderSizePixel = 0; eTog.Text = ""; eTog.AutoButtonColor = false; eTog.Parent = rowFrame
+                eTog.BorderSizePixel = 0; eTog.Parent = rowFrame
                 local eTogC = Instance.new("UICorner"); eTogC.CornerRadius = UDim.new(0, 0); eTogC.Parent = eTog
                 local eCheck = Instance.new("TextLabel")
                 eCheck.Size = UDim2.fromScale(1, 1); eCheck.BackgroundTransparency = 1
@@ -11090,10 +11091,14 @@ local function BuildConfigTab(page)
 
                 -- Capture mutable refs for closure
                 local capKey, capTog, capChk, capLbl = eKey, eTog, eCheck, eLbl
-                TrackConnection(eTog.MouseButton1Click:Connect(function()
+                TrackConnection(rowFrame.MouseButton1Click:Connect(function()
                     if not SaveModifierState.Categories[catKey] then return end
                     local cur = stateTable[capKey] ~= false
-                    stateTable[capKey] = cur and false or nil
+                    if cur then
+                        stateTable[capKey] = false
+                    else
+                        stateTable[capKey] = nil
+                    end
                     local newSel = stateTable[capKey] ~= false
                     TweenService:Create(capTog, TWEENS.FAST, {BackgroundColor3 = newSel and THEME.Accent or Color3.fromRGB(48, 48, 55)}):Play()
                     capChk.Text = newSel and "✓" or ""
