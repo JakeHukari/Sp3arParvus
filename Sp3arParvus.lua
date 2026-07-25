@@ -206,6 +206,26 @@ local AdvancedPlayerPanelState
 local WorldHumState
 local USER_MODIFIED_FLAGS = {}
 local PROFILE_LOADED_FLAGS = {}  -- flags loaded from a profile (kept separate from user-touched flags)
+-- ── Save Modifier: session-persistent selective-save filter ───────
+local SaveModifierState = {
+    Active               = false,   -- true when ≥1 item is deselected
+    Categories = {
+        whitelist        = true,
+        blacklist        = true,
+        teamWhitelist    = true,
+        teamBlacklist    = true,
+        priorityList     = true,
+        worldHumPresets  = true,
+        flags            = true,
+    },
+    WhitelistEntries     = {},      -- [tostring(userId)]  = bool; false = excluded
+    BlacklistEntries     = {},
+    TeamWhitelistEntries = {},      -- [teamName] = bool
+    TeamBlacklistEntries = {},
+    PriorityEntries      = {},      -- [tostring(index)] = bool
+    PresetEntries        = {},      -- [tostring(presetId)] = bool
+    FlagEntries          = {},      -- [flagKey] = bool  (/Locked companions excluded too)
+}
 local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
 
 -- ╔══════════════════════════════════════════════════════════════════╗
@@ -321,6 +341,89 @@ do
         return name:match("(.+)%.[^%.]+$") or name
     end
 
+    -- ── Save Modifier filter applier ──────────────────────────────────
+    local function applyFilterToPayload(payload, filter)
+        if not filter then return end
+        -- Flags
+        if filter.flags == false then
+            payload.flags = {}
+        elseif type(filter.flagEntries) == "table" then
+            local stripped = {}
+            for k, v in pairs(payload.flags or {}) do
+                local baseKey = k:match("^(.+)/Locked$") or k
+                if filter.flagEntries[baseKey] ~= false and filter.flagEntries[k] ~= false then
+                    stripped[k] = v
+                end
+            end
+            payload.flags = stripped
+        end
+        -- Whitelist
+        if filter.whitelist == false then
+            payload.whitelist = {}
+        elseif type(filter.whitelistEntries) == "table" then
+            local stripped = {}
+            for k, v in pairs(payload.whitelist or {}) do
+                if filter.whitelistEntries[tostring(k)] ~= false then stripped[k] = v end
+            end
+            payload.whitelist = stripped
+        end
+        -- Blacklist
+        if filter.blacklist == false then
+            payload.blacklist = {}
+        elseif type(filter.blacklistEntries) == "table" then
+            local stripped = {}
+            for k, v in pairs(payload.blacklist or {}) do
+                if filter.blacklistEntries[tostring(k)] ~= false then stripped[k] = v end
+            end
+            payload.blacklist = stripped
+        end
+        -- Team Whitelist
+        if filter.teamWhitelist == false then
+            payload.teamWhitelist = {}
+        elseif type(filter.teamWhitelistEntries) == "table" then
+            local stripped = {}
+            for k, v in pairs(payload.teamWhitelist or {}) do
+                if filter.teamWhitelistEntries[tostring(k)] ~= false then stripped[k] = v end
+            end
+            payload.teamWhitelist = stripped
+        end
+        -- Team Blacklist
+        if filter.teamBlacklist == false then
+            payload.teamBlacklist = {}
+        elseif type(filter.teamBlacklistEntries) == "table" then
+            local stripped = {}
+            for k, v in pairs(payload.teamBlacklist or {}) do
+                if filter.teamBlacklistEntries[tostring(k)] ~= false then stripped[k] = v end
+            end
+            payload.teamBlacklist = stripped
+        end
+        -- Priority List
+        if filter.priorityList == false then
+            payload.priorityList = {}
+        elseif type(filter.priorityEntries) == "table" then
+            local stripped = {}
+            for i, entry in ipairs(payload.priorityList or {}) do
+                if filter.priorityEntries[tostring(i)] ~= false then
+                    table.insert(stripped, entry)
+                end
+            end
+            payload.priorityList = stripped
+        end
+        -- WorldHum Presets
+        if filter.worldHumPresets == false then
+            payload.worldHumPresets = {}
+        elseif type(filter.presetEntries) == "table" then
+            local stripped = {}
+            for _, preset in ipairs(payload.worldHumPresets or {}) do
+                local pid = tostring(preset.Id or "")
+                if filter.presetEntries[pid] ~= false then
+                    table.insert(stripped, preset)
+                end
+            end
+            payload.worldHumPresets = stripped
+        end
+    end
+
     -- ── Public API ────────────────────────────────────────────────────
 
     function ConfigManager.HasFileAPIs()
@@ -328,7 +431,7 @@ do
     end
 
     -- Save current settings as a Universal profile
-    function ConfigManager.SaveUniversal(profileName)
+    function ConfigManager.SaveUniversal(profileName, filter)
         if not hasFileAPIs() then
             return false, "writefile API unavailable"
         end
@@ -369,6 +472,7 @@ do
             priorityList    = AdvancedPlayerPanelState.PriorityList,
             worldHumPresets = safePresets
         }
+        applyFilterToPayload(payload, filter)
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
             return true, nil
@@ -378,7 +482,7 @@ do
     end
 
     -- Save current settings as a Per-Game profile (tied to current PlaceId)
-    function ConfigManager.SavePerGame(profileName)
+    function ConfigManager.SavePerGame(profileName, filter)
         if not hasFileAPIs() then
             return false, "writefile API unavailable"
         end
@@ -420,6 +524,7 @@ do
             priorityList    = AdvancedPlayerPanelState.PriorityList,
             worldHumPresets = safePresets
         }
+        applyFilterToPayload(payload, filter)
         local ok, err = pcall(writefile, fileName, encode(payload))
         if ok then
             return true, nil
@@ -571,7 +676,7 @@ do
     end
 
     -- Overwrite an existing profile's flags in-place (preserves name, autoLoad, placeId, etc.)
-    function ConfigManager.OverwriteProfile(filePath)
+    function ConfigManager.OverwriteProfile(filePath, filter)
         if not hasFileAPIs() then
             return false, "file API unavailable"
         end
@@ -630,6 +735,7 @@ do
         parsed.worldHumPresets = WorldHumState.Presets
         parsed.savedAt = os.time()
         parsed.version = VERSION
+        applyFilterToPayload(parsed, filter)
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
         return writeOk, writeOk and (parsed.name or "Unknown") or tostring(writeErr)
     end
@@ -9932,11 +10038,51 @@ local MiscTab = UI.CreateTab("Dev Tools")
 local ShortcutsTab = UI.CreateTab("Shortcuts")
 InitializeShortcutsPage(ShortcutsTab)
 
+-- ── Save Modifier: Active-state scanner ───────────────────────────
+local function UpdateSaveModifierActive()
+    for _, v in pairs(SaveModifierState.Categories) do
+        if not v then SaveModifierState.Active = true; return end
+    end
+    for _, tbl in ipairs({
+        SaveModifierState.WhitelistEntries,     SaveModifierState.BlacklistEntries,
+        SaveModifierState.TeamWhitelistEntries, SaveModifierState.TeamBlacklistEntries,
+        SaveModifierState.PriorityEntries,      SaveModifierState.PresetEntries,
+        SaveModifierState.FlagEntries,
+    }) do
+        for _, v in pairs(tbl) do
+            if v == false then SaveModifierState.Active = true; return end
+        end
+    end
+    SaveModifierState.Active = false
+end
+
+-- ── Save Modifier: Build filter table for ConfigManager ────────────
+local function BuildSaveFilter()
+    UpdateSaveModifierActive()
+    if not SaveModifierState.Active then return nil end
+    local filter = {}
+    local cats   = SaveModifierState.Categories
+    local function makeEx(tbl)
+        local ex, any = {}, false
+        for k, v in pairs(tbl) do if v == false then ex[k] = false; any = true end end
+        return any and ex or nil
+    end
+    if not cats.flags           then filter.flags           = false else local ex = makeEx(SaveModifierState.FlagEntries);          if ex then filter.flagEntries          = ex end end
+    if not cats.whitelist       then filter.whitelist       = false else local ex = makeEx(SaveModifierState.WhitelistEntries);      if ex then filter.whitelistEntries      = ex end end
+    if not cats.blacklist       then filter.blacklist       = false else local ex = makeEx(SaveModifierState.BlacklistEntries);      if ex then filter.blacklistEntries      = ex end end
+    if not cats.teamWhitelist   then filter.teamWhitelist   = false else local ex = makeEx(SaveModifierState.TeamWhitelistEntries);  if ex then filter.teamWhitelistEntries  = ex end end
+    if not cats.teamBlacklist   then filter.teamBlacklist   = false else local ex = makeEx(SaveModifierState.TeamBlacklistEntries);  if ex then filter.teamBlacklistEntries  = ex end end
+    if not cats.priorityList    then filter.priorityList    = false else local ex = makeEx(SaveModifierState.PriorityEntries);       if ex then filter.priorityEntries       = ex end end
+    if not cats.worldHumPresets then filter.worldHumPresets = false else local ex = makeEx(SaveModifierState.PresetEntries);         if ex then filter.presetEntries         = ex end end
+    return filter
+end
+
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  Config Tab — Profile Save/Load System UI                        ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 local function BuildConfigTab(page)
     local THEME = UI_THEME
+    local openModifier  -- forward-declared; assigned after overlay is fully built
 
     -- ── Helper: thin separator ─────────────────────────────────────────
     local function makeSeparator(parent)
@@ -10094,6 +10240,43 @@ local function BuildConfigTab(page)
         sl.Parent = s
     end
 
+    -- ── Save Modifier button (opens full-page overlay) ───────────────
+    local modOpenBtn = Instance.new("TextButton")
+    modOpenBtn.Size = UDim2.new(1, 0, 0, 34)
+    modOpenBtn.BackgroundColor3 = Color3.fromRGB(28, 22, 34)
+    modOpenBtn.BorderSizePixel = 0
+    modOpenBtn.Text = "SAVE MODIFIER  —  Customize what gets saved"
+    modOpenBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    modOpenBtn.TextSize = 12
+    modOpenBtn.TextColor3 = THEME.Accent
+    modOpenBtn.AutoButtonColor = false
+    modOpenBtn.Parent = expandable
+    local _modBtnC  = Instance.new("UICorner"); _modBtnC.CornerRadius  = UDim.new(0, 6); _modBtnC.Parent  = modOpenBtn
+    local _modBtnSt = Instance.new("UIStroke");  _modBtnSt.Color = THEME.Accent; _modBtnSt.Thickness = 1
+    _modBtnSt.Transparency = 0.4; _modBtnSt.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; _modBtnSt.Parent = modOpenBtn
+    TrackConnection(modOpenBtn.MouseEnter:Connect(function()
+        TweenService:Create(modOpenBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(38, 28, 46)}):Play()
+        TweenService:Create(_modBtnSt, TWEENS.FAST, {Transparency = 0}):Play()
+    end))
+    TrackConnection(modOpenBtn.MouseLeave:Connect(function()
+        TweenService:Create(modOpenBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(28, 22, 34)}):Play()
+        TweenService:Create(_modBtnSt, TWEENS.FAST, {Transparency = 0.4}):Play()
+    end))
+    TrackConnection(modOpenBtn.MouseButton1Click:Connect(function()
+        if openModifier then openModifier() end
+    end))
+    -- Active badge (amber, shown when SaveModifierState.Active == true)
+    local activeModLabel = Instance.new("TextLabel")
+    activeModLabel.Size = UDim2.new(1, 0, 0, 20)
+    activeModLabel.BackgroundTransparency = 1
+    activeModLabel.Text = "Save Modifier active  —  filtered data will be omitted from saves"
+    activeModLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    activeModLabel.TextSize = 10
+    activeModLabel.TextColor3 = Color3.fromRGB(230, 160, 40)
+    activeModLabel.TextXAlignment = Enum.TextXAlignment.Right
+    activeModLabel.Visible = false
+    activeModLabel.Parent = expandable
+
     makeSection(expandable, "Quick Actions")
 
     makeInfoLabel(expandable,
@@ -10131,7 +10314,7 @@ local function BuildConfigTab(page)
             UI.Notify("Invalid Name", "Please enter a profile name before saving.", 4)
             return
         end
-        local ok, err = ConfigManager.SaveUniversal(name)
+        local ok, err = ConfigManager.SaveUniversal(name, BuildSaveFilter())
         if ok then
             UI.Notify("Profile Saved", "Universal profile \"" .. name .. "\" saved successfully.", 5)
             saveNameBox.Text = ""
@@ -10175,7 +10358,7 @@ local function BuildConfigTab(page)
             UI.Notify("Invalid Name", "Please enter a profile name before saving.", 4)
             return
         end
-        local ok, err = ConfigManager.SavePerGame(name)
+        local ok, err = ConfigManager.SavePerGame(name, BuildSaveFilter())
         if ok then
             UI.Notify("Profile Saved", "Per-Game profile \"" .. name .. "\" saved for PlaceId " .. tostring(game.PlaceId) .. ".", 5)
             saveNameBox.Text = ""
@@ -10475,7 +10658,7 @@ local function BuildConfigTab(page)
                 overwriteConfirming = false
                 overwriteBtn.Text = "Overwrite"
                 overwriteBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 20)
-                local ok, nameOrErr = ConfigManager.OverwriteProfile(profileData.fileName)
+                local ok, nameOrErr = ConfigManager.OverwriteProfile(profileData.fileName, BuildSaveFilter())
                 if ok then
                     UI.Notify("Profile Updated", "Profile \"" .. (nameOrErr or profileData.name) .. "\" has been overwritten with current settings.", 5)
                 else
@@ -10585,6 +10768,491 @@ local function BuildConfigTab(page)
     end
     -- Populate profile lists now that all containers exist
     task.defer(refreshLists)
+
+    -- ─────────────────────────────────────────────────────────────────
+    --  Save Modifier Overlay  (full-page takeover, parented to `page`)
+    -- ─────────────────────────────────────────────────────────────────
+    local modOverlay = Instance.new("Frame")
+    modOverlay.Name = "SaveModifierOverlay"
+    modOverlay.Size = UDim2.new(1, 0, 0, 0)
+    modOverlay.BackgroundColor3 = THEME.Background
+    modOverlay.BorderSizePixel = 0
+    modOverlay.Visible = false
+    modOverlay.ZIndex = 5
+    modOverlay.Parent = page
+    local _molayout = Instance.new("UIListLayout")
+    _molayout.Padding = UDim.new(0, 0)
+    _molayout.SortOrder = Enum.SortOrder.LayoutOrder
+    _molayout.Parent = modOverlay
+    TrackConnection(_molayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        modOverlay.Size = UDim2.new(1, 0, 0, _molayout.AbsoluteContentSize.Y + 12)
+    end))
+
+    -- ── Header ──────────────────────────────────────────────────────
+    local modHdr = Instance.new("Frame")
+    modHdr.Size = UDim2.new(1, 0, 0, 46)
+    modHdr.BackgroundColor3 = Color3.fromRGB(24, 18, 30)
+    modHdr.BorderSizePixel = 0
+    modHdr.LayoutOrder = 1
+    modHdr.Parent = modOverlay
+    local modHdrStroke = Instance.new("UIStroke")
+    modHdrStroke.Color = THEME.Accent; modHdrStroke.Thickness = 1
+    modHdrStroke.Transparency = 0.35; modHdrStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    modHdrStroke.Parent = modHdr
+    local modHdrTitle = Instance.new("TextLabel")
+    modHdrTitle.Size = UDim2.new(1, -114, 0, 24)
+    modHdrTitle.Position = UDim2.new(0, 12, 0, 7)
+    modHdrTitle.BackgroundTransparency = 1
+    modHdrTitle.Text = "SAVE MODIFIER"
+    modHdrTitle.FontFace = Font.fromName("Montserrat", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal)
+    modHdrTitle.TextSize = 14
+    modHdrTitle.TextColor3 = THEME.Accent
+    modHdrTitle.TextXAlignment = Enum.TextXAlignment.Left
+    modHdrTitle.Parent = modHdr
+    local modHdrSub = Instance.new("TextLabel")
+    modHdrSub.Size = UDim2.new(1, -114, 0, 12)
+    modHdrSub.Position = UDim2.new(0, 12, 0, 31)
+    modHdrSub.BackgroundTransparency = 1
+    modHdrSub.Text = "Choose what data is included when saving or overwriting profiles"
+    modHdrSub.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    modHdrSub.TextSize = 9
+    modHdrSub.TextColor3 = THEME.TextDark
+    modHdrSub.TextXAlignment = Enum.TextXAlignment.Left
+    modHdrSub.Parent = modHdr
+    local modCloseBtn = Instance.new("TextButton")
+    modCloseBtn.Size = UDim2.new(0, 96, 0, 28)
+    modCloseBtn.Position = UDim2.new(1, -104, 0.5, -14)
+    modCloseBtn.BackgroundColor3 = Color3.fromRGB(55, 28, 33)
+    modCloseBtn.BorderSizePixel = 0
+    modCloseBtn.Text = "Close"
+    modCloseBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    modCloseBtn.TextSize = 12
+    modCloseBtn.TextColor3 = Color3.fromRGB(240, 100, 110)
+    modCloseBtn.AutoButtonColor = false
+    modCloseBtn.Parent = modHdr
+    local modCloseBtnC = Instance.new("UICorner"); modCloseBtnC.CornerRadius = UDim.new(0, 5); modCloseBtnC.Parent = modCloseBtn
+    TrackConnection(modCloseBtn.MouseEnter:Connect(function()
+        TweenService:Create(modCloseBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(90, 38, 44)}):Play()
+    end))
+    TrackConnection(modCloseBtn.MouseLeave:Connect(function()
+        TweenService:Create(modCloseBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(55, 28, 33)}):Play()
+    end))
+
+    -- ── Amber status bar (visible when modifier is filtering) ────────
+    local modStatusBar = Instance.new("Frame")
+    modStatusBar.Size = UDim2.new(1, 0, 0, 28)
+    modStatusBar.BackgroundColor3 = Color3.fromRGB(44, 33, 7)
+    modStatusBar.BorderSizePixel = 0
+    modStatusBar.LayoutOrder = 2
+    modStatusBar.Visible = false
+    modStatusBar.Parent = modOverlay
+    local modStatusStroke = Instance.new("UIStroke")
+    modStatusStroke.Color = Color3.fromRGB(210, 150, 40)
+    modStatusStroke.Thickness = 1; modStatusStroke.Transparency = 0.4
+    modStatusStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; modStatusStroke.Parent = modStatusBar
+    local modStatusLbl = Instance.new("TextLabel")
+    modStatusLbl.Size = UDim2.new(1, -16, 1, 0)
+    modStatusLbl.Position = UDim2.new(0, 8, 0, 0)
+    modStatusLbl.BackgroundTransparency = 1
+    modStatusLbl.Text = "Modifier is active  —  filtered data will be omitted when saving."
+    modStatusLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    modStatusLbl.TextSize = 10
+    modStatusLbl.TextColor3 = Color3.fromRGB(230, 175, 60)
+    modStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    modStatusLbl.Parent = modStatusBar
+
+    -- ── Action bar ───────────────────────────────────────────────────
+    local modActionBar = Instance.new("Frame")
+    modActionBar.Size = UDim2.new(1, 0, 0, 38)
+    modActionBar.BackgroundTransparency = 1
+    modActionBar.LayoutOrder = 3
+    modActionBar.Parent = modOverlay
+    local modActionPad = Instance.new("UIPadding")
+    modActionPad.PaddingLeft = UDim.new(0, 6); modActionPad.PaddingRight  = UDim.new(0, 6)
+    modActionPad.PaddingTop  = UDim.new(0, 5); modActionPad.PaddingBottom = UDim.new(0, 5)
+    modActionPad.Parent = modActionBar
+    local modActionLayout2 = Instance.new("UIListLayout")
+    modActionLayout2.FillDirection = Enum.FillDirection.Horizontal
+    modActionLayout2.Padding = UDim.new(0, 6)
+    modActionLayout2.SortOrder = Enum.SortOrder.LayoutOrder
+    modActionLayout2.VerticalAlignment = Enum.VerticalAlignment.Center
+    modActionLayout2.Parent = modActionBar
+    local function _makeModActionBtn(parent, text, bg, tc, w)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, w, 0, 26)
+        b.BackgroundColor3 = bg; b.BorderSizePixel = 0
+        b.Text = text
+        b.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        b.TextSize = 11; b.TextColor3 = tc
+        b.AutoButtonColor = false; b.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 5); c.Parent = b
+        TrackConnection(b.MouseEnter:Connect(function()
+            TweenService:Create(b, TWEENS.FAST, {BackgroundColor3 = bg:Lerp(Color3.fromRGB(255,255,255), 0.10)}):Play()
+        end))
+        TrackConnection(b.MouseLeave:Connect(function()
+            TweenService:Create(b, TWEENS.FAST, {BackgroundColor3 = bg}):Play()
+        end))
+        return b
+    end
+    local modSelectAllBtn   = _makeModActionBtn(modActionBar, "Select All",   Color3.fromRGB(28, 68, 34),  THEME.Success,               90)
+    local modDeselectAllBtn = _makeModActionBtn(modActionBar, "Deselect All", Color3.fromRGB(60, 38, 14),  Color3.fromRGB(220, 155, 70), 100)
+    local modResetBtn       = _makeModActionBtn(modActionBar, "Reset",        Color3.fromRGB(38, 38, 48),  THEME.TextDark,               64)
+
+    -- ── Info label ───────────────────────────────────────────────────
+    local modInfoLbl = makeInfoLabel(modOverlay,
+        "Toggle categories and individual entries. Selections persist when you close. Use Save / Overwrite buttons to save with the active filter.", 40)
+    modInfoLbl.LayoutOrder = 4
+
+    -- ── Categories container ─────────────────────────────────────────
+    local modCatContainer = Instance.new("Frame")
+    modCatContainer.Size = UDim2.new(1, 0, 0, 0)
+    modCatContainer.BackgroundTransparency = 1
+    modCatContainer.LayoutOrder = 5
+    modCatContainer.Parent = modOverlay
+    local modCatLayout = Instance.new("UIListLayout")
+    modCatLayout.Padding = UDim.new(0, 4)
+    modCatLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    modCatLayout.Parent = modCatContainer
+    local modCatPad = Instance.new("UIPadding")
+    modCatPad.PaddingTop = UDim.new(0, 4); modCatPad.PaddingBottom = UDim.new(0, 4)
+    modCatPad.Parent = modCatContainer
+    TrackConnection(modCatLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        modCatContainer.Size = UDim2.new(1, 0, 0, modCatLayout.AbsoluteContentSize.Y + 8)
+    end))
+
+    -- Persist expand state across open/close cycles
+    local _modCatExpanded = {}
+
+    -- ── Helper: build one collapsible category section ───────────────
+    local function buildModSection(catKey, catLabel, stateTable, getEntries)
+        local secFrame = Instance.new("Frame")
+        secFrame.Size = UDim2.new(1, 0, 0, 0)
+        secFrame.BackgroundTransparency = 1
+        secFrame.Parent = modCatContainer
+        local secLayout = Instance.new("UIListLayout")
+        secLayout.Padding = UDim.new(0, 0)
+        secLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        secLayout.Parent = secFrame
+        TrackConnection(secLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            secFrame.Size = UDim2.new(1, 0, 0, secLayout.AbsoluteContentSize.Y)
+        end))
+
+        -- Section header row
+        local hdr = Instance.new("Frame")
+        hdr.Size = UDim2.new(1, 0, 0, 36)
+        hdr.BackgroundColor3 = Color3.fromRGB(30, 28, 36)
+        hdr.BorderSizePixel = 0; hdr.LayoutOrder = 1
+        hdr.Parent = secFrame
+        local hdrC = Instance.new("UICorner"); hdrC.CornerRadius = UDim.new(0, 6); hdrC.Parent = hdr
+        local hdrStroke = Instance.new("UIStroke")
+        hdrStroke.Color = SaveModifierState.Categories[catKey] and THEME.Accent or Color3.fromRGB(55, 55, 60)
+        hdrStroke.Thickness = 1; hdrStroke.Transparency = 0.6
+        hdrStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; hdrStroke.Parent = hdr
+
+        -- Master toggle circle
+        local masterTog = Instance.new("TextButton")
+        masterTog.Size = UDim2.new(0, 18, 0, 18)
+        masterTog.Position = UDim2.new(0, 8, 0.5, -9)
+        masterTog.BackgroundColor3 = SaveModifierState.Categories[catKey] and THEME.Accent or Color3.fromRGB(48, 48, 55)
+        masterTog.BorderSizePixel = 0; masterTog.Text = ""; masterTog.AutoButtonColor = false
+        masterTog.Parent = hdr
+        local masterTogC = Instance.new("UICorner"); masterTogC.CornerRadius = UDim.new(0, 3); masterTogC.Parent = masterTog
+        local masterCheck = Instance.new("TextLabel")
+        masterCheck.Size = UDim2.fromScale(1, 1); masterCheck.BackgroundTransparency = 1
+        masterCheck.Text = SaveModifierState.Categories[catKey] and "✓" or ""
+        masterCheck.FontFace = Font.fromName("Montserrat", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal)
+        masterCheck.TextSize = 10; masterCheck.TextColor3 = Color3.fromRGB(255, 255, 255)
+        masterCheck.Parent = masterTog
+
+        -- Title
+        local titleLbl = Instance.new("TextLabel")
+        titleLbl.Size = UDim2.new(0.5, -34, 1, 0); titleLbl.Position = UDim2.new(0, 32, 0, 0)
+        titleLbl.BackgroundTransparency = 1; titleLbl.Text = catLabel
+        titleLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        titleLbl.TextSize = 12
+        titleLbl.TextColor3 = SaveModifierState.Categories[catKey] and THEME.Text or THEME.TextDark
+        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        titleLbl.TextTruncate = Enum.TextTruncate.AtEnd; titleLbl.Parent = hdr
+
+        -- Entry count
+        local countLbl = Instance.new("TextLabel")
+        countLbl.Size = UDim2.new(0.3, 0, 1, 0); countLbl.Position = UDim2.new(0.5, 0, 0, 0)
+        countLbl.BackgroundTransparency = 1; countLbl.Text = "—"
+        countLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        countLbl.TextSize = 10; countLbl.TextColor3 = THEME.TextDark
+        countLbl.TextXAlignment = Enum.TextXAlignment.Center; countLbl.Parent = hdr
+
+        -- Expand arrow
+        local arrowBtn = Instance.new("TextButton")
+        arrowBtn.Size = UDim2.new(0, 30, 0, 30); arrowBtn.Position = UDim2.new(1, -34, 0.5, -15)
+        arrowBtn.BackgroundTransparency = 1; arrowBtn.BorderSizePixel = 0
+        arrowBtn.Text = _modCatExpanded[catKey] and "▼" or "▶"
+        arrowBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        arrowBtn.TextSize = 10; arrowBtn.TextColor3 = THEME.TextDark; arrowBtn.AutoButtonColor = false
+        arrowBtn.Parent = hdr
+
+        -- Entries frame
+        local entriesFrame = Instance.new("Frame")
+        entriesFrame.Size = UDim2.new(1, 0, 0, 0)
+        entriesFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+        entriesFrame.BorderSizePixel = 0; entriesFrame.LayoutOrder = 2
+        entriesFrame.Visible = _modCatExpanded[catKey] == true; entriesFrame.Parent = secFrame
+        local entriesLayout = Instance.new("UIListLayout")
+        entriesLayout.Padding = UDim.new(0, 0); entriesLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        entriesLayout.Parent = entriesFrame
+        local entriesPad = Instance.new("UIPadding")
+        entriesPad.PaddingLeft = UDim.new(0, 28); entriesPad.PaddingRight = UDim.new(0, 8)
+        entriesPad.PaddingTop = UDim.new(0, 2); entriesPad.PaddingBottom = UDim.new(0, 4)
+        entriesPad.Parent = entriesFrame
+        local entriesC = Instance.new("UICorner"); entriesC.CornerRadius = UDim.new(0, 4); entriesC.Parent = entriesFrame
+        TrackConnection(entriesLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            entriesFrame.Size = UDim2.new(1, 0, 0, entriesLayout.AbsoluteContentSize.Y + 6)
+        end))
+
+        local function setExpanded(v)
+            _modCatExpanded[catKey] = v
+            arrowBtn.Text = v and "▼" or "▶"
+            entriesFrame.Visible = v
+        end
+        TrackConnection(arrowBtn.MouseButton1Click:Connect(function() setExpanded(not _modCatExpanded[catKey]) end))
+
+        local function updateHdrVisuals(enabled)
+            TweenService:Create(masterTog, TWEENS.FAST, {BackgroundColor3 = enabled and THEME.Accent or Color3.fromRGB(48, 48, 55)}):Play()
+            masterCheck.Text = enabled and "✓" or ""
+            titleLbl.TextColor3 = enabled and THEME.Text or THEME.TextDark
+            hdrStroke.Color = enabled and THEME.Accent or Color3.fromRGB(55, 55, 60)
+        end
+
+        local rebuildEntries  -- forward-declared
+
+        TrackConnection(masterTog.MouseButton1Click:Connect(function()
+            local newState = not SaveModifierState.Categories[catKey]
+            SaveModifierState.Categories[catKey] = newState
+            if newState then for k in pairs(stateTable) do stateTable[k] = nil end end
+            updateHdrVisuals(newState)
+            UpdateSaveModifierActive()
+            modStatusBar.Visible = SaveModifierState.Active
+            if rebuildEntries then pcall(rebuildEntries) end
+        end))
+
+        rebuildEntries = function()
+            for _, child in ipairs(entriesFrame:GetChildren()) do
+                if not child:IsA("UIListLayout") and not child:IsA("UIPadding") and not child:IsA("UICorner") then
+                    child:Destroy()
+                end
+            end
+            local entries  = getEntries()
+            local total    = #entries
+            local selCnt   = 0
+            local catOn    = SaveModifierState.Categories[catKey]
+
+            if total == 0 then
+                local emptyLbl = Instance.new("TextLabel")
+                emptyLbl.Size = UDim2.new(1, 0, 0, 26)
+                emptyLbl.BackgroundTransparency = 1
+                emptyLbl.Text = "No entries saved in this category."
+                emptyLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                emptyLbl.TextSize = 10; emptyLbl.TextColor3 = THEME.TextDark
+                emptyLbl.TextXAlignment = Enum.TextXAlignment.Left
+                emptyLbl.Parent = entriesFrame
+                countLbl.Text = "0 / 0"
+                updateHdrVisuals(catOn)
+                return
+            end
+
+            for _, entry in ipairs(entries) do
+                local eKey = tostring(entry.key)
+                local isSel = catOn and (stateTable[eKey] ~= false)
+                if isSel then selCnt += 1 end
+
+                local rowFrame = Instance.new("Frame")
+                rowFrame.Size = UDim2.new(1, 0, 0, 28); rowFrame.BackgroundTransparency = 1
+                rowFrame.BorderSizePixel = 0; rowFrame.Parent = entriesFrame
+
+                local eTog = Instance.new("TextButton")
+                eTog.Size = UDim2.new(0, 14, 0, 14); eTog.Position = UDim2.new(0, 0, 0.5, -7)
+                eTog.BackgroundColor3 = isSel and THEME.Accent or Color3.fromRGB(48, 48, 55)
+                eTog.BorderSizePixel = 0; eTog.Text = ""; eTog.AutoButtonColor = false; eTog.Parent = rowFrame
+                local eTogC = Instance.new("UICorner"); eTogC.CornerRadius = UDim.new(0, 0); eTogC.Parent = eTog
+                local eCheck = Instance.new("TextLabel")
+                eCheck.Size = UDim2.fromScale(1, 1); eCheck.BackgroundTransparency = 1
+                eCheck.Text = isSel and "✓" or ""; eCheck.TextSize = 8
+                eCheck.FontFace = Font.fromName("Montserrat", Enum.FontWeight.ExtraBold, Enum.FontStyle.Normal)
+                eCheck.TextColor3 = Color3.fromRGB(255, 255, 255); eCheck.Parent = eTog
+
+                local eLbl = Instance.new("TextLabel")
+                eLbl.Size = UDim2.new(1, -20, 1, 0); eLbl.Position = UDim2.new(0, 20, 0, 0)
+                eLbl.BackgroundTransparency = 1; eLbl.Text = entry.label
+                eLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                eLbl.TextSize = 11; eLbl.TextColor3 = isSel and THEME.Text or THEME.TextDark
+                eLbl.TextXAlignment = Enum.TextXAlignment.Left
+                eLbl.TextTruncate = Enum.TextTruncate.AtEnd; eLbl.Parent = rowFrame
+
+                -- Capture mutable refs for closure
+                local capKey, capTog, capChk, capLbl = eKey, eTog, eCheck, eLbl
+                TrackConnection(eTog.MouseButton1Click:Connect(function()
+                    if not SaveModifierState.Categories[catKey] then return end
+                    local cur = stateTable[capKey] ~= false
+                    stateTable[capKey] = cur and false or nil
+                    local newSel = stateTable[capKey] ~= false
+                    TweenService:Create(capTog, TWEENS.FAST, {BackgroundColor3 = newSel and THEME.Accent or Color3.fromRGB(48, 48, 55)}):Play()
+                    capChk.Text = newSel and "✓" or ""
+                    capLbl.TextColor3 = newSel and THEME.Text or THEME.TextDark
+                    -- Recount
+                    local cnt = 0
+                    for _, e in ipairs(entries) do
+                        if stateTable[tostring(e.key)] ~= false then cnt += 1 end
+                    end
+                    countLbl.Text = tostring(cnt) .. " / " .. tostring(total)
+                    UpdateSaveModifierActive()
+                    modStatusBar.Visible = SaveModifierState.Active
+                end))
+            end
+            countLbl.Text = tostring(selCnt) .. " / " .. tostring(total)
+            updateHdrVisuals(catOn)
+        end
+
+        return rebuildEntries
+    end
+
+    -- ── Instantiate all 7 category sections ──────────────────────────
+    local _PS = game:GetService("Players")
+    local function _pname(uid)
+        local ok, pl = pcall(function() return _PS:GetPlayerByUserId(tonumber(uid) or 0) end)
+        return (ok and pl) and pl.Name or ("User #" .. tostring(uid))
+    end
+
+    local _modRebuilders = {}
+
+    table.insert(_modRebuilders, buildModSection("whitelist",  "Player Whitelist",
+        SaveModifierState.WhitelistEntries, function()
+            local out = {}
+            for uid, v in pairs(AdvancedPlayerPanelState.Whitelist) do
+                if v then table.insert(out, {key = tostring(uid), label = _pname(uid)}) end
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("blacklist",  "Player Blacklist",
+        SaveModifierState.BlacklistEntries, function()
+            local out = {}
+            for uid, v in pairs(AdvancedPlayerPanelState.Blacklist) do
+                if v then table.insert(out, {key = tostring(uid), label = _pname(uid)}) end
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("teamWhitelist", "Team Whitelist",
+        SaveModifierState.TeamWhitelistEntries, function()
+            local out = {}
+            for tName, v in pairs(AdvancedPlayerPanelState.TeamWhitelist) do
+                if v then table.insert(out, {key = tName, label = "Team: " .. tName}) end
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("teamBlacklist", "Team Blacklist",
+        SaveModifierState.TeamBlacklistEntries, function()
+            local out = {}
+            for tName, v in pairs(AdvancedPlayerPanelState.TeamBlacklist) do
+                if v then table.insert(out, {key = tName, label = "Team: " .. tName}) end
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("priorityList", "Priority List",
+        SaveModifierState.PriorityEntries, function()
+            local out = {}
+            for i, item in ipairs(AdvancedPlayerPanelState.PriorityList) do
+                table.insert(out, {key = tostring(i), label = "#" .. i .. "  " .. item.type .. ": " .. tostring(item.value)})
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("worldHumPresets", "Humanoid Presets",
+        SaveModifierState.PresetEntries, function()
+            local out = {}
+            for _, preset in ipairs(WorldHumState.Presets) do
+                local pid = tostring(preset.Id or "")
+                local lbl = (preset.TargetName or "Unnamed") .. "  [" .. (preset.TargetMode or "?") .. "]"
+                table.insert(out, {key = pid, label = lbl})
+            end; return out
+        end))
+
+    table.insert(_modRebuilders, buildModSection("flags", "Flags / Settings",
+        SaveModifierState.FlagEntries, function()
+            local seen, out = {}, {}
+            for k in pairs(USER_MODIFIED_FLAGS) do
+                if not k:match("/Locked$") and not seen[k] then
+                    seen[k] = true
+                    local val = Flags[k]
+                    table.insert(out, {key = k, label = k .. "  =  " .. (type(val) == "table" and "{…}" or tostring(val))})
+                end
+            end
+            for k in pairs(PROFILE_LOADED_FLAGS) do
+                if not k:match("/Locked$") and not seen[k] then
+                    seen[k] = true
+                    local val = Flags[k]
+                    table.insert(out, {key = k, label = k .. "  =  " .. (type(val) == "table" and "{…}" or tostring(val))})
+                end
+            end
+            table.sort(out, function(a, b) return a.key < b.key end)
+            return out
+        end))
+
+    -- Refresh all sections (called on each open)
+    local function _rebuildModifierContent()
+        for _, fn in ipairs(_modRebuilders) do pcall(fn) end
+        UpdateSaveModifierActive()
+        modStatusBar.Visible = SaveModifierState.Active
+    end
+
+    -- ── Badge updater (called on close, updates Config page button/label) ──
+    local function _updateConfigBadges()
+        UpdateSaveModifierActive()
+        local active = SaveModifierState.Active
+        activeModLabel.Visible = active
+        modOpenBtn.Text = active
+            and "SAVE MODIFIER  —  Modifier Active"
+            or  "SAVE MODIFIER  —  Customize what gets saved"
+        modOpenBtn.TextColor3 = active and Color3.fromRGB(230, 160, 40) or THEME.Accent
+        _modBtnSt.Color = active and Color3.fromRGB(230, 160, 40) or THEME.Accent
+    end
+    _G._SP3AR_ModBadgeUpdate = _updateConfigBadges
+
+    -- ── Close handler ────────────────────────────────────────────────
+    local function _closeModifier()
+        modOverlay.Visible = false
+        expandable.Visible = true
+        _updateConfigBadges()
+    end
+    TrackConnection(modCloseBtn.MouseButton1Click:Connect(_closeModifier))
+
+    -- ── Bulk action handlers ─────────────────────────────────────────
+    local _allEntryTables = {
+        SaveModifierState.WhitelistEntries,     SaveModifierState.BlacklistEntries,
+        SaveModifierState.TeamWhitelistEntries, SaveModifierState.TeamBlacklistEntries,
+        SaveModifierState.PriorityEntries,      SaveModifierState.PresetEntries,
+        SaveModifierState.FlagEntries,
+    }
+    TrackConnection(modSelectAllBtn.MouseButton1Click:Connect(function()
+        for k in pairs(SaveModifierState.Categories) do SaveModifierState.Categories[k] = true end
+        for _, t in ipairs(_allEntryTables) do for k in pairs(t) do t[k] = nil end end
+        _rebuildModifierContent()
+    end))
+    TrackConnection(modDeselectAllBtn.MouseButton1Click:Connect(function()
+        for k in pairs(SaveModifierState.Categories) do SaveModifierState.Categories[k] = false end
+        for _, t in ipairs(_allEntryTables) do for k in pairs(t) do t[k] = nil end end
+        _rebuildModifierContent()
+    end))
+    TrackConnection(modResetBtn.MouseButton1Click:Connect(function()
+        for k in pairs(SaveModifierState.Categories) do SaveModifierState.Categories[k] = true end
+        for _, t in ipairs(_allEntryTables) do for k in pairs(t) do t[k] = nil end end
+        _rebuildModifierContent()
+    end))
+
+    -- ── Assign openModifier (forward-declared at top of BuildConfigTab) ──
+    openModifier = function()
+        expandable.Visible = false
+        modOverlay.Visible = true
+        pcall(function() page.CanvasPosition = Vector2.zero end)
+        _rebuildModifierContent()
+    end
 end
 
 local ConfigTab = UI.CreateTab("Config")
