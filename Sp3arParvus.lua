@@ -807,54 +807,23 @@ do
 
     -- ── Startup Auto-Load Logic ───────────────────────────────────────
     -- Runs synchronously before UI is built. Priority:
-    --   1. Per-Game profile matching current PlaceId with autoLoad=true
-    --   2. Universal profile with autoLoad=true
+    --   1. Universal profiles with autoLoad=true
+    --   2. Per-Game profiles matching current PlaceId with autoLoad=true
     --   3. Fallback to defaults (no-op — already loaded)
     local function RunStartupAutoLoad()
         if not hasFileAPIs() then
             -- Notify is not yet available at this point; defer to a post-UI notification
-            ConfigManager._startupNotify = {
-                kind = "no_api"
-            }
+            ConfigManager._startupNotifies = {{ kind = "no_api" }}
             return
         end
 
         pcall(ensureDirs)
 
         local currentPlaceId = tostring(game.PlaceId)
+        ConfigManager._startupPayloads = {}
+        ConfigManager._startupNotifies = {}
 
-        -- 1. Scan Per-Game profiles
-        local perGameProfiles = {}
-        local pgFiles = listdir(PERGAME_DIR)
-        for _, filePath in ipairs(pgFiles) do
-            local baseName = fileBasename(filePath)
-            if baseName:match("%.json$") then
-                local ok, raw = pcall(readfile, filePath)
-                if ok and raw then
-                    local parsed = nil
-                    pcall(function() parsed = decode(raw) end)
-                    if parsed then
-                        table.insert(perGameProfiles, {parsed = parsed, filePath = filePath})
-                    end
-                end
-            end
-        end
-
-        for _, entry in ipairs(perGameProfiles) do
-            local p = entry.parsed
-            if p.autoLoad == true and tostring(p.placeId) == currentPlaceId and type(p.flags) == "table" then
-                ConfigManager._startupPayload = entry.filePath
-                ConfigManager._startupNotify = {
-                    kind        = "pergame",
-                    profileName = p.name or "Unknown",
-                    placeId     = currentPlaceId
-                }
-                print(string.format("[Sp3arParvus] Config: Per-game profile \"%s\" auto-loaded for PlaceId %s.", p.name or "?", currentPlaceId))
-                return
-            end
-        end
-
-        -- 2. Scan Universal profiles
+        -- Scan Universal profiles
         local universalProfiles = {}
         local uFiles = listdir(UNIVERSAL_DIR)
         for _, filePath in ipairs(uFiles) do
@@ -871,30 +840,67 @@ do
             end
         end
 
-        for _, entry in ipairs(universalProfiles) do
-            local p = entry.parsed
-            if p.autoLoad == true and type(p.flags) == "table" then
-                ConfigManager._startupPayload = entry.filePath
-                ConfigManager._startupNotify = {
-                    kind        = "universal",
-                    profileName = p.name or "Unknown"
-                }
-                print(string.format("[Sp3arParvus] Config: Universal profile \"%s\" auto-loaded.", p.name or "?"))
-                return
+        -- Scan Per-Game profiles
+        local perGameProfiles = {}
+        local pgFiles = listdir(PERGAME_DIR)
+        for _, filePath in ipairs(pgFiles) do
+            local baseName = fileBasename(filePath)
+            if baseName:match("%.json$") then
+                local ok, raw = pcall(readfile, filePath)
+                if ok and raw then
+                    local parsed = nil
+                    pcall(function() parsed = decode(raw) end)
+                    if parsed then
+                        table.insert(perGameProfiles, {parsed = parsed, filePath = filePath})
+                    end
+                end
             end
         end
 
-        -- 3. Fallback — notify only if profiles exist but none auto-load
-        local totalProfiles = #perGameProfiles + #universalProfiles
-        if totalProfiles > 0 then
-            ConfigManager._startupNotify = {
-                kind  = "defaults_with_profiles",
-                count = totalProfiles
-            }
-            print(string.format("[Sp3arParvus] Config: %d profile(s) found, none with auto-load enabled. Loading defaults.", totalProfiles))
-        else
-            -- Silent — first run
-            print("[Sp3arParvus] Config: No saved profiles found. Using defaults.")
+        local loadedAny = false
+
+        -- Apply Universal profiles first so Per-Game overrides them
+        for _, entry in ipairs(universalProfiles) do
+            local p = entry.parsed
+            if p.autoLoad == true and type(p.flags) == "table" then
+                table.insert(ConfigManager._startupPayloads, entry.filePath)
+                table.insert(ConfigManager._startupNotifies, {
+                    kind        = "universal",
+                    profileName = p.name or "Unknown"
+                })
+                print(string.format("[Sp3arParvus] Config: Universal profile \"%s\" auto-loaded.", p.name or "?"))
+                loadedAny = true
+            end
+        end
+
+        -- Then apply Per-Game profiles
+        for _, entry in ipairs(perGameProfiles) do
+            local p = entry.parsed
+            if p.autoLoad == true and tostring(p.placeId) == currentPlaceId and type(p.flags) == "table" then
+                table.insert(ConfigManager._startupPayloads, entry.filePath)
+                table.insert(ConfigManager._startupNotifies, {
+                    kind        = "pergame",
+                    profileName = p.name or "Unknown",
+                    placeId     = currentPlaceId
+                })
+                print(string.format("[Sp3arParvus] Config: Per-game profile \"%s\" auto-loaded for PlaceId %s.", p.name or "?", currentPlaceId))
+                loadedAny = true
+            end
+        end
+
+        -- Fallback — notify only if profiles exist but none auto-load
+        if not loadedAny then
+            local totalProfiles = #perGameProfiles + #universalProfiles
+            if totalProfiles > 0 then
+                table.insert(ConfigManager._startupNotifies, {
+                    kind  = "defaults_with_profiles",
+                    count = totalProfiles
+                })
+                print(string.format("[Sp3arParvus] Config: %d profile(s) found, none with auto-load enabled. Loading defaults.", totalProfiles))
+            else
+                -- Silent — first run
+                print("[Sp3arParvus] Config: No saved profiles found. Using defaults.")
+            end
         end
     end
 
@@ -14707,39 +14713,45 @@ print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤750
 
 -- ── Deferred startup config notification (UI is now ready) ────────────
 do
-    local sf = ConfigManager and ConfigManager._startupPayload
-    if sf then
-        pcall(ConfigManager.LoadProfile, sf)
+    local payloads = ConfigManager and ConfigManager._startupPayloads
+    if payloads then
+        for _, sf in ipairs(payloads) do
+            pcall(ConfigManager.LoadProfile, sf)
+        end
     end
 
-    local sn = ConfigManager and ConfigManager._startupNotify
-    if sn then
+    local notifies = ConfigManager and ConfigManager._startupNotifies
+    if notifies then
         task.delay(0.5, function()
             -- Small delay so the main load notification displays first
-            if sn.kind == "no_api" then
-                UI.Notify(
-                    "⚠ Config Unavailable",
-                    "File I/O API inaccessible on this executor. Config saving/loading is disabled.",
-                    8
-                )
-            elseif sn.kind == "pergame" then
-                UI.Notify(
-                    "🌎 Per-Game Config Loaded",
-                    string.format("Game %s detected — auto-loading profile \"%s\".", sn.placeId or "?", sn.profileName or "?"),
-                    7
-                )
-            elseif sn.kind == "universal" then
-                UI.Notify(
-                    "🌐 Universal Config Loaded",
-                    string.format("Universal config with auto-load enabled detected — loading profile \"%s\".", sn.profileName or "?"),
-                    7
-                )
-            elseif sn.kind == "defaults_with_profiles" then
-                UI.Notify(
-                    "📄 Config: Defaults Loaded",
-                    string.format("%d profile(s) found, none with auto-load enabled. Loading defaults.", sn.count or 0),
-                    6
-                )
+            for i, sn in ipairs(notifies) do
+                task.delay((i - 1) * 2, function()
+                    if sn.kind == "no_api" then
+                        UI.Notify(
+                            "⚠ Config Unavailable",
+                            "File I/O API inaccessible on this executor. Config saving/loading is disabled.",
+                            8
+                        )
+                    elseif sn.kind == "pergame" then
+                        UI.Notify(
+                            "🌎 Per-Game Config Loaded",
+                            string.format("Game %s detected — auto-loading profile \"%s\".", sn.placeId or "?", sn.profileName or "?"),
+                            7
+                        )
+                    elseif sn.kind == "universal" then
+                        UI.Notify(
+                            "🌐 Universal Config Loaded",
+                            string.format("Universal config with auto-load enabled detected — loading profile \"%s\".", sn.profileName or "?"),
+                            7
+                        )
+                    elseif sn.kind == "defaults_with_profiles" then
+                        UI.Notify(
+                            "📄 Config: Defaults Loaded",
+                            string.format("%d profile(s) found, none with auto-load enabled. Loading defaults.", sn.count or 0),
+                            6
+                        )
+                    end
+                end)
             end
         end)
     end
