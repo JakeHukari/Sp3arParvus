@@ -8037,12 +8037,15 @@ function UpdateESP(now, player, isClosest)
     local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
     local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
     local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
+    local isPrioritized = IsPlayerPrioritized(player) or IsTeamPrioritized(teamName)
 
     local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
 
     local statusEmoji = ""
     if isIndivBlacklisted then
         statusEmoji = "❌"
+    elseif isPrioritized then
+        statusEmoji = "⭐"
     elseif isIndivWhitelisted then
         statusEmoji = "✅"
     elseif isTeamBlacklisted then
@@ -13526,6 +13529,8 @@ TrackConnection(Players.PlayerAdded:Connect(function(player)
         UI.Notify("☮️ Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has joined the server")
     elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
         UI.Notify("☠️ Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has joined the server")
+    elseif IsPlayerPrioritized(player) then
+        UI.Notify("⭐ Prioritized", "Prioritized player " .. (player.Name or "Unknown") .. " has joined the server")
     end
 end))
 TrackConnection(Players.PlayerRemoving:Connect(function(player)
@@ -13545,6 +13550,8 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
         UI.Notify("Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has left")
     elseif AdvancedPlayerPanelState.Blacklist[player.UserId] then
         UI.Notify("Blacklist", "Blacklisted player " .. (player.Name or "Unknown") .. " has left")
+    elseif IsPlayerPrioritized(player) then
+        UI.Notify("Prioritized", "Prioritized player " .. (player.Name or "Unknown") .. " has left")
     end
 end))
 
