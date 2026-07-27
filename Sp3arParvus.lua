@@ -359,7 +359,7 @@ do
         end
         -- Whitelist
         if filter.whitelist == false then
-            payload.whitelist = {}
+            payload.whitelist = nil
         elseif type(filter.whitelistEntries) == "table" then
             local stripped = {}
             for k, v in pairs(payload.whitelist or {}) do
@@ -369,7 +369,7 @@ do
         end
         -- Blacklist
         if filter.blacklist == false then
-            payload.blacklist = {}
+            payload.blacklist = nil
         elseif type(filter.blacklistEntries) == "table" then
             local stripped = {}
             for k, v in pairs(payload.blacklist or {}) do
@@ -379,7 +379,7 @@ do
         end
         -- Team Whitelist
         if filter.teamWhitelist == false then
-            payload.teamWhitelist = {}
+            payload.teamWhitelist = nil
         elseif type(filter.teamWhitelistEntries) == "table" then
             local stripped = {}
             for k, v in pairs(payload.teamWhitelist or {}) do
@@ -389,7 +389,7 @@ do
         end
         -- Team Blacklist
         if filter.teamBlacklist == false then
-            payload.teamBlacklist = {}
+            payload.teamBlacklist = nil
         elseif type(filter.teamBlacklistEntries) == "table" then
             local stripped = {}
             for k, v in pairs(payload.teamBlacklist or {}) do
@@ -399,7 +399,7 @@ do
         end
         -- Priority List
         if filter.priorityList == false then
-            payload.priorityList = {}
+            payload.priorityList = nil
         elseif type(filter.priorityEntries) == "table" then
             local stripped = {}
             for i, entry in ipairs(payload.priorityList or {}) do
@@ -585,6 +585,7 @@ do
         local function fixNumberKeys(t)
             if type(t) ~= "table" then return nil end
             local newT = {}
+            local hasItems = false
             for k, v in pairs(t) do
                 local cleanK = type(k) == "string" and k:match("^%s*(.-)%s*$") or k
                 local numKey = tonumber(cleanK)
@@ -593,7 +594,9 @@ do
                 else
                     newT[k] = v
                 end
+                hasItems = true
             end
+            if not hasItems then return nil end
             return newT
         end
         
