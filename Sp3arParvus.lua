@@ -760,13 +760,29 @@ do
             end
         end
 
+        local safePresets = {}
+        if WorldHumState.Presets then
+            for _, p in ipairs(WorldHumState.Presets) do
+                local copy = {
+                    Id = p.Id, TargetName = p.TargetName, TargetMode = p.TargetMode,
+                    TargetCount = p.TargetCount, UpdateRate = p.UpdateRate,
+                    Enabled = p.Enabled, HighlightEnabled = p.HighlightEnabled,
+                    Properties = {}
+                }
+                if p.Properties then
+                    for k, v in pairs(p.Properties) do copy.Properties[k] = v end
+                end
+                table.insert(safePresets, copy)
+            end
+        end
+
         parsed.flags           = newFlags
         parsed.whitelist       = AdvancedPlayerPanelState.Whitelist
         parsed.blacklist       = AdvancedPlayerPanelState.Blacklist
         parsed.teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist
         parsed.teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist
         parsed.priorityList    = AdvancedPlayerPanelState.PriorityList
-        parsed.worldHumPresets = WorldHumState.Presets
+        parsed.worldHumPresets = safePresets
         parsed.savedAt = os.time()
         parsed.version = VERSION
         applyFilterToPayload(parsed, filter)
