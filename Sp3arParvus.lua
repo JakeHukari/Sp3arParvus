@@ -204,7 +204,20 @@ end
 local UIState
 local AdvancedPlayerPanelState
 local WorldHumState
-local USER_MODIFIED_FLAGS = {}
+
+local FLAG_METADATA = {
+    ["Humanoid/Health"] = { ReadOnly = true },
+    -- Future flags with Min/Max/ReadOnly constraints can be added here
+}
+
+local USER_MODIFIED_FLAGS = setmetatable({}, {
+    __newindex = function(t, k, v)
+        rawset(t, k, v)
+        if ConfigManager and type(ConfigManager) == "table" then
+            ConfigManager.IsDirty = true
+        end
+    end
+})
 local PROFILE_LOADED_FLAGS = {}  -- flags loaded from a profile (kept separate from user-touched flags)
 -- ── Save Modifier: session-persistent selective-save filter ───────
 local SaveModifierState = {
@@ -231,7 +244,7 @@ local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  ConfigManager — Local Profile Save/Load System                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
-local ConfigManager = {}
+local ConfigManager = { IsDirty = true }
 do
     -- ── Path Constants ────────────────────────────────────────────────
     local ROOT_DIR        = "Sp3arParvus"
@@ -285,6 +298,8 @@ do
     -- ── Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
+            if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
+            
             -- Mark as profile-loaded (NOT user-touched) to prevent cross-contamination
             -- between profiles when using Overwrite. USER_MODIFIED_FLAGS is reserved for
             -- flags the user explicitly changes via the UI in this session.
@@ -301,11 +316,15 @@ do
                 end
             end
             if Flags[k] ~= nil then
-                if type(Flags[k]) == "table" and type(v) == "table" then
+                local expectedType = type(Flags[k])
+                local loadedType = type(v)
+                
+                if expectedType == "table" and loadedType == "table" then
                     for k2, v2 in pairs(v) do
+                        if Flags[k][k2] ~= nil and type(Flags[k][k2]) ~= type(v2) then continue end
                         Flags[k][k2] = v2
                     end
-                else
+                elseif expectedType == loadedType then
                     Flags[k] = v
                 end
             elseif type(v) ~= "table" then
@@ -317,7 +336,9 @@ do
             -- Skip raw table values (e.g. TargetGroups) — those UIs rebuild themselves.
             if UIState and UIState.Updaters and UIState.Updaters[k] then
                 if type(v) ~= "table" then
-                    pcall(UIState.Updaters[k], v)
+                    task.defer(function()
+                        pcall(UIState.Updaters[k], v)
+                    end)
                 end
             end
         end
@@ -435,11 +456,11 @@ do
         if not hasFileAPIs() then
             return false, "writefile API unavailable"
         end
-        if not profileName or profileName:match("^%s*$") then
-            return false, "empty name"
+        local safeProfileName = (profileName or ""):gsub("[^%w%-%_%. ]", "")
+        if safeProfileName:match("^%s*$") then
+            return false, "Invalid name (contains only special characters or is empty)"
         end
         pcall(ensureDirs)
-        local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
         local fileName = UNIVERSAL_DIR .. "/" .. safeProfileName .. ".json"
         local safePresets = {}
         if WorldHumState.Presets then
@@ -486,12 +507,12 @@ do
         if not hasFileAPIs() then
             return false, "writefile API unavailable"
         end
-        if not profileName or profileName:match("^%s*$") then
-            return false, "empty name"
+        local safeProfileName = (profileName or ""):gsub("[^%w%-%_%. ]", "")
+        if safeProfileName:match("^%s*$") then
+            return false, "Invalid name (contains only special characters or is empty)"
         end
         pcall(ensureDirs)
         local placeId  = tostring(game.PlaceId)
-        local safeProfileName = profileName:gsub("[^%w%-%_%. ]", "")
         local fileName = PERGAME_DIR .. "/" .. placeId .. "_" .. safeProfileName .. ".json"
         local safePresets = {}
         if WorldHumState.Presets then
@@ -573,9 +594,14 @@ do
         end
         local parsed = nil
         local parseOk = pcall(function() parsed = decode(raw) end)
-        if not parseOk or not parsed or type(parsed.flags) ~= "table" then
+        if not parseOk or type(parsed) ~= "table" or type(parsed.flags) ~= "table" then
             return false, "parse error"
         end
+        
+        parsed.whitelist = type(parsed.whitelist) == "table" and parsed.whitelist or {}
+        parsed.blacklist = type(parsed.blacklist) == "table" and parsed.blacklist or {}
+        parsed.teamWhitelist = type(parsed.teamWhitelist) == "table" and parsed.teamWhitelist or {}
+        parsed.teamBlacklist = type(parsed.teamBlacklist) == "table" and parsed.teamBlacklist or {}
         
         PROFILE_LOADED_FLAGS = {}
         applyFlags(parsed.flags)
@@ -625,7 +651,7 @@ do
                 -- Skip Humanoid/Health: it is a live runtime value. Writing it back on load
                 -- (or re-applying it every 0.1 s via ApplyHumanoidSettings) causes repeated
                 -- HealthChanged events that loop the damage indicator animation.
-                if k == "Humanoid/Health" then continue end
+                if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
                 if k:match("^Humanoid/") and not k:match("/Locked$") then
                     local currentVal = Flags[k] ~= nil and Flags[k] or savedVal
                     local isLocked   = (parsed.flags[k .. "/Locked"] == true)
@@ -634,12 +660,12 @@ do
                     -- Sync lock-button icon (updater registered in CreateToggle/CreateNumericInput)
                     if isLocked then
                         local lockUpd = UIState and UIState.Updaters and UIState.Updaters[k .. "/Locked"]
-                        if lockUpd then pcall(lockUpd, true) end
+                        if lockUpd then task.defer(function() pcall(lockUpd, true) end) end
                     end
 
                     -- Sync value display in the UI widget
                     local valUpd = UIState and UIState.Updaters and UIState.Updaters[k]
-                    if valUpd then pcall(valUpd, currentVal) end
+                    if valUpd then task.defer(function() pcall(valUpd, currentVal) end) end
 
                     -- Push value to the live humanoid right away
                     if hum and _updateHum then
@@ -744,7 +770,13 @@ do
         parsed.savedAt = os.time()
         parsed.version = VERSION
         applyFilterToPayload(parsed, filter)
+        
+        if not ConfigManager.IsDirty then
+            return true, parsed.name or "Unknown"
+        end
+        
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
+        if writeOk then ConfigManager.IsDirty = false end
         return writeOk, writeOk and (parsed.name or "Unknown") or tostring(writeErr)
     end
 
@@ -809,7 +841,9 @@ do
                 pcall(UIState.Updaters[k], Flags[k])
             end
         end
-        USER_MODIFIED_FLAGS = {}
+        for k in pairs(USER_MODIFIED_FLAGS) do
+            rawset(USER_MODIFIED_FLAGS, k, nil)
+        end
         PROFILE_LOADED_FLAGS = {}
     end
 
