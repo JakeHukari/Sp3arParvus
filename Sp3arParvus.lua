@@ -586,8 +586,9 @@ do
             if type(t) ~= "table" then return nil end
             local newT = {}
             for k, v in pairs(t) do
-                local numKey = tonumber(k)
-                if numKey and tostring(numKey) == k then
+                local cleanK = type(k) == "string" and k:match("^%s*(.-)%s*$") or k
+                local numKey = tonumber(cleanK)
+                if numKey and tostring(numKey) == cleanK then
                     newT[numKey] = v
                 else
                     newT[k] = v
@@ -606,7 +607,11 @@ do
         end
         WorldHumState.Presets = type(parsed.worldHumPresets) == "table" and parsed.worldHumPresets or {}
         
-        pcall(RebuildAdvancedPlayerPanel)
+        pcall(function()
+            if type(UpdateAdvancedPlayerList) == "function" then UpdateAdvancedPlayerList() end
+            if type(UpdateSettingsPanelList) == "function" then UpdateSettingsPanelList() end
+            if type(UpdateTeamPanelList) == "function" then UpdateTeamPanelList() end
+        end)
         
         -- Sync Humanoid UI and apply values to the live humanoid immediately.
         -- Iterate parsed.flags (not Flags, which may have nil Humanoid entries before spawn).
