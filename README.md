@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/github/stars/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Stars">
   <img src="https://img.shields.io/github/forks/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="Forks">
   <img src="https://img.shields.io/github/license/JakeHukari/Sp3arParvus?style=for-the-badge&color=fc95af" alt="License">
-  <img src="https://img.shields.io/badge/version-4.2.5-fc95af?style=for-the-badge" alt="Version 4.2.5">
+  <img src="https://img.shields.io/badge/version-4.2.9-fc95af?style=for-the-badge" alt="Version 4.2.9">
   <a href="https://discord.gg/KJuxMnBFqB"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white&color=fc95af" alt="Discord"></a>
 </p>
 
