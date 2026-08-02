@@ -40,7 +40,9 @@ Execute the script in your testing environment workspace.
 ## Features
 
 ### Interaction & Input Testing
-*   **Camera Tracking Assistant**: Smoothing-based viewport tracking to automatically focus the camera on nearby targets, simulating player focus.
+*   **Advanced Target Tracking (Aim-Lock)**: Sophisticated viewport tracking to automatically focus the camera on nearby targets, simulating player focus. Includes customizable target groups (Head, Torso, Limbs), dampening/smoothing, and Field of View (FOV) limits.
+*   **Target Prioritization**: Prioritize specific players or entire teams. Prioritized targets will be locked onto preferentially over other players.
+*   **Blacklist & Visibility Rules**: Configure rules to bypass blacklist priorities if a target is occluded or far away, and optionally target blacklisted players through terrain.
 *   **Input Simulation**: Automated click simulation for testing UI interactions, hitboxes, and event triggers without manual repetition.
 *   **Target Indicators**: Dynamic Indicators on target parts that turn **Red** when focused by the camera tracking system.
 *   **Position-Force**: Instantly move your humanoid in any direction using direction inputs.
@@ -57,7 +59,7 @@ Execute the script in your testing environment workspace.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create visual markers for any item, folder, or instance group in your workspace to track spawns and replication.
 
 ### Developer Utilities
-*   **PlayerPage**: Comprehensive player management including whitelisting, blacklisting, and detailed property viewing/spectating for testing moderation and replication.
+*   **PlayerPage**: Comprehensive player management including prioritizing, whitelisting, blacklisting, and detailed property viewing/spectating for testing moderation and replication.
 *   **Item Panel**: Robust item explorer and property editor for backpack and character tools.
 *   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC to test AI behavior and limits.
 *   **Br3ak3r (Collision Debugger)**: Isolate map geometry, remove physical obstacles, and disable collisions to analyze map structure and walk through walls.
@@ -82,11 +84,11 @@ Execute the script in your testing environment workspace.
 *   **Unload Sp3arParvus**: `Ctrl + U`
 
 ### Interaction & Testing
-*   **Camera Tracking Toggle**: `Ctrl + ~`
-*   **Camera Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
+*   **Aim-Lock / Camera Tracking Toggle**: `Ctrl + ~`
+*   **Aim-Lock Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
+*   **Toggle Headshot Only**: `Ctrl + H`
 *   **Mouse Teleport**: `Ctrl + Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
-*   **Toggle Full-Body Camera Tracking**: `Ctrl + H`
 *   **Position-Force**: `Ctrl` + `Up↑`, `Down↓`, `Left←`, `Right→` (Arrow keys)
 
 ### Visuals & Analytics
