@@ -141,19 +141,21 @@ local Flags = {
     ["Visuals/Fullbright/RemoveAtmosphere"] = true,
     ["Visuals/Fullbright/SkyHaze"]          = 0,
     ["Visuals/Fullbright/SkyGlare"]         = 0,
+    ["Visuals/Fullbright/SetExposure"]      = true,
     ["Visuals/Fullbright/ExposureCompensation"] = 0,
     -- FullDark modifiers
     ["Visuals/FullDark/ClockTime"]          = 0,
     ["Visuals/FullDark/Brightness"]         = 0,
     ["Visuals/FullDark/FogEnd"]             = 100,
     ["Visuals/FullDark/FogStart"]           = 0,
-    ["Visuals/FullDark/SetFog"]             = true,
-    ["Visuals/FullDark/SetShadows"]         = true,
-    ["Visuals/FullDark/BlackAmbient"]       = true,
-    ["Visuals/FullDark/SetAtmosphere"]      = true,
+    ["Visuals/FullDark/SetFog"]             = false,
+    ["Visuals/FullDark/SetShadows"]         = false,
+    ["Visuals/FullDark/BlackAmbient"]       = false,
+    ["Visuals/FullDark/SetAtmosphere"]      = false,
     ["Visuals/FullDark/AtmosphereDensity"]  = 1,
     ["Visuals/FullDark/SkyHaze"]            = 0,
     ["Visuals/FullDark/SkyGlare"]           = 0,
+    ["Visuals/FullDark/SetExposure"]        = false,
     ["Visuals/FullDark/ExposureCompensation"] = -2,
     ["Visuals/UIScale"] = 1,
     ["LocalUI/PerformancePanel"] = true,
@@ -4175,6 +4177,31 @@ function UpdateLighting()
 
     if not currentState then return end
 
+    if FullbrightState.originalSettings then
+        local s = FullbrightState.originalSettings
+        Services.Lighting.Ambient             = s.Ambient
+        Services.Lighting.OutdoorAmbient      = s.OutdoorAmbient
+        Services.Lighting.Brightness          = s.Brightness
+        Services.Lighting.ClockTime           = s.ClockTime
+        Services.Lighting.FogEnd              = s.FogEnd
+        Services.Lighting.FogStart            = s.FogStart
+        Services.Lighting.FogColor            = s.FogColor
+        Services.Lighting.GlobalShadows       = s.GlobalShadows
+        Services.Lighting.ExposureCompensation = s.ExposureCompensation
+
+        local atmosphere = Services.Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere then
+            if s.AtmosphereDensity ~= nil then atmosphere.Density = s.AtmosphereDensity end
+            if s.AtmosphereHaze    ~= nil then atmosphere.Haze    = s.AtmosphereHaze    end
+            if s.AtmosphereGlare   ~= nil then atmosphere.Glare   = s.AtmosphereGlare   end
+        end
+
+        local bloom = Services.Lighting:FindFirstChildOfClass("BloomEffect")
+        if bloom and s.BloomIntensity ~= nil then
+            bloom.Intensity = s.BloomIntensity
+        end
+    end
+
     -- ── FULLBRIGHT ──────────────────────────────────────────────────────────
     if fullbright then
         -- Ambient
@@ -4190,7 +4217,9 @@ function UpdateLighting()
         Services.Lighting.ClockTime = Flags["Visuals/Fullbright/ClockTime"]
 
         -- Exposure
-        Services.Lighting.ExposureCompensation = Flags["Visuals/Fullbright/ExposureCompensation"]
+        if Flags["Visuals/Fullbright/SetExposure"] then
+            Services.Lighting.ExposureCompensation = Flags["Visuals/Fullbright/ExposureCompensation"]
+        end
 
         -- Fog
         if Flags["Visuals/Fullbright/RemoveFog"] then
@@ -4223,7 +4252,9 @@ function UpdateLighting()
         end
 
         -- Exposure
-        Services.Lighting.ExposureCompensation = Flags["Visuals/FullDark/ExposureCompensation"]
+        if Flags["Visuals/FullDark/SetExposure"] then
+            Services.Lighting.ExposureCompensation = Flags["Visuals/FullDark/ExposureCompensation"]
+        end
 
         -- Ambient
         if Flags["Visuals/FullDark/BlackAmbient"] then
@@ -12807,6 +12838,8 @@ UI.CreateNumericInput(VisualsTab, "FB: Time of Day (0-24)", "Visuals/Fullbright/
     Flags["Visuals/Fullbright/ClockTime"], 0, 23.99, 0.25, "h", nil)
 UI.CreateNumericInput(VisualsTab, "FB: Brightness", "Visuals/Fullbright/Brightness",
     Flags["Visuals/Fullbright/Brightness"], 0, 10, 0.1, "", nil)
+UI.CreateToggle(VisualsTab, "FB: Set Exposure", "Visuals/Fullbright/SetExposure",
+    Flags["Visuals/Fullbright/SetExposure"], nil)
 UI.CreateNumericInput(VisualsTab, "FB: Exposure Compensation", "Visuals/Fullbright/ExposureCompensation",
     Flags["Visuals/Fullbright/ExposureCompensation"], -5, 5, 0.1, "", nil)
 UI.CreateToggle(VisualsTab, "FB: Remove Fog", "Visuals/Fullbright/RemoveFog",
@@ -12832,6 +12865,8 @@ UI.CreateNumericInput(VisualsTab, "FD: Time of Day (0-24)", "Visuals/FullDark/Cl
     Flags["Visuals/FullDark/ClockTime"], 0, 23.99, 0.25, "h", nil)
 UI.CreateNumericInput(VisualsTab, "FD: Brightness", "Visuals/FullDark/Brightness",
     Flags["Visuals/FullDark/Brightness"], 0, 10, 0.1, "", nil)
+UI.CreateToggle(VisualsTab, "FD: Set Exposure", "Visuals/FullDark/SetExposure",
+    Flags["Visuals/FullDark/SetExposure"], nil)
 UI.CreateNumericInput(VisualsTab, "FD: Exposure Compensation", "Visuals/FullDark/ExposureCompensation",
     Flags["Visuals/FullDark/ExposureCompensation"], -5, 5, 0.1, "", nil)
 UI.CreateToggle(VisualsTab, "FD: Black Ambient Light", "Visuals/FullDark/BlackAmbient",
