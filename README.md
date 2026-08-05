@@ -76,8 +76,7 @@ Execute the script in your testing environment workspace.
 ## Shortcut Keys
 
 ### UI & Configuration
-*   **Menu Visibility**: `CapsLock`
-*   **Menu Minimize/Maximize**: `Ctrl + -`
+*   **Open / Close Menu**: `CapsLock`
 *   **Gh0st Mode**: `Ctrl + G`
 *   **Rejoin Server**: `Ctrl + R`
 *   **Complete Reload**: `Ctrl + Shift + R`

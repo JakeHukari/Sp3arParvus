@@ -3666,7 +3666,7 @@ function UI.CreateWindow(title)
             MinimizedLabel.Visible = true
             MinButton.Text = "+"
             if fromKeybind then
-                UI.Notify("Menu", "Minimized with 'Ctrl+-'")
+                UI.Notify("Menu", "Minimized with 'CapsLock'")
             end
         else
             MinimizedLabel.Visible = false
@@ -3682,7 +3682,7 @@ function UI.CreateWindow(title)
             Sidebar.Visible = true
             MinButton.Text = "X"
             if fromKeybind then
-                UI.Notify("Menu", "Restored with 'Ctrl+-'")
+                UI.Notify("Menu", "Restored with 'CapsLock'")
             end
         end
     end
@@ -3706,7 +3706,7 @@ function UI.CreateWindow(title)
 
     TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.KeyCode == Enum.KeyCode.CapsLock then
-            ToggleVisible()
+            ToggleMinimize(true)
         end
     end))
 
@@ -9688,7 +9688,7 @@ local KeyboardRows = {
         {Text = "8", Width = 1},
         {Text = "9", Width = 1},
         {Text = "0", Width = 1},
-        {Text = "-", Key = "Minus", Width = 1, KeyCode = Enum.KeyCode.Minus, Name = "Minimize Menu", Action = "Ctrl + -", Desc = "Minimizes or maximizes the main Sp3arParvus GUI window."},
+        {Text = "-", Width = 1},
         {Text = "+", Width = 1},
         {Text = "<-", Width = 2},
         {Text = "del", Width = 1}
@@ -9711,7 +9711,7 @@ local KeyboardRows = {
         {Text = "pg up", Width = 1}
     },
     {
-        {Text = "caps", Key = "CapsLock", Width = 1.75, KeyCode = Enum.KeyCode.CapsLock, Name = "Toggle Menu Visibility", Action = "CapsLock", Desc = "Toggles visibility of the main Sp3arParvus menu GUI."},
+        {Text = "caps", Key = "CapsLock", Width = 1.75, KeyCode = Enum.KeyCode.CapsLock, Name = "Open / Close Menu", Action = "CapsLock", Desc = "Opens or closes the main Sp3arParvus menu GUI."},
         {Text = "A", Width = 1},
         {Text = "S", Width = 1},
         {Text = "D", Width = 1},
@@ -14084,11 +14084,6 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 end
                 return Enum.ContextActionResult.Sink
             end
-        elseif inputObject.KeyCode == Enum.KeyCode.Minus then
-            if UIState.ToggleMinimize then
-                UIState.ToggleMinimize(true)
-            end
-            return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.K then
             if not UIState.Visible then
 
@@ -14225,7 +14220,7 @@ game:GetService("ContextActionService"):BindActionAtPriority(
     Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.B, Enum.KeyCode.E,
     Enum.KeyCode.R, Enum.KeyCode.U, Enum.KeyCode.F, Enum.KeyCode.N,
     Enum.KeyCode.G, Enum.KeyCode.Period, Enum.KeyCode.Backquote,
-    Enum.KeyCode.H, Enum.KeyCode.Minus, Enum.KeyCode.K, Enum.KeyCode.Y,
+    Enum.KeyCode.H, Enum.KeyCode.K, Enum.KeyCode.Y,
     Enum.KeyCode.Q, Enum.KeyCode.J, Enum.KeyCode.Up, Enum.KeyCode.Down,
     Enum.KeyCode.Left, Enum.KeyCode.Right
 )
