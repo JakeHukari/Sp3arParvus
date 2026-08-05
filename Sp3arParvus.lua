@@ -171,7 +171,7 @@ local Flags = {
     ["Waypoints/Enabled"] = true,
     ["Settings/Freecam Toggle"] = true,
     ["Settings/GhostMode"] = false,
-    ["Misc/D3vTool"] = true,
+    ["Visuals/InformationDisplay"] = true,
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
@@ -8312,28 +8312,28 @@ function RemoveESP(player)
     ESPObjects[player] = nil
 end
 
-local D3vToolHUD = nil
-local D3vToolLabel = nil
+local InformationDisplayHUD = nil
+local InformationDisplayLabel = nil
 
 -- Server region detection: infer from round-trip ping latency against Roblox's
 -- known data-center locations. Cached after first stable read to avoid flicker.
-local D3V_CACHED_REGION = nil
-local D3V_REGION_SAMPLES = 0
-local D3V_REGION_PING_SUM = 0
-local D3V_REGION_RESOLVE_AFTER = 8  -- samples before locking the region label
+local INFO_DISPLAY_CACHED_REGION = nil
+local INFO_DISPLAY_REGION_SAMPLES = 0
+local INFO_DISPLAY_REGION_PING_SUM = 0
+local INFO_DISPLAY_REGION_RESOLVE_AFTER = 8  -- samples before locking the region label
 
 function GetServerRegion()
     -- Once resolved, return the cached value
-    if D3V_CACHED_REGION then return D3V_CACHED_REGION end
+    if INFO_DISPLAY_CACHED_REGION then return INFO_DISPLAY_CACHED_REGION end
 
     local ok, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
     if not ok then return "N/A" end
 
     local ms = ping * 1000
-    D3V_REGION_PING_SUM = D3V_REGION_PING_SUM + ms
-    D3V_REGION_SAMPLES  = D3V_REGION_SAMPLES  + 1
+    INFO_DISPLAY_REGION_PING_SUM = INFO_DISPLAY_REGION_PING_SUM + ms
+    INFO_DISPLAY_REGION_SAMPLES  = INFO_DISPLAY_REGION_SAMPLES  + 1
 
-    if D3V_REGION_SAMPLES < D3V_REGION_RESOLVE_AFTER then
+    if INFO_DISPLAY_REGION_SAMPLES < INFO_DISPLAY_REGION_RESOLVE_AFTER then
         -- Not enough samples yet — show provisional label with a tilde
         local region
         if ms < 45   then region = "US-E"
@@ -8346,48 +8346,48 @@ function GetServerRegion()
     end
 
     -- Lock in using the average ping over the sampling window
-    local avgMs = D3V_REGION_PING_SUM / D3V_REGION_SAMPLES
-    if avgMs < 45   then D3V_CACHED_REGION = "US-E"
-    elseif avgMs < 90  then D3V_CACHED_REGION = "US-W"
-    elseif avgMs < 120 then D3V_CACHED_REGION = "EU-W"
-    elseif avgMs < 180 then D3V_CACHED_REGION = "AP-SE"
-    else                    D3V_CACHED_REGION = "AP-E"
+    local avgMs = INFO_DISPLAY_REGION_PING_SUM / INFO_DISPLAY_REGION_SAMPLES
+    if avgMs < 45   then INFO_DISPLAY_CACHED_REGION = "US-E"
+    elseif avgMs < 90  then INFO_DISPLAY_CACHED_REGION = "US-W"
+    elseif avgMs < 120 then INFO_DISPLAY_CACHED_REGION = "EU-W"
+    elseif avgMs < 180 then INFO_DISPLAY_CACHED_REGION = "AP-SE"
+    else                    INFO_DISPLAY_CACHED_REGION = "AP-E"
     end
-    return D3V_CACHED_REGION
+    return INFO_DISPLAY_CACHED_REGION
 end
 
-function CreateD3vToolHUD(parent)
-    D3vToolHUD = Instance.new("Frame")
-    D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(1, -6, 0, 3)
-    D3vToolHUD.AnchorPoint = Vector2.new(1, 0)
-    D3vToolHUD.BackgroundTransparency = 1
-    D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
-    D3vToolHUD.Parent = parent
+function CreateInformationDisplayHUD(parent)
+    InformationDisplayHUD = Instance.new("Frame")
+    InformationDisplayHUD.Name = "InformationDisplayHUD"
+    InformationDisplayHUD.Position = UDim2.new(1, -6, 0, 3)
+    InformationDisplayHUD.AnchorPoint = Vector2.new(1, 0)
+    InformationDisplayHUD.BackgroundTransparency = 1
+    InformationDisplayHUD.AutomaticSize = Enum.AutomaticSize.XY
+    InformationDisplayHUD.Parent = parent
 
-    D3vToolLabel = Instance.new("TextLabel")
-    D3vToolLabel.Name = "D3vToolLabel"
-    D3vToolLabel.Text = ""
-    D3vToolLabel.BackgroundTransparency = 1
-    D3vToolLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    D3vToolLabel.TextSize = 15
-    D3vToolLabel.TextColor3 = Color3.new(1, 1, 1)
-    D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Right
-    D3vToolLabel.AutomaticSize = Enum.AutomaticSize.XY
-    D3vToolLabel.Parent = D3vToolHUD
+    InformationDisplayLabel = Instance.new("TextLabel")
+    InformationDisplayLabel.Name = "InformationDisplayLabel"
+    InformationDisplayLabel.Text = ""
+    InformationDisplayLabel.BackgroundTransparency = 1
+    InformationDisplayLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    InformationDisplayLabel.TextSize = 15
+    InformationDisplayLabel.TextColor3 = Color3.new(1, 1, 1)
+    InformationDisplayLabel.TextXAlignment = Enum.TextXAlignment.Right
+    InformationDisplayLabel.AutomaticSize = Enum.AutomaticSize.XY
+    InformationDisplayLabel.Parent = InformationDisplayHUD
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1
     stroke.Color = Color3.new(0, 0, 0)
-    stroke.Parent = D3vToolLabel
+    stroke.Parent = InformationDisplayLabel
 end
 
-function UpdateD3vTool()
-    if not D3vToolHUD then return end
+function UpdateInformationDisplay()
+    if not InformationDisplayHUD then return end
 
-    local visible = Flags["Misc/D3vTool"] and not Flags["Settings/GhostMode"]
-    if D3vToolHUD.Visible ~= visible then
-        D3vToolHUD.Visible = visible
+    local visible = Flags["Visuals/InformationDisplay"] and not Flags["Settings/GhostMode"]
+    if InformationDisplayHUD.Visible ~= visible then
+        InformationDisplayHUD.Visible = visible
     end
 
     if not visible then return end
@@ -8424,8 +8424,8 @@ function UpdateD3vTool()
         "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s] Uptime[%s]",
         timeStr, lpcStr, lmcStr, regionStr, uptimeStr
     )
-    if D3vToolLabel.Text ~= newText then
-        D3vToolLabel.Text = newText
+    if InformationDisplayLabel.Text ~= newText then
+        InformationDisplayLabel.Text = newText
     end
 end
 
@@ -9565,11 +9565,11 @@ function Cleanup()
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
-    if D3vToolHUD then
-        pcall(function() D3vToolHUD:Destroy() end)
+    if InformationDisplayHUD then
+        pcall(function() InformationDisplayHUD:Destroy() end)
     end
-    D3vToolHUD = nil
-    D3vToolLabel = nil
+    InformationDisplayHUD = nil
+    InformationDisplayLabel = nil
     ClosestPlayerTrackerLabel = nil
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
@@ -9736,7 +9736,7 @@ local KeyboardRows = {
         {Text = "N", Key = "N", Width = 1, KeyCode = Enum.KeyCode.N, Name = "Toggle FullDark", Action = "Ctrl + N", Desc = "Toggles full dark lighting mode.", StatusKey = "Visuals/FullDark"},
         {Text = "M", Width = 1},
         {Text = ",", Width = 1},
-        {Text = ".", Key = "Period", Width = 1, KeyCode = Enum.KeyCode.Period, Name = "Toggle Dev Tool", Action = "Ctrl + .", Desc = "Toggles developer HUD panels / D3vTool.", StatusKey = "Misc/D3vTool"},
+        {Text = ".", Key = "Period", Width = 1, KeyCode = Enum.KeyCode.Period, Name = "Toggle Information Display", Action = "Ctrl + .", Desc = "Toggles the Information Display overlay.", StatusKey = "Visuals/InformationDisplay"},
         {Text = "/", Width = 1},
         {Text = "shift", Width = 1.75},
         {Text = "↑", Key = "Up", Width = 1, KeyCode = Enum.KeyCode.Up, Name = "Position Force Up / Forward", Action = "Ctrl+Up / Ctrl+Shift+Up", Desc = "Forces character position up or forward by the configured distance."},
@@ -9806,7 +9806,7 @@ function InitializeShortcutsPage(page)
     legendLabel.TextWrapped = true
     legendLabel.Text = "• Teal Keys/Buttons: Have active game shortcuts assigned.\n" ..
                       "• Gray Keys/Buttons: Standard keyboard layout (no shortcut).\n" ..
-                      "• Toggles (Active/Inactive): Features like Fullbright (Ctrl+F) or Dev Tool (Ctrl+.) show active/inactive state inside the tooltip popup in real-time.\n" ..
+                      "• Toggles (Active/Inactive): Features like Fullbright (Ctrl+F) or Information Display (Ctrl+.) show active/inactive state inside the tooltip popup in real-time.\n" ..
                       "• Modifiers (Ctrl/Shift): Hold these keys in game to execute actions.\n" ..
                       "• Hover over any highlighted key/button to view its detailed shortcut function."
     legendLabel.Parent = page
@@ -10175,7 +10175,7 @@ end
 
 local Window = UI.CreateWindow("Sp3arParvus")
 
-CreateD3vToolHUD(ScreenGui)
+CreateInformationDisplayHUD(ScreenGui)
 CreatePerformanceDisplay(ScreenGui)
 CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
@@ -12877,6 +12877,25 @@ end)
 UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlayerTracker", Flags["LocalUI/ClosestPlayerTracker"], function(state)
     if ClosestPlayerTrackerLabel then ClosestPlayerTrackerLabel.Visible = state end
 end)
+UI.CreateToggle(VisualsTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"], function(state)
+    if NotifyGui then NotifyGui.Enabled = not state end
+end)
+UI.CreateToggle(VisualsTab, "Enable Information Display (Ctrl+.)", "Visuals/InformationDisplay", Flags["Visuals/InformationDisplay"])
+UI.CreateToggle(VisualsTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/ScrollUnlocker"], function(state)
+    if not state then
+        if ZoomState.OriginalMax then
+            LocalPlayer.CameraMaxZoomDistance = ZoomState.OriginalMax
+        end
+        if ZoomState.OriginalMin then
+            LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
+        end
+        ZoomState.LastSetMax = nil
+        ZoomState.LastSetMin = nil
+        ZoomState.Multiplier = 1
+        ZoomState.WasCtrlHeld = false
+        ZoomState.UserScrolled = false
+    end
+end)
 UI.CreateNumericInput(VisualsTab, "Screen UI Opacity", "LocalUI/ScreenUIOpacity", Flags["LocalUI/ScreenUIOpacity"], 0, 100, 5, "%", function(val)
     UpdateScreenUIOpacity()
 end)
@@ -13464,25 +13483,7 @@ UI.CreateToggle(MiscTab, "Freecam Toggle (Ctrl+P)", "Settings/Freecam Toggle", F
         _G.StopFreecamFunc()
     end
 end)
-UI.CreateToggle(MiscTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"], function(state)
-    if NotifyGui then NotifyGui.Enabled = not state end
-end)
-UI.CreateToggle(MiscTab, "Enable D3v Tool (Ctrl+.)", "Misc/D3vTool", Flags["Misc/D3vTool"])
-UI.CreateToggle(MiscTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/ScrollUnlocker"], function(state)
-    if not state then
-        if ZoomState.OriginalMax then
-            LocalPlayer.CameraMaxZoomDistance = ZoomState.OriginalMax
-        end
-        if ZoomState.OriginalMin then
-            LocalPlayer.CameraMinZoomDistance = ZoomState.OriginalMin
-        end
-        ZoomState.LastSetMax = nil
-        ZoomState.LastSetMin = nil
-        ZoomState.Multiplier = 1
-        ZoomState.WasCtrlHeld = false
-        ZoomState.UserScrolled = false
-    end
-end)
+
 UI.CreateNumericInput(MiscTab, "Horizontal Position Force Distance", "Misc/HorizontalPositionForceValue", Flags["Misc/HorizontalPositionForceValue"], 0.1, 100, 0.05, "studs")
 UI.CreateNumericInput(MiscTab, "Vertical Position Force Distance", "Misc/VerticalPositionForceValue", Flags["Misc/VerticalPositionForceValue"], 0.1, 100, 0.05, "studs")
 
@@ -13987,9 +13988,9 @@ local function handleShortcuts(actionName, inputState, inputObject)
             UI.Notify("Ghost Mode", string.format("Ghost Mode has been %s with 'Ctrl+G'", state and "activated" or "deactivated"))
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Period then
-            Flags["Misc/D3vTool"] = not Flags["Misc/D3vTool"]
-            local state = Flags["Misc/D3vTool"]
-            UI.Notify("Dev Tool", string.format("Dev Tool has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
+            Flags["Visuals/InformationDisplay"] = not Flags["Visuals/InformationDisplay"]
+            local state = Flags["Visuals/InformationDisplay"]
+            UI.Notify("Information Display", string.format("Information Display has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Backquote then
             Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
@@ -14440,7 +14441,7 @@ function UnifiedHeartbeat(dt)
     if (now - lastStateEnforcement) > 0.1 or ghostModeChanged then
         lastStateEnforcement = now
         UpdateLocalHealthHUD()
-        UpdateD3vTool()
+        UpdateInformationDisplay()
         ApplyHumanoidSettings()
         ApplyWorldHumanoidSettings()
         ApplyItemPanelSettings()
