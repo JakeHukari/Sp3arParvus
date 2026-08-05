@@ -86,6 +86,7 @@ local Flags = {
     ["Aim/AlwaysEnabled"] = true,
     ["Aim/ShowAssistDots"] = false,
     ["Aim/TeamCheck"] = false,
+    ["Aim/AutoWhitelistFriends"] = false,
     ["Aim/VisibilityCheck"] = true,
     ["Aim/AttractionStrength"] = 200,
     ["Aim/FOV/Radius"] = 50,
@@ -12660,6 +12661,22 @@ UI.CreateSection(AimTab, "Camera Tracking Assistant")
 UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
+UI.CreateToggle(AimTab, "Auto Whitelist Friends/Connections", "Aim/AutoWhitelistFriends", Flags["Aim/AutoWhitelistFriends"], function(state)
+    if state then
+        task.spawn(function()
+            if not LocalPlayer then return end
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.UserId > 0 and LocalPlayer.UserId > 0 then
+                    pcall(function()
+                        if LocalPlayer:IsFriendsWith(p.UserId) then
+                            AdvancedPlayerPanelState.Whitelist[p.UserId] = true
+                        end
+                    end)
+                end
+            end
+        end)
+    end
+end)
 UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
 UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
@@ -13612,6 +13629,18 @@ end
 TrackConnection(Players.PlayerAdded:Connect(function(player)
     AddPlayerToCache(player)
     SetupPlayerESP(player)
+
+    if Flags["Aim/AutoWhitelistFriends"] then
+        task.spawn(function()
+            if LocalPlayer and LocalPlayer.UserId > 0 and player.UserId > 0 then
+                pcall(function()
+                    if LocalPlayer:IsFriendsWith(player.UserId) then
+                        AdvancedPlayerPanelState.Whitelist[player.UserId] = true
+                    end
+                end)
+            end
+        end)
+    end
 
     if AdvancedPlayerPanelState.Whitelist[player.UserId] then
         UI.Notify("☮️ Whitelist", "Whitelisted player " .. (player.Name or "Unknown") .. " has joined the server")
