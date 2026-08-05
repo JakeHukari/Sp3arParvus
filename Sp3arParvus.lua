@@ -8314,11 +8314,52 @@ end
 local D3vToolHUD = nil
 local D3vToolLabel = nil
 
+-- Server region detection: infer from round-trip ping latency against Roblox's
+-- known data-center locations. Cached after first stable read to avoid flicker.
+local D3V_CACHED_REGION = nil
+local D3V_REGION_SAMPLES = 0
+local D3V_REGION_PING_SUM = 0
+local D3V_REGION_RESOLVE_AFTER = 8  -- samples before locking the region label
+
+function GetServerRegion()
+    -- Once resolved, return the cached value
+    if D3V_CACHED_REGION then return D3V_CACHED_REGION end
+
+    local ok, ping = pcall(LocalPlayer.GetNetworkPing, LocalPlayer)
+    if not ok then return "N/A" end
+
+    local ms = ping * 1000
+    D3V_REGION_PING_SUM = D3V_REGION_PING_SUM + ms
+    D3V_REGION_SAMPLES  = D3V_REGION_SAMPLES  + 1
+
+    if D3V_REGION_SAMPLES < D3V_REGION_RESOLVE_AFTER then
+        -- Not enough samples yet — show provisional label with a tilde
+        local region
+        if ms < 45   then region = "US-E"
+        elseif ms < 90  then region = "US-W"
+        elseif ms < 120 then region = "EU-W"
+        elseif ms < 180 then region = "AP-SE"
+        else                 region = "AP-E"
+        end
+        return "~" .. region
+    end
+
+    -- Lock in using the average ping over the sampling window
+    local avgMs = D3V_REGION_PING_SUM / D3V_REGION_SAMPLES
+    if avgMs < 45   then D3V_CACHED_REGION = "US-E"
+    elseif avgMs < 90  then D3V_CACHED_REGION = "US-W"
+    elseif avgMs < 120 then D3V_CACHED_REGION = "EU-W"
+    elseif avgMs < 180 then D3V_CACHED_REGION = "AP-SE"
+    else                    D3V_CACHED_REGION = "AP-E"
+    end
+    return D3V_CACHED_REGION
+end
+
 function CreateD3vToolHUD(parent)
     D3vToolHUD = Instance.new("Frame")
     D3vToolHUD.Name = "D3vToolHUD"
-    D3vToolHUD.Position = UDim2.new(1, -450, 0, 3)
-    D3vToolHUD.AnchorPoint = Vector2.new(0, 0)
+    D3vToolHUD.Position = UDim2.new(1, -6, 0, 3)
+    D3vToolHUD.AnchorPoint = Vector2.new(1, 0)
     D3vToolHUD.BackgroundTransparency = 1
     D3vToolHUD.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolHUD.Parent = parent
@@ -8330,7 +8371,7 @@ function CreateD3vToolHUD(parent)
     D3vToolLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     D3vToolLabel.TextSize = 15
     D3vToolLabel.TextColor3 = Color3.new(1, 1, 1)
-    D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Left
+    D3vToolLabel.TextXAlignment = Enum.TextXAlignment.Right
     D3vToolLabel.AutomaticSize = Enum.AutomaticSize.XY
     D3vToolLabel.Parent = D3vToolHUD
 
@@ -8369,7 +8410,19 @@ function UpdateD3vTool()
     local mouseLoc = UserInputService:GetMouseLocation()
     local lmcStr = string.format("%d,%d", floor(mouseLoc.X), floor(mouseLoc.Y))
 
-    local newText = string.format("WorldTime[%s] Humanoid[%s] Mouse[%s]", timeStr, lpcStr, lmcStr)
+    -- Region: latency-inferred data-center label
+    local regionStr = GetServerRegion()
+
+    local uptimeSec = math.floor(Workspace.DistributedGameTime)
+    local uptimeH   = math.floor(uptimeSec / 3600)
+    local uptimeM   = math.floor((uptimeSec % 3600) / 60)
+    local uptimeS   = uptimeSec % 60
+    local uptimeStr = string.format("%d:%02d:%02d", uptimeH, uptimeM, uptimeS)
+
+    local newText = string.format(
+        "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s] Uptime[%s]",
+        timeStr, lpcStr, lmcStr, regionStr, uptimeStr
+    )
     if D3vToolLabel.Text ~= newText then
         D3vToolLabel.Text = newText
     end
