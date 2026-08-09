@@ -3987,7 +3987,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     Input.ClearTextOnFocus = false
     Input.Parent = InputFrame
 
-    local function updateValue(val)
+    local function updateValueStepped(val)
         val = math.clamp(tonumber(val) or default, min, max)
         if step and step > 0 then
             val = math.floor(val / step + 0.5) * step
@@ -3998,19 +3998,23 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         if callback then callback(val) end
     end
 
+    local function updateValueFree(val)
+        val = math.clamp(tonumber(val) or default, min, max)
+        Flags[flag] = val
+        USER_MODIFIED_FLAGS[flag] = true
+        Input.Text = tostring(val)
+        if callback then callback(val) end
+    end
+
     UIState.Updaters[flag] = function(val)
         if not Input:IsFocused() then
             val = math.clamp(tonumber(val) or default, min, max)
-            if step and step > 0 then
-                val = math.floor(val / step + 0.5) * step
-            end
             Input.Text = tostring(val)
-            if callback then callback(val) end
         end
     end
 
     TrackConnection(Input.FocusLost:Connect(function()
-        updateValue(Input.Text)
+        updateValueFree(Input.Text)
     end))
 
     local function createBtn(t, pos, xAlign)
@@ -4030,11 +4034,11 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     local plusBtn = createBtn("+", UDim2.new(1, -25, 0, 0))
 
     TrackConnection(minusBtn.MouseButton1Click:Connect(function()
-        updateValue(Flags[flag] - (step or 1))
+        updateValueStepped(Flags[flag] - (step or 1))
     end))
 
     TrackConnection(plusBtn.MouseButton1Click:Connect(function()
-        updateValue(Flags[flag] + (step or 1))
+        updateValueStepped(Flags[flag] + (step or 1))
     end))
 
     -- Guard: only set the default if no value was pre-loaded from a config
@@ -11565,7 +11569,7 @@ local function ShowPresetEditor(page, preset, isNew)
             Input.Text = v ~= nil and tostring(math.floor(v * 100) / 100) or ""
         end
 
-        local function updateValue(val)
+        local function updateValueStepped(val)
             if type(val) == "string" and val:match("^%s*$") then
                 draft.Properties[prop] = nil
                 Input.Text = ""
@@ -11576,7 +11580,17 @@ local function ShowPresetEditor(page, preset, isNew)
             draft.Properties[prop] = val
             Input.Text = tostring(math.floor(val * 100) / 100)
         end
-        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+        local function updateValueFree(val)
+            if type(val) == "string" and val:match("^%s*$") then
+                draft.Properties[prop] = nil
+                Input.Text = ""
+                return
+            end
+            val = math.clamp(tonumber(val) or (draft.Properties[prop] or min), min, max)
+            draft.Properties[prop] = val
+            Input.Text = tostring(math.floor(val * 100) / 100)
+        end
+        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValueFree(Input.Text) end))
 
         local mBtn = Instance.new("TextButton")
         mBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -11586,7 +11600,7 @@ local function ShowPresetEditor(page, preset, isNew)
         mBtn.TextSize = 16
         mBtn.TextColor3 = UI_THEME.TextDark
         mBtn.Parent = InputFrame
-        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or min) - (step or 1)) end))
+        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValueStepped((draft.Properties[prop] or min) - (step or 1)) end))
 
         local pBtn = Instance.new("TextButton")
         pBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -11597,7 +11611,7 @@ local function ShowPresetEditor(page, preset, isNew)
         pBtn.TextSize = 16
         pBtn.TextColor3 = UI_THEME.TextDark
         pBtn.Parent = InputFrame
-        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue((draft.Properties[prop] or min) + (step or 1)) end))
+        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValueStepped((draft.Properties[prop] or min) + (step or 1)) end))
     end
 
     local function makeInputRow(pg, labelText, defaultVal, callback)
@@ -11731,15 +11745,21 @@ local function ShowPresetEditor(page, preset, isNew)
 
         local currentVal = defaultVal
 
-        local function updateValue(val)
+        local function updateValueStepped(val)
             val = math.clamp(tonumber(val) or currentVal, min, max)
             if step and step > 0 then val = math.floor(val / step + 0.5) * step end
             currentVal = val
             Input.Text = tostring(math.floor(val * 100) / 100)
             callback(val)
         end
+        local function updateValueFree(val)
+            val = math.clamp(tonumber(val) or currentVal, min, max)
+            currentVal = val
+            Input.Text = tostring(math.floor(val * 100) / 100)
+            callback(val)
+        end
 
-        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+        TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValueFree(Input.Text) end))
 
         local mBtn = Instance.new("TextButton")
         mBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -11749,7 +11769,7 @@ local function ShowPresetEditor(page, preset, isNew)
         mBtn.TextSize = 16
         mBtn.TextColor3 = UI_THEME.TextDark
         mBtn.Parent = InputFrame
-        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue(currentVal - step) end))
+        TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValueStepped(currentVal - step) end))
 
         local pBtn = Instance.new("TextButton")
         pBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -11760,7 +11780,7 @@ local function ShowPresetEditor(page, preset, isNew)
         pBtn.TextSize = 16
         pBtn.TextColor3 = UI_THEME.TextDark
         pBtn.Parent = InputFrame
-        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue(currentVal + step) end))
+        TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValueStepped(currentVal + step) end))
 
         return InputFrame
     end
@@ -12483,9 +12503,17 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     Input.ClearTextOnFocus = false
     Input.Parent = InputFrame
 
-    local function updateValue(val)
+    local function updateValueStepped(val)
         val = math.clamp(tonumber(val) or targetHum[prop], min, max)
         if step and step > 0 then val = math.floor(val / step + 0.5) * step end
+        pcall(SafeSetProp, targetHum, prop, val)
+        if WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil then
+            WorldHumState.lockedProperties[path][prop] = val
+        end
+        Input.Text = tostring(math.floor(val * 100) / 100)
+    end
+    local function updateValueFree(val)
+        val = math.clamp(tonumber(val) or targetHum[prop], min, max)
         pcall(SafeSetProp, targetHum, prop, val)
         if WorldHumState.lockedProperties[path] and WorldHumState.lockedProperties[path][prop] ~= nil then
             WorldHumState.lockedProperties[path][prop] = val
@@ -12511,7 +12539,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
         LockBtn.TextColor3 = isLocked and UI_THEME.Accent or UI_THEME.TextDark
     end))
 
-    TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValue(Input.Text) end))
+    TrackWorldHumConnection(Input.FocusLost:Connect(function() updateValueFree(Input.Text) end))
 
     local mBtn = Instance.new("TextButton")
     mBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -12521,7 +12549,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     mBtn.TextSize = 16
     mBtn.TextColor3 = UI_THEME.TextDark
     mBtn.Parent = InputFrame
-    TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValue(targetHum[prop] - (step or 1)) end))
+    TrackWorldHumConnection(mBtn.MouseButton1Click:Connect(function() updateValueStepped(targetHum[prop] - (step or 1)) end))
 
     local pBtn = Instance.new("TextButton")
     pBtn.Size = UDim2.new(0, 25, 1, 0)
@@ -12532,7 +12560,7 @@ function CreateWorldHumNumeric(page, text, targetHum, prop, min, max, step)
     pBtn.TextSize = 16
     pBtn.TextColor3 = UI_THEME.TextDark
     pBtn.Parent = InputFrame
-    TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValue(targetHum[prop] + (step or 1)) end))
+    TrackWorldHumConnection(pBtn.MouseButton1Click:Connect(function() updateValueStepped(targetHum[prop] + (step or 1)) end))
 end
 
 function ShowWorldHumEditor(page, hum)
