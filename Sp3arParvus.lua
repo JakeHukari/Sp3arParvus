@@ -209,8 +209,11 @@ local AdvancedPlayerPanelState
 local WorldHumState
 
 local FLAG_METADATA = {
-    ["Humanoid/Health"] = { ReadOnly = true },
-    -- Future flags with Min/Max/ReadOnly constraints can be added here
+    ["Humanoid/Health"]     = { ReadOnly = true },
+    -- (cutscenes, vehicles, anti-exploit scripts, stat systems, etc.).
+    ["Humanoid/WalkSpeed"]  = { RequiresUserAction = true },
+    ["Humanoid/JumpPower"]  = { RequiresUserAction = true },
+    ["Humanoid/JumpHeight"] = { RequiresUserAction = true },
 }
 
 local USER_MODIFIED_FLAGS = setmetatable({}, {
@@ -645,15 +648,8 @@ do
             if type(UpdateTeamPanelList) == "function" then UpdateTeamPanelList() end
         end)
         
-        -- Sync Humanoid UI and apply values to the live humanoid immediately.
-        -- Iterate parsed.flags (not Flags, which may have nil Humanoid entries before spawn).
         do
-            local char = LocalPlayer.Character
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
             for k, savedVal in pairs(parsed.flags) do
-                -- Skip Humanoid/Health: it is a live runtime value. Writing it back on load
-                -- (or re-applying it every 0.1 s via ApplyHumanoidSettings) causes repeated
-                -- HealthChanged events that loop the damage indicator animation.
                 if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
                 if k:match("^Humanoid/") and not k:match("/Locked$") then
                     local currentVal = Flags[k] ~= nil and Flags[k] or savedVal
@@ -670,11 +666,8 @@ do
                     local valUpd = UIState and UIState.Updaters and UIState.Updaters[k]
                     if valUpd then task.defer(function() pcall(valUpd, currentVal) end) end
 
-                    -- Push value to the live humanoid right away
-                    if hum and _updateHum then
-                        local prop = k:match("^Humanoid/(.+)")
-                        if prop then pcall(_updateHum, prop, currentVal) end
-                    end
+                    -- Live Humanoid write is handled by ApplyHumanoidSettings() on the next heartbeat tick
+                    -- no direct push needed here.
                 end
             end
         end
@@ -1689,16 +1682,24 @@ function ApplyHumanoidSettings()
 
     if not humanoid then return end
 
-    if not HumanoidState.captured then
-        CaptureHumanoidSettings(humanoid)
-    end
+    if not HumanoidState.captured then return end
 
     for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        local isEnforced = HUMANOID_ENFORCED_PROPERTIES[flag] ~= nil
-        local isLocked = Flags[flag .. "/Locked"] == true
-        local isConfigured = USER_MODIFIED_FLAGS[flag] == true or PROFILE_LOADED_FLAGS[flag] == true
+        -- Only write when the user has explicitly configured or locked this property.
+        -- The game owns all Humanoid values by default; we are read-only unless user modifies values.
+        local isLocked     = Flags[flag .. "/Locked"] == true
+        local meta         = FLAG_METADATA[flag]
 
-        if isEnforced or isLocked or isConfigured then
+        -- RequiresUserAction flags need direct interaction inside of current session
+        -- This prevents overriding game-controlled movement physics
+        local isConfigured
+        if meta and meta.RequiresUserAction then
+            isConfigured = USER_MODIFIED_FLAGS[flag] == true
+        else
+            isConfigured = USER_MODIFIED_FLAGS[flag] == true or PROFILE_LOADED_FLAGS[flag] == true
+        end
+
+        if isLocked or isConfigured then
             local val = Flags[flag]
             if val ~= nil then
                 pcall(SafeSetProp, humanoid, prop, val)
