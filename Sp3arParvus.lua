@@ -1449,22 +1449,32 @@ local TWEENS = {
 
 local ViewportCache = {}
 local ViewportPool = {}
+local _vp_floor = math.floor
+local MAX_VIEWPORT_POOL = 64
 TrackConnection(RunService.RenderStepped:Connect(function()
-    for pos, entry in pairs(ViewportCache) do
-        table.insert(ViewportPool, entry)
+    local recycled = 0
+    for _, entry in pairs(ViewportCache) do
+        if recycled < MAX_VIEWPORT_POOL then
+            ViewportPool[#ViewportPool + 1] = entry
+            recycled = recycled + 1
+        end
     end
     table.clear(ViewportCache)
 end))
 
 local function GetViewportPoint(worldPos)
-    local entry = ViewportCache[worldPos]
+    local kx = _vp_floor(worldPos.X * 4)
+    local ky = _vp_floor(worldPos.Y * 4)
+    local kz = _vp_floor(worldPos.Z * 4)
+    local key = kx .. "|" .. ky .. "|" .. kz
+    local entry = ViewportCache[key]
     if entry then
         return entry[1], entry[2]
     end
     local screenPos, onScreen = Camera:WorldToViewportPoint(worldPos)
     entry = table.remove(ViewportPool) or {}
     entry[1], entry[2] = screenPos, onScreen
-    ViewportCache[worldPos] = entry
+    ViewportCache[key] = entry
     return screenPos, onScreen
 end
 
@@ -1560,6 +1570,13 @@ for _, group in pairs(TARGET_GROUPS) do
 end
 
 KnownBodyParts = ALL_BODY_PARTS
+
+local PART_TO_CATEGORY = {}
+for _cat, _parts in pairs(TARGET_GROUPS) do
+    for _, _pName in ipairs(_parts) do
+        PART_TO_CATEGORY[_pName] = _cat
+    end
+end
 
 local HUMANOID_PROPERTY_MAPPING = {
     ["Humanoid/Archivable"] = "Archivable",
@@ -1728,15 +1745,20 @@ function UpdateHumanoidUI()
     end
 end
 
+local _nearbyHumanoids = {}
+local _nearbySeen      = {}
+local _nearbyFilterBuf = {}
+
 local _nearbyOverlapParams = OverlapParams.new()
 _nearbyOverlapParams.MaxParts = 0
 
 function GetNearbyHumanoids()
-    local humanoids = {}
-    local seen = {}
-    local myChar = LocalPlayer.Character
+    table.clear(_nearbyHumanoids)
+    table.clear(_nearbySeen)
 
-    _nearbyOverlapParams.FilterDescendantsInstances = myChar and {myChar} or {}
+    local myChar = LocalPlayer.Character
+    _nearbyFilterBuf[1] = myChar
+    _nearbyOverlapParams.FilterDescendantsInstances = myChar and _nearbyFilterBuf or {}
     if CachedFilterType and _nearbyOverlapParams.FilterType ~= CachedFilterType then
         _nearbyOverlapParams.FilterType = CachedFilterType
     end
@@ -1745,16 +1767,16 @@ function GetNearbyHumanoids()
     for i = 1, #parts do
         local part = parts[i]
         local model = part:FindFirstAncestorOfClass("Model")
-        if model and model ~= myChar and not seen[model] then
-            seen[model] = true
+        if model and model ~= myChar and not _nearbySeen[model] then
+            _nearbySeen[model] = true
             local hum = model:FindFirstChildOfClass("Humanoid")
             if hum and not Players:GetPlayerFromCharacter(model) then
-                table.insert(humanoids, hum)
+                _nearbyHumanoids[#_nearbyHumanoids + 1] = hum
             end
         end
     end
 
-    return humanoids
+    return _nearbyHumanoids
 end
 
 function ApplyItemPanelSettings()
@@ -1876,12 +1898,16 @@ function ApplyWorldHumanoidSettings()
             end
         end
 
-        -- Live-refresh Affected count labels every tick (not just when needsScan fires).
-        -- Placed outside the needsScan gate so the display stays current between scan cycles.
+        -- H-2b fix: guard the .Text write — assigning the same string still fires
+        -- Roblox's layout-dirty signal.  Only write when the displayed value changes.
         for _, preset in ipairs(WorldHumState.Presets) do
             local lbl = preset.Id and WorldHumState.presetCountLabels[preset.Id]
             if lbl and lbl.Parent then
-                lbl.Text = "Affected: " .. (preset.affectedCount or 0) .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
+                local newText = "Affected: " .. (preset.affectedCount or 0)
+                             .. "  |  Update: " .. (preset.UpdateRate or 2.0) .. "s"
+                if lbl.Text ~= newText then
+                    lbl.Text = newText
+                end
             end
         end
 
@@ -2278,29 +2304,20 @@ function markBroken(part)
         unbreakAll()
     end
 
-    Br3ak3rState.brokenSet[path] = {
+    local record = {
+        path     = path,
         instance = part,
-        pos = part.Position,
-        name = part.Name,
-        cc = part.CanCollide,
-        ct = part.CanTouch,
-        cq = part.CanQuery,
-        ltm = part.LocalTransparencyModifier,
-        t = part.Transparency
+        pos      = part.Position,
+        name     = part.Name,
+        cc       = part.CanCollide,
+        ct       = part.CanTouch,
+        cq       = part.CanQuery,
+        ltm      = part.LocalTransparencyModifier,
+        t        = part.Transparency,
     }
+    Br3ak3rState.brokenSet[path] = record
     Br3ak3rState.brokenCacheDirty = true
-
-    table.insert(Br3ak3rState.undoStack, {
-        path = path,
-        instance = part,
-        pos = part.Position,
-        name = part.Name,
-        cc = part.CanCollide,
-        ct = part.CanTouch,
-        cq = part.CanQuery,
-        ltm = part.LocalTransparencyModifier,
-        t = part.Transparency
-    })
+    table.insert(Br3ak3rState.undoStack, record)
 
     part.CanCollide = false
     pcall(function() part.CanTouch = false end)
@@ -2553,7 +2570,11 @@ function unhighlightAll()
     UI.Notify("H1ghl1ght3r", "Removed " .. count .. " highlights")
 end
 
+local _sweepHLAccum = 0
 function sweepHighlightedUndo(dt)
+    _sweepHLAccum = _sweepHLAccum + dt
+    if _sweepHLAccum < 2 then return end
+    _sweepHLAccum = 0
 
     local n = #H1ghl1ght3rState.undoStack
     if n == 0 then return end
@@ -4973,6 +4994,9 @@ end
 
 ESPObjects = {}
 PlayerOutlineObjects = {}
+
+local _cachedESPOpacity      = nil
+local _cachedESPTransparency = nil
 
 COLORS = {
     CLOSEST = Color3.fromRGB(255, 105, 180),
@@ -8143,8 +8167,12 @@ function UpdateESP(now, player, isClosest)
     if espData.Nametag then
         local nametag = espData.Nametag
 
-        local opacity = (Flags["ESP/NametagOpacity"] or 75) / 100
-        local transparency = 1 - opacity
+        local flagOpacity = Flags["ESP/NametagOpacity"] or 75
+        if flagOpacity ~= _cachedESPOpacity then
+            _cachedESPOpacity      = flagOpacity
+            _cachedESPTransparency = 1 - (flagOpacity / 100)
+        end
+        local transparency = _cachedESPTransparency
 
         if espData.StatusLabel and espData.StatusLabel.TextTransparency ~= transparency then
             espData.StatusLabel.TextTransparency = transparency
@@ -13684,6 +13712,7 @@ TrackConnection(Players.PlayerRemoving:Connect(function(player)
     RemovePlayerFromCache(player)
     CharCache[player] = nil
     RemoveESP(player)
+    RemovePlayerOutlines(player)   -- L-1 fix: immediately release the pooled Highlight
 
     if AdvancedPlayerPanelState.SelectedPlayer == player then
         AdvancedPlayerPanelState.SelectedPlayer = nil
@@ -14316,15 +14345,8 @@ function GetCachedTarget()
 
             if CachedTarget then
                 local targetedPart = CachedTarget[3]
-                local categoryName = "Closest part"
-                for category, parts in pairs(TARGET_GROUPS) do
-                    for _, pName in ipairs(parts) do
-                        if targetedPart.Name == pName then
-                            categoryName = category
-                            break
-                        end
-                    end
-                end
+                local categoryName = (targetedPart and PART_TO_CATEGORY[targetedPart.Name])
+                    or "Closest part"
                 UIState.PriorityLabel.Text = "Priority: " .. categoryName
             else
                 UIState.PriorityLabel.Text = "Priority: Closest part"
