@@ -4031,6 +4031,7 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
         if not Input:IsFocused() then
             val = math.clamp(tonumber(val) or default, min, max)
             Input.Text = tostring(val)
+            if callback then pcall(callback, val) end
         end
     end
 
