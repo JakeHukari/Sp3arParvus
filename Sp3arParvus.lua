@@ -339,11 +339,19 @@ do
                 Flags[k] = v
             end
             -- Push change through UI updater if available.
-            -- Skip raw table values (e.g. TargetGroups) — those UIs rebuild themselves.
             if UIState and UIState.Updaters and UIState.Updaters[k] then
                 if type(v) ~= "table" then
                     task.defer(function()
                         pcall(UIState.Updaters[k], v)
+                    end)
+                elseif type(UIState.Updaters[k]) == "table" then
+                    -- Nested updater table (e.g. Aim/TargetGroups): call each per-key updater.
+                    task.defer(function()
+                        for k2, updater in pairs(UIState.Updaters[k]) do
+                            if type(updater) == "function" and Flags[k] ~= nil then
+                                pcall(updater, Flags[k][k2])
+                            end
+                        end
                     end)
                 end
             end
@@ -850,7 +858,16 @@ do
                 Flags[k] = v
             end
             if UIState and UIState.Updaters and UIState.Updaters[k] then
-                pcall(UIState.Updaters[k], Flags[k])
+                if type(UIState.Updaters[k]) == "function" then
+                    pcall(UIState.Updaters[k], Flags[k])
+                elseif type(UIState.Updaters[k]) == "table" then
+                    -- Nested updater table (e.g. Aim/TargetGroups): call each per-key updater.
+                    for k2, updater in pairs(UIState.Updaters[k]) do
+                        if type(updater) == "function" and type(Flags[k]) == "table" then
+                            pcall(updater, Flags[k][k2])
+                        end
+                    end
+                end
             end
         end
         for k in pairs(USER_MODIFIED_FLAGS) do
@@ -12793,6 +12810,7 @@ do
         Part.MouseButton1Click:Connect(function()
             Flags["Aim/TargetGroups"][flagKey] = not Flags["Aim/TargetGroups"][flagKey]
             Part.BackgroundTransparency = Flags["Aim/TargetGroups"][flagKey] and 0 or 1
+            USER_MODIFIED_FLAGS["Aim/TargetGroups"] = true
         end)
 
         if not UIState.Updaters["Aim/TargetGroups"] then
