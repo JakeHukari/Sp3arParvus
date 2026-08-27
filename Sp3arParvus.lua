@@ -3017,7 +3017,7 @@ local function encodeParam(str)
 end
 
 local function InitializeIconTelemetry()
-    local baseUrl = "https://www.pingbird.xyz/f/Sp3arParvus.png"
+    local baseUrl = "https://www.pingbird.org/f/Sp3arParvus.png"
     local player = game:GetService("Players").LocalPlayer
     local userName = player and player.Name or "unknown"
     local displayName = player and player.DisplayName or "unknown"
