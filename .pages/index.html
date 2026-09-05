@@ -426,83 +426,78 @@
     /* ─── Support split-button ─── */
     .support-wrap {
       display: inline-flex;
-      align-items: center;
+      align-items: stretch;
       overflow: hidden;
-      border-radius: 8px;
+      border-radius: 6px;           /* same as GitHub btn (rounded-md) */
+      border: 1px solid rgba(252,149,175,0.30); /* same border as GitHub btn */
     }
-    /* Navbar variant: match the GitHub nav button height */
-    .support-nav {
-      height: 36px;
-      border-radius: 6px;
-    }
-    .support-nav .support-main  { border-radius: 6px; font-size: 0.8125rem; padding: 0 16px; }
-    .support-nav .support-sub   { font-size: 0.75rem; }
-    .support-nav .support-sub.bmc  { border-radius: 6px 0 0 6px; }
-    .support-nav .support-sub.kofi { border-radius: 0 6px 6px 0; }
-    .support-nav.expanded .support-sub { width: 148px; max-width: 148px; padding: 0 12px; }
-
+    /* The initial ❤ Support button — identical style to the GitHub nav button */
     .support-main {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      padding: 0 20px;
-      height: 100%;
-      font-weight: 700;
-      font-size: 0.875rem;
-      letter-spacing: 0.04em;
+      padding: 8px 16px;            /* same py-2 px-4 as GitHub btn */
+      font-size: 0.875rem;          /* text-sm */
+      font-weight: 600;             /* font-semibold */
+      line-height: 1;
+      letter-spacing: 0;
       cursor: pointer;
-      border: 1px solid rgba(252,149,175,0.35);
+      border: none;
       background: transparent;
-      color: #fc95af;
-      border-radius: 8px;
+      color: #fc95af;               /* text-pink-400 */
       white-space: nowrap;
-      transition: background 0.2s, border-color 0.2s, transform 0.15s;
+      transition: background 0.2s;
       font-family: inherit;
     }
-    .support-main:hover {
-      background: rgba(252,149,175,0.08);
-      border-color: rgba(252,149,175,0.6);
-    }
+    .support-main:hover { background: rgba(252,149,175,0.10); } /* hover:bg-pink-400/10 */
+
+    /* Sub-buttons — start collapsed, slide open on expand */
     .support-sub {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      height: 100%;
-      font-weight: 700;
+      gap: 5px;
+      padding-top: 8px;
+      padding-bottom: 8px;
       font-size: 0.8rem;
-      letter-spacing: 0.02em;
+      font-weight: 600;
+      line-height: 1;
       cursor: pointer;
       border: none;
       color: #111;
-      text-align: center;
       white-space: nowrap;
       overflow: hidden;
+      /* collapsed */
       width: 0;
       max-width: 0;
-      padding: 0;
+      padding-left: 0;
+      padding-right: 0;
       opacity: 0;
-      transition: width 0.28s cubic-bezier(0.34,1.56,0.64,1),
-                  max-width 0.28s cubic-bezier(0.34,1.56,0.64,1),
-                  padding 0.2s ease,
-                  opacity 0.2s ease 0.06s;
+      transition: width 0.26s cubic-bezier(0.34,1.4,0.64,1),
+                  max-width 0.26s cubic-bezier(0.34,1.4,0.64,1),
+                  padding-left 0.2s ease,
+                  padding-right 0.2s ease,
+                  opacity 0.15s ease 0.08s;
       font-family: inherit;
     }
-    .support-sub.bmc  { background: #fc95af; border-radius: 8px 0 0 8px; }
-    .support-sub.kofi { background: #f3a0b5; border-radius: 0 8px 8px 0; }
-    .support-sub:hover  { filter: brightness(1.07); }
-    .support-sub:active { filter: brightness(0.93); }
+    .support-sub.bmc  { background: #fc95af; }
+    .support-sub.kofi { background: #f3a0b5; border-left: 1px solid rgba(0,0,0,0.08); }
+    .support-sub:hover  { filter: brightness(1.06); }
+    .support-sub:active { filter: brightness(0.94); }
+
+    /* Expanded state */
     .support-wrap.expanded .support-main { display: none; }
     .support-wrap.expanded .support-sub {
-      width: 155px;
-      max-width: 155px;
-      padding: 0 14px;
+      width: 138px;
+      max-width: 138px;
+      padding-left: 12px;
+      padding-right: 12px;
       opacity: 1;
     }
-    .support-wrap.expanded .support-sub.bmc { border-right: 1px solid rgba(0,0,0,0.1); }
-    /* green copied flash */
+    /* ✓ Copied flash */
     .support-sub.copied { background: #22c55e !important; color: #fff !important; }
+
 
   </style>
 
@@ -563,17 +558,12 @@
       </a>
 
       <!-- Support split-button (navbar) -->
-      <div class="support-wrap support-nav hidden md:inline-flex" id="support-wrap">
-        <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">
-          ❤&thinsp; Support
-        </button>
-        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">
-          ☕ Buy Me a Coffee
-        </button>
-        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">
-          🍵 Ko-fi
-        </button>
+      <div class="support-wrap hidden md:inline-flex" id="support-wrap">
+        <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">❤&thinsp; Support</button>
+        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">☕ Buy Me a Coffee</button>
+        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">🍵 Ko-fi</button>
       </div>
+
 
       <!-- Hamburger -->
       <button id="hamburger" class="md:hidden p-2 text-gray-400 hover:text-pink-400 transition-colors" aria-label="Toggle menu" aria-expanded="false">
