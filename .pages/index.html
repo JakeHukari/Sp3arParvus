@@ -495,8 +495,7 @@
       padding-right: 12px;
       opacity: 1;
     }
-    /* ✓ Copied flash */
-    .support-sub.copied { background: #22c55e !important; color: #fff !important; }
+
 
 
   </style>
@@ -560,9 +559,10 @@
       <!-- Support split-button (navbar) -->
       <div class="support-wrap hidden md:inline-flex" id="support-wrap">
         <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">❤&thinsp; Support</button>
-        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">☕ Buy Me a Coffee</button>
-        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">🍵 Ko-fi</button>
+        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Open Buy Me a Coffee">☕ Buy Me a Coffee</button>
+        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Open Ko-fi">🍵 Ko-fi</button>
       </div>
+
 
 
       <!-- Hamburger -->
@@ -1598,38 +1598,15 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
 // ── Support split-button ──
 function toggleSupport() {
   document.getElementById('support-wrap').classList.add('expanded');
 }
 
-function _copyUrl(url, btnId, label) {
-  const btn = document.getElementById(btnId);
-  const doFlash = () => {
-    btn.classList.add('copied');
-    const orig = btn.innerHTML;
-    btn.innerHTML = '✓ Copied!';
-    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 2000);
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(doFlash).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); document.body.removeChild(ta);
-      doFlash();
-    });
-  } else {
-    const ta = document.createElement('textarea');
-    ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
-    document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); document.body.removeChild(ta);
-    doFlash();
-  }
-}
+function copyBMC()  { window.open('https://buymeacoffee.com/Hukari', '_blank', 'noopener'); }
+function copyKofi() { window.open('https://ko-fi.com/hukari',         '_blank', 'noopener'); }
 
-function copyBMC()  { _copyUrl('https://buymeacoffee.com/Hukari', 'bmc-btn',  'Buy Me a Coffee'); }
-function copyKofi() { _copyUrl('https://ko-fi.com/hukari',         'kofi-btn', 'Ko-fi'); }
 </script>
 
 
