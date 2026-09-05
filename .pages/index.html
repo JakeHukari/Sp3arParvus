@@ -429,42 +429,54 @@
       align-items: center;
       overflow: hidden;
       border-radius: 8px;
-      height: 52px; /* matches hero CTA height */
     }
+    /* Navbar variant: match the GitHub nav button height */
+    .support-nav {
+      height: 36px;
+      border-radius: 6px;
+    }
+    .support-nav .support-main  { border-radius: 6px; font-size: 0.8125rem; padding: 0 16px; }
+    .support-nav .support-sub   { font-size: 0.75rem; }
+    .support-nav .support-sub.bmc  { border-radius: 6px 0 0 6px; }
+    .support-nav .support-sub.kofi { border-radius: 0 6px 6px 0; }
+    .support-nav.expanded .support-sub { width: 148px; max-width: 148px; padding: 0 12px; }
+
     .support-main {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
-      padding: 0 28px;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 20px;
       height: 100%;
       font-weight: 700;
       font-size: 0.875rem;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       cursor: pointer;
       border: 1px solid rgba(252,149,175,0.35);
       background: transparent;
       color: #fc95af;
       border-radius: 8px;
       white-space: nowrap;
-      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+      transition: background 0.2s, border-color 0.2s, transform 0.15s;
       font-family: inherit;
     }
     .support-main:hover {
       background: rgba(252,149,175,0.08);
       border-color: rgba(252,149,175,0.6);
-      transform: translateY(-2px);
     }
     .support-sub {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      gap: 6px;
       height: 100%;
       font-weight: 700;
       font-size: 0.8rem;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.02em;
       cursor: pointer;
       border: none;
       color: #111;
+      text-align: center;
       white-space: nowrap;
       overflow: hidden;
       width: 0;
@@ -477,23 +489,21 @@
                   opacity 0.2s ease 0.06s;
       font-family: inherit;
     }
-    .support-sub.bmc { background: #fc95af; border-radius: 8px 0 0 8px; }
+    .support-sub.bmc  { background: #fc95af; border-radius: 8px 0 0 8px; }
     .support-sub.kofi { background: #f3a0b5; border-radius: 0 8px 8px 0; }
-    .support-sub:hover { filter: brightness(1.07); }
-    .support-sub:active { filter: brightness(0.95); }
+    .support-sub:hover  { filter: brightness(1.07); }
+    .support-sub:active { filter: brightness(0.93); }
     .support-wrap.expanded .support-main { display: none; }
     .support-wrap.expanded .support-sub {
-      width: 160px;
-      max-width: 160px;
-      padding: 0 20px;
+      width: 155px;
+      max-width: 155px;
+      padding: 0 14px;
       opacity: 1;
     }
     .support-wrap.expanded .support-sub.bmc { border-right: 1px solid rgba(0,0,0,0.1); }
-    @media (max-width: 480px) {
-      .support-wrap.expanded .support-sub { width: 130px; max-width: 130px; padding: 0 14px; font-size: 0.72rem; }
-    }
-    /* copied flash */
+    /* green copied flash */
     .support-sub.copied { background: #22c55e !important; color: #fff !important; }
+
   </style>
 
   <!-- JSON-LD Structured Data (Google Rich Results) -->
@@ -551,11 +561,26 @@
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
         GitHub
       </a>
+
+      <!-- Support split-button (navbar) -->
+      <div class="support-wrap support-nav hidden md:inline-flex" id="support-wrap">
+        <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">
+          ❤&thinsp; Support
+        </button>
+        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">
+          ☕ Buy Me a Coffee
+        </button>
+        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">
+          🍵 Ko-fi
+        </button>
+      </div>
+
       <!-- Hamburger -->
       <button id="hamburger" class="md:hidden p-2 text-gray-400 hover:text-pink-400 transition-colors" aria-label="Toggle menu" aria-expanded="false">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
     </div>
+
   </div>
 
   <!-- Mobile Menu -->
@@ -614,20 +639,8 @@
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
         View on GitHub
       </a>
-
-      <!-- Support split-button -->
-      <div class="support-wrap" id="support-wrap">
-        <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">
-          ❤&thinsp; Support
-        </button>
-        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">
-          ☕ Buy Me a Coffee
-        </button>
-        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">
-          🍵 Ko-fi
-        </button>
-      </div>
     </div>
+
 
 
     <!-- Loader code snippet -->
