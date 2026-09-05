@@ -422,6 +422,78 @@
     @media (max-width: 768px) {
       .stat-val { font-size: 1.8rem; }
     }
+
+    /* ─── Support split-button ─── */
+    .support-wrap {
+      display: inline-flex;
+      align-items: center;
+      overflow: hidden;
+      border-radius: 8px;
+      height: 52px; /* matches hero CTA height */
+    }
+    .support-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 28px;
+      height: 100%;
+      font-weight: 700;
+      font-size: 0.875rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      border: 1px solid rgba(252,149,175,0.35);
+      background: transparent;
+      color: #fc95af;
+      border-radius: 8px;
+      white-space: nowrap;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+      font-family: inherit;
+    }
+    .support-main:hover {
+      background: rgba(252,149,175,0.08);
+      border-color: rgba(252,149,175,0.6);
+      transform: translateY(-2px);
+    }
+    .support-sub {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      border: none;
+      color: #111;
+      white-space: nowrap;
+      overflow: hidden;
+      width: 0;
+      max-width: 0;
+      padding: 0;
+      opacity: 0;
+      transition: width 0.28s cubic-bezier(0.34,1.56,0.64,1),
+                  max-width 0.28s cubic-bezier(0.34,1.56,0.64,1),
+                  padding 0.2s ease,
+                  opacity 0.2s ease 0.06s;
+      font-family: inherit;
+    }
+    .support-sub.bmc { background: #fc95af; border-radius: 8px 0 0 8px; }
+    .support-sub.kofi { background: #f3a0b5; border-radius: 0 8px 8px 0; }
+    .support-sub:hover { filter: brightness(1.07); }
+    .support-sub:active { filter: brightness(0.95); }
+    .support-wrap.expanded .support-main { display: none; }
+    .support-wrap.expanded .support-sub {
+      width: 160px;
+      max-width: 160px;
+      padding: 0 20px;
+      opacity: 1;
+    }
+    .support-wrap.expanded .support-sub.bmc { border-right: 1px solid rgba(0,0,0,0.1); }
+    @media (max-width: 480px) {
+      .support-wrap.expanded .support-sub { width: 130px; max-width: 130px; padding: 0 14px; font-size: 0.72rem; }
+    }
+    /* copied flash */
+    .support-sub.copied { background: #22c55e !important; color: #fff !important; }
   </style>
 
   <!-- JSON-LD Structured Data (Google Rich Results) -->
@@ -542,7 +614,21 @@
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
         View on GitHub
       </a>
+
+      <!-- Support split-button -->
+      <div class="support-wrap" id="support-wrap">
+        <button class="support-main" onclick="toggleSupport()" aria-label="Support the project">
+          ❤&thinsp; Support
+        </button>
+        <button class="support-sub bmc" id="bmc-btn" onclick="copyBMC()" aria-label="Copy Buy Me a Coffee link">
+          ☕ Buy Me a Coffee
+        </button>
+        <button class="support-sub kofi" id="kofi-btn" onclick="copyKofi()" aria-label="Copy Ko-fi link">
+          🍵 Ko-fi
+        </button>
+      </div>
     </div>
+
 
     <!-- Loader code snippet -->
     <div class="max-w-2xl mx-auto code-block py-4 px-5 reveal" style="transition-delay:0.4s">
@@ -1362,6 +1448,8 @@
         <a href="https://discord.gg/KJuxMnBFqB" target="_blank" rel="noopener">Discord</a>
         <a href="https://github.com/JakeHukari/Sp3arParvus/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
         <a href="https://github.com/JakeHukari" target="_blank" rel="noopener">@JakeHukari</a>
+        <a href="https://buymeacoffee.com/Hukari" target="_blank" rel="noopener" style="color:#fc95af">☕ Buy Me a Coffee</a>
+        <a href="https://ko-fi.com/hukari" target="_blank" rel="noopener" style="color:#fc95af">🍵 Ko-fi</a>
       </div>
     </div>
     <div class="pink-divider my-8"></div>
@@ -1506,7 +1594,41 @@ window.addEventListener('DOMContentLoaded', () => {
     if (rect.top < window.innerHeight) el.classList.add('visible');
   });
 });
+
+// ── Support split-button ──
+function toggleSupport() {
+  document.getElementById('support-wrap').classList.add('expanded');
+}
+
+function _copyUrl(url, btnId, label) {
+  const btn = document.getElementById(btnId);
+  const doFlash = () => {
+    btn.classList.add('copied');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Copied!';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(doFlash).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      doFlash();
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    doFlash();
+  }
+}
+
+function copyBMC()  { _copyUrl('https://buymeacoffee.com/Hukari', 'bmc-btn',  'Buy Me a Coffee'); }
+function copyKofi() { _copyUrl('https://ko-fi.com/hukari',         'kofi-btn', 'Ko-fi'); }
 </script>
+
 
 </body>
 </html>

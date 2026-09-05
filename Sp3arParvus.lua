@@ -13572,6 +13572,116 @@ UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
     end
 end)
 
+do
+    -- Support button: splits into Buy Me a Coffee / Ko-fi on click
+    local supportContainer = Instance.new("Frame")
+    supportContainer.Size = UDim2.new(1, 0, 0, 36)
+    supportContainer.BackgroundTransparency = 1
+    supportContainer.BorderSizePixel = 0
+    supportContainer.ClipsDescendants = true
+    supportContainer.Parent = MiscTab
+
+    local supportListLayout = Instance.new("UIListLayout")
+    supportListLayout.FillDirection = Enum.FillDirection.Horizontal
+    supportListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    supportListLayout.Padding = UDim.new(0, 6)
+    supportListLayout.Parent = supportContainer
+
+    local function makeSupportBtn(text, layoutOrder, color, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 0, 1, 0)   -- width controlled by tween
+        btn.AutomaticSize = Enum.AutomaticSize.None
+        btn.BackgroundColor3 = color or UI_THEME.Accent
+        btn.BackgroundTransparency = 0.2
+        btn.BorderSizePixel = 0
+        btn.Text = text
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 13
+        btn.TextColor3 = UI_THEME.Background
+        btn.ClipsDescendants = true
+        btn.LayoutOrder = layoutOrder
+        btn.Parent = supportContainer
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = btn
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = color or UI_THEME.Accent
+        stroke.Thickness = 1
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Parent = btn
+
+        TrackConnection(btn.MouseButton1Click:Connect(function()
+            TweenService:Create(btn, TWEENS.INSTANT, {Size = UDim2.new(0, btn.AbsoluteSize.X - 4, 0, 32)}):Play()
+            task.wait(0.05)
+            TweenService:Create(btn, TWEENS.INSTANT, {Size = UDim2.new(0, btn.AbsoluteSize.X + 4, 0, 36)}):Play()
+            if callback then callback() end
+        end))
+
+        return btn
+    end
+
+    local supportBtn = makeSupportBtn("❤  Support", 1, UI_THEME.Accent, nil)
+    TweenService:Create(supportBtn, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 1, 0)}):Play()
+
+    local bmcBtn  = makeSupportBtn("☕  Buy Me a Coffee", 1, UI_THEME.Accent, nil)
+    local kofiBtn = makeSupportBtn("🍵  Ko-fi", 2, UI_THEME.Accent, nil)
+
+    -- Start sub-buttons hidden (zero width)
+    bmcBtn.Visible  = false
+    kofiBtn.Visible = false
+
+    local expanded = false
+
+    TrackConnection(supportBtn.MouseButton1Click:Connect(function()
+        if expanded then return end
+        expanded = true
+
+        -- Press animation on the main button
+        TweenService:Create(supportBtn, TWEENS.INSTANT, {Size = UDim2.new(1, -4, 0, 32)}):Play()
+        task.wait(0.05)
+
+        -- Hide main button, reveal sub-buttons
+        supportBtn.Visible = false
+        bmcBtn.Visible  = true
+        kofiBtn.Visible = true
+
+        local containerWidth = supportContainer.AbsoluteSize.X
+        local half = math.floor((containerWidth - 6) / 2)  -- 6px gap
+
+        bmcBtn.Size  = UDim2.new(0, 0, 1, 0)
+        kofiBtn.Size = UDim2.new(0, 0, 1, 0)
+
+        TweenService:Create(bmcBtn,  TWEENS.SMOOTH, {Size = UDim2.new(0, half, 1, 0)}):Play()
+        TweenService:Create(kofiBtn, TWEENS.SMOOTH, {Size = UDim2.new(0, half, 1, 0)}):Play()
+    end))
+
+    -- Buy Me a Coffee callback
+    TrackConnection(bmcBtn.MouseButton1Click:Connect(function()
+        local url = "https://buymeacoffee.com/Hukari"
+        local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+        if copy then
+            pcall(function() copy(url) end)
+            UI.Notify("Support", "Buy Me a Coffee link copied to clipboard!", 5)
+        else
+            UI.Notify("Support", "Clipboard not supported by your exploit", 5)
+        end
+    end))
+
+    -- Ko-fi callback
+    TrackConnection(kofiBtn.MouseButton1Click:Connect(function()
+        local url = "https://ko-fi.com/hukari"
+        local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
+        if copy then
+            pcall(function() copy(url) end)
+            UI.Notify("Support", "Ko-fi link copied to clipboard!", 5)
+        else
+            UI.Notify("Support", "Clipboard not supported by your exploit", 5)
+        end
+    end))
+end
+
 UI.CreateButton(MiscTab, "Join Official Discord Server", function()
     local inviteCode = "KJuxMnBFqB"
     local url = "https://discord.gg/" .. inviteCode
