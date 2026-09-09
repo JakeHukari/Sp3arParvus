@@ -228,7 +228,7 @@ local USER_MODIFIED_FLAGS = setmetatable({}, {
     end
 })
 local PROFILE_LOADED_FLAGS = {}  -- flags loaded from a profile (kept separate from user-touched flags)
--- ── Save Modifier: session-persistent selective-save filter ───────
+-- Save Modifier: session-persistent selective-save filter ───────
 local SaveModifierState = {
     Active               = false,   -- true when ≥1 item is deselected
     Categories = {
@@ -255,13 +255,13 @@ local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
 -- ╚══════════════════════════════════════════════════════════════════╝
 local ConfigManager = { IsDirty = true }
 do
-    -- ── Path Constants ────────────────────────────────────────────────
+    -- Path Constants ────────────────────────────────────────────────
     local ROOT_DIR        = "Sp3arParvus"
     local CONFIGS_DIR     = ROOT_DIR .. "/Configs"
     local UNIVERSAL_DIR   = CONFIGS_DIR .. "/Universal"
     local PERGAME_DIR     = CONFIGS_DIR .. "/PerGame"
 
-    -- ── File API availability check ───────────────────────────────────
+    -- File API availability check ───────────────────────────────────
     local function hasFileAPIs()
         return type(writefile) == "function"
            and type(readfile)  == "function"
@@ -270,7 +270,7 @@ do
            and type(makefolder) == "function"
     end
 
-    -- ── Ensure directory structure exists ────────────────────────────
+    -- Ensure directory structure exists ────────────────────────────
     local function ensureDirs()
         if not isfolder(ROOT_DIR)    then makefolder(ROOT_DIR)    end
         if not isfolder(CONFIGS_DIR) then makefolder(CONFIGS_DIR) end
@@ -278,12 +278,12 @@ do
         if not isfolder(PERGAME_DIR)   then makefolder(PERGAME_DIR)   end
     end
 
-    -- ── JSON helpers (thin wrappers) ──────────────────────────────────
+    -- JSON helpers (thin wrappers) ──────────────────────────────────
     local HttpService = game:GetService("HttpService")
     local function encode(t) return HttpService:JSONEncode(t) end
     local function decode(s) return HttpService:JSONDecode(s) end
 
-    -- ── Serialize current Flags to a plain table safe for JSON ────────
+    -- Serialize current Flags to a plain table safe for JSON ────────
     local function serializeFlags()
         local out = {}
         for k, v in pairs(Flags) do
@@ -304,7 +304,7 @@ do
         return out
     end
 
-    -- ── Apply a flags table onto live Flags + update UI updaters ──────
+    -- Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
             if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
@@ -361,7 +361,7 @@ do
         end
     end
 
-    -- ── List helpers ──────────────────────────────────────────────────
+    -- List helpers ──────────────────────────────────────────────────
     local function listdir(dir)
         -- listfiles is the standard exploit API
         if type(listfiles) == "function" then
@@ -379,7 +379,7 @@ do
         return name:match("(.+)%.[^%.]+$") or name
     end
 
-    -- ── Save Modifier filter applier ──────────────────────────────────
+    -- Save Modifier filter applier ──────────────────────────────────
     local function applyFilterToPayload(payload, filter)
         if not filter then return end
         -- Flags
@@ -462,7 +462,7 @@ do
         end
     end
 
-    -- ── Public API ────────────────────────────────────────────────────
+    -- Public API ────────────────────────────────────────────────────
 
     function ConfigManager.HasFileAPIs()
         return hasFileAPIs()
@@ -879,7 +879,7 @@ do
         PROFILE_LOADED_FLAGS = {}
     end
 
-    -- ── Startup Auto-Load Logic ───────────────────────────────────────
+    -- Startup Auto-Load Logic ───────────────────────────────────────
     -- Runs synchronously before UI is built. Priority:
     --   1. Universal profiles with autoLoad=true
     --   2. Per-Game profiles matching current PlaceId with autoLoad=true
@@ -1744,7 +1744,7 @@ function ApplyHumanoidSettings()
         end
     end
 
-    -- ── Active rotation override ─────────────────────────────────────────
+    -- Active rotation override ─────────────────────────────────────────
     local rotXMod = USER_MODIFIED_FLAGS["Humanoid/RotationX"]
     local rotYMod = USER_MODIFIED_FLAGS["Humanoid/RotationY"]
     local rotZMod = USER_MODIFIED_FLAGS["Humanoid/RotationZ"]
@@ -1786,7 +1786,7 @@ function UpdateHumanoidUI()
         end
     end
 
-    -- ── Passive rotation display ─────────────────────────────────────────
+    -- Passive rotation display ─────────────────────────────────────────
     local root = character and character:FindFirstChild("HumanoidRootPart")
     if root then
         local ok, rx, ry, rz = pcall(function()
@@ -4137,12 +4137,12 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     if Flags[flag] == nil then Flags[flag] = default end
 end
 
--- ── UI.CreateRotationSlider ─────────────────────────────────────────────────
+-- UI.CreateRotationSlider ─────────────────────────────────────────────────
 function UI.CreateRotationSlider(page, text, flag, default)
     local ROT_MIN  = -180
     local ROT_MAX  =  180
 
-    -- ── Outer container (input row + slider row) ─────────────────────────
+    -- Outer container (input row + slider row) ─────────────────────────
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(1, 0, 0, 80)
     Container.BackgroundColor3 = UI_THEME.Element
@@ -4152,7 +4152,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
     cCorner.CornerRadius = UDim.new(0, 6)
     cCorner.Parent = Container
 
-    -- ── Label ────────────────────────────────────────────────────────────
+    -- Label ────────────────────────────────────────────────────────────
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(0.6, -12, 0, 48)
     Label.Position = UDim2.new(0, 12, 0, 0)
@@ -4164,7 +4164,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Container
 
-    -- ── Numeric input (right side of top row) ────────────────────────────
+    -- Numeric input (right side of top row) ────────────────────────────
     local InputFrame = Instance.new("Frame")
     InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
     InputFrame.Position = UDim2.new(1, -12, 0, 9)
@@ -4186,7 +4186,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Input.ClearTextOnFocus = false
     Input.Parent = InputFrame
 
-    -- ── Slider track (bottom row) ─────────────────────────────────────────
+    -- Slider track (bottom row) ─────────────────────────────────────────
     local TrackFrame = Instance.new("Frame")
     TrackFrame.Name = "SliderTrack"
     TrackFrame.Size = UDim2.new(1, -24, 0, 8)
@@ -4221,19 +4221,19 @@ function UI.CreateRotationSlider(page, text, flag, default)
     thCorner.CornerRadius = UDim.new(1, 0) -- circle
     thCorner.Parent = Thumb
 
-    -- ── Helper: convert degree value → slider fraction ────────────────────
+    -- Helper: convert degree value → slider fraction ────────────────────
     local function degToFrac(deg)
         return (math.clamp(deg, ROT_MIN, ROT_MAX) - ROT_MIN) / (ROT_MAX - ROT_MIN)
     end
 
-    -- ── Helper: update slider visuals from a fraction ─────────────────────
+    -- Helper: update slider visuals from a fraction ─────────────────────
     local function applyFrac(frac)
         frac = math.clamp(frac, 0, 1)
         Fill.Size = UDim2.new(frac, 0, 1, 0)
         Thumb.Position = UDim2.new(frac, 0, 0.5, 0)
     end
 
-    -- ── Helper: clamp + snap to integer, then propagate everywhere ─────────
+    -- Helper: clamp + snap to integer, then propagate everywhere ─────────
     local function commitDeg(rawDeg, isUserAction)
         local deg = math.clamp(math.floor(rawDeg + 0.5), ROT_MIN, ROT_MAX)
         Flags[flag] = deg
@@ -4246,7 +4246,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
         applyFrac(degToFrac(deg))
     end
 
-    -- ── UIState.Updaters: passive (read-only) refresh from UpdateHumanoidUI
+    -- UIState.Updaters: passive (read-only) refresh from UpdateHumanoidUI
     UIState.Updaters[flag] = function(val)
         -- Never mark USER_MODIFIED_FLAGS — this is a passive display update.
         local deg = math.clamp(math.floor(tonumber(val) or default), ROT_MIN, ROT_MAX)
@@ -4257,12 +4257,12 @@ function UI.CreateRotationSlider(page, text, flag, default)
         applyFrac(degToFrac(deg))
     end
 
-    -- ── TextBox: commit on focus lost ──────────────────────────────────────
+    -- TextBox: commit on focus lost ──────────────────────────────────────
     TrackConnection(Input.FocusLost:Connect(function()
         commitDeg(tonumber(Input.Text) or Flags[flag] or default, true)
     end))
 
-    -- ── Step buttons (− / +) ──────────────────────────────────────────────
+    -- Step buttons (− / +) ──────────────────────────────────────────────
     local function makeStepBtn(label, pos)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0, 25, 1, 0)
@@ -4286,7 +4286,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
         commitDeg((Flags[flag] or default) + 1, true)
     end))
 
-    -- ── Slider drag ───────────────────────────────────────────────────────
+    -- Slider drag ───────────────────────────────────────────────────────
     local dragging = false
 
     local function sliderFromInput(inputPos)
@@ -4320,7 +4320,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
         end
     end))
 
-    -- ── Initialise visuals from current flag value ─────────────────────────
+    -- Initialise visuals from current flag value ─────────────────────────
     local initVal = Flags[flag] ~= nil and Flags[flag] or default
     Flags[flag] = math.clamp(math.floor(initVal + 0.5), ROT_MIN, ROT_MAX)
     Input.Text = tostring(Flags[flag])
@@ -4492,7 +4492,7 @@ function UpdateLighting()
         end
     end
 
-    -- ── FULLBRIGHT ──────────────────────────────────────────────────────────
+    -- FULLBRIGHT ──────────────────────────────────────────────────────────
     if fullbright then
         -- Ambient
         if Flags["Visuals/Fullbright/WhiteAmbient"] then
@@ -4530,7 +4530,7 @@ function UpdateLighting()
             atmosphere.Glare   = Flags["Visuals/Fullbright/SkyGlare"]
         end
 
-    -- ── FULLDARK ────────────────────────────────────────────────────────────
+    -- FULLDARK ────────────────────────────────────────────────────────────
     elseif fullDark then
         -- Time of day
         Services.Lighting.ClockTime = Flags["Visuals/FullDark/ClockTime"]
@@ -10486,7 +10486,7 @@ local MiscTab = UI.CreateTab("Dev Tools")
 local ShortcutsTab = UI.CreateTab("Shortcuts")
 InitializeShortcutsPage(ShortcutsTab)
 
--- ── Save Modifier: Active-state scanner ───────────────────────────
+-- Save Modifier: Active-state scanner ───────────────────────────
 local function UpdateSaveModifierActive()
     for _, v in pairs(SaveModifierState.Categories) do
         if not v then SaveModifierState.Active = true; return end
@@ -10504,7 +10504,7 @@ local function UpdateSaveModifierActive()
     SaveModifierState.Active = false
 end
 
--- ── Save Modifier: Build filter table for ConfigManager ────────────
+-- Save Modifier: Build filter table for ConfigManager ────────────
 local function BuildSaveFilter()
     UpdateSaveModifierActive()
     if not SaveModifierState.Active then return nil end
@@ -10532,7 +10532,7 @@ local function BuildConfigTab(page)
     local THEME = UI_THEME
     local openModifier  -- forward-declared; assigned after overlay is fully built
 
-    -- ── Helper: thin separator ─────────────────────────────────────────
+    -- Helper: thin separator ─────────────────────────────────────────
     local function makeSeparator(parent)
         local sep = Instance.new("Frame")
         sep.Size = UDim2.new(1, 0, 0, 1)
@@ -10541,7 +10541,7 @@ local function BuildConfigTab(page)
         sep.Parent = parent
     end
 
-    -- ── Helper: make a styled info label ──────────────────────────────
+    -- Helper: make a styled info label ──────────────────────────────
     local function makeInfoLabel(parent, text, height)
         height = height or 36
         local lbl = Instance.new("TextLabel")
@@ -10565,7 +10565,7 @@ local function BuildConfigTab(page)
         return lbl
     end
 
-    -- ── Helper: make a small icon+text button ─────────────────────────
+    -- Helper: make a small icon+text button ─────────────────────────
     local function makeSmallBtn(parent, text, bgColor, textColor, width)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0, width or 60, 0, 26)
@@ -10587,7 +10587,7 @@ local function BuildConfigTab(page)
         return btn
     end
 
-    -- ── Helper: TextBox row (for inline naming) ────────────────────────
+    -- Helper: TextBox row (for inline naming) ────────────────────────
     local function makeNameInput(parent, placeholderText)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 0, 36)
@@ -10624,10 +10624,10 @@ local function BuildConfigTab(page)
         return frame, tb
     end
 
-    -- ── State ───────────────────────────────────────────────────────────
+    -- State ───────────────────────────────────────────────────────────
     local apiAvailable  = ConfigManager.HasFileAPIs()
 
-    -- ── Content frame (always visible) ───────────────────────────────────
+    -- Content frame (always visible) ───────────────────────────────────
     local expandable = Instance.new("Frame")
     expandable.Size = UDim2.new(1, 0, 0, 0)
     expandable.BackgroundTransparency = 1
@@ -10670,7 +10670,7 @@ local function BuildConfigTab(page)
         abLabel.Parent = apiBanner
     end
 
-    -- ── SECTION: QUICK ACTIONS ────────────────────────────────────────
+    -- SECTION: QUICK ACTIONS ────────────────────────────────────────
     local function makeSection(parent, label)
         local s = Instance.new("Frame")
         s.Size = UDim2.new(1, 0, 0, 26)
@@ -10688,7 +10688,7 @@ local function BuildConfigTab(page)
         sl.Parent = s
     end
 
-    -- ── Save Modifier button (opens full-page overlay) ───────────────
+    -- Save Modifier button (opens full-page overlay) ───────────────
     local modOpenBtn = Instance.new("TextButton")
     modOpenBtn.Size = UDim2.new(1, 0, 0, 34)
     modOpenBtn.BackgroundColor3 = Color3.fromRGB(28, 22, 34)
@@ -10865,7 +10865,7 @@ local function BuildConfigTab(page)
         end
     end))
 
-    -- ── SECTION: PROFILE LISTS ────────────────────────────────────────
+    -- SECTION: PROFILE LISTS ────────────────────────────────────────
     makeSection(expandable, "Universal Profiles")
     makeInfoLabel(expandable, "Universal profiles load regardless of which game you're in.", 30)
 
@@ -11207,7 +11207,7 @@ local function BuildConfigTab(page)
         refreshLists()
     end))
 
-    -- ── Initial population ─────────────────────────────────────────────
+    -- Initial population ─────────────────────────────────────────────
     -- Fire API warning notification immediately if file I/O is unavailable
     if not apiAvailable then
         task.delay(1, function()
@@ -11236,7 +11236,7 @@ local function BuildConfigTab(page)
         modOverlay.Size = UDim2.new(1, 0, 0, _molayout.AbsoluteContentSize.Y + 12)
     end))
 
-    -- ── Header ──────────────────────────────────────────────────────
+    -- Header ──────────────────────────────────────────────────────
     local modHdr = Instance.new("Frame")
     modHdr.Size = UDim2.new(1, 0, 0, 46)
     modHdr.BackgroundColor3 = Color3.fromRGB(24, 18, 30)
@@ -11286,7 +11286,7 @@ local function BuildConfigTab(page)
         TweenService:Create(modCloseBtn, TWEENS.FAST, {BackgroundColor3 = Color3.fromRGB(55, 28, 33)}):Play()
     end))
 
-    -- ── Amber status bar (visible when modifier is filtering) ────────
+    -- Amber status bar (visible when modifier is filtering) ────────
     local modStatusBar = Instance.new("Frame")
     modStatusBar.Size = UDim2.new(1, 0, 0, 28)
     modStatusBar.BackgroundColor3 = Color3.fromRGB(44, 33, 7)
@@ -11309,7 +11309,7 @@ local function BuildConfigTab(page)
     modStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
     modStatusLbl.Parent = modStatusBar
 
-    -- ── Action bar ───────────────────────────────────────────────────
+    -- Action bar ───────────────────────────────────────────────────
     local modActionBar = Instance.new("Frame")
     modActionBar.Size = UDim2.new(1, 0, 0, 38)
     modActionBar.BackgroundTransparency = 1
@@ -11346,12 +11346,12 @@ local function BuildConfigTab(page)
     local modDeselectAllBtn = _makeModActionBtn(modActionBar, "Deselect All", Color3.fromRGB(60, 38, 14),  Color3.fromRGB(220, 155, 70), 100)
     local modResetBtn       = _makeModActionBtn(modActionBar, "Reset",        Color3.fromRGB(38, 38, 48),  THEME.TextDark,               64)
 
-    -- ── Info label ───────────────────────────────────────────────────
+    -- Info label ───────────────────────────────────────────────────
     local modInfoLbl = makeInfoLabel(modOverlay,
         "Toggle categories and individual entries. Selections persist when you close. Use Save / Overwrite buttons to save with the active filter.", 40)
     modInfoLbl.LayoutOrder = 4
 
-    -- ── Categories container ─────────────────────────────────────────
+    -- Categories container ─────────────────────────────────────────
     local modCatContainer = Instance.new("Frame")
     modCatContainer.Size = UDim2.new(1, 0, 0, 0)
     modCatContainer.BackgroundTransparency = 1
@@ -11371,7 +11371,7 @@ local function BuildConfigTab(page)
     -- Persist expand state across open/close cycles
     local _modCatExpanded = {}
 
-    -- ── Helper: build one collapsible category section ───────────────
+    -- Helper: build one collapsible category section ───────────────
     local function buildModSection(catKey, catLabel, stateTable, getEntries)
         local secFrame = Instance.new("Frame")
         secFrame.Size = UDim2.new(1, 0, 0, 0)
@@ -11568,7 +11568,7 @@ local function BuildConfigTab(page)
         return rebuildEntries
     end
 
-    -- ── Instantiate all 7 category sections ──────────────────────────
+    -- Instantiate all 7 category sections ──────────────────────────
     local _PS = game:GetService("Players")
     local function _pname(uid)
         local ok, pl = pcall(function() return _PS:GetPlayerByUserId(tonumber(uid) or 0) end)
@@ -11655,7 +11655,7 @@ local function BuildConfigTab(page)
         modStatusBar.Visible = SaveModifierState.Active
     end
 
-    -- ── Badge updater (called on close, updates Config page button/label) ──
+    -- Badge updater (called on close, updates Config page button/label) ──
     local function _updateConfigBadges()
         UpdateSaveModifierActive()
         local active = SaveModifierState.Active
@@ -11668,7 +11668,7 @@ local function BuildConfigTab(page)
     end
     _G._SP3AR_ModBadgeUpdate = _updateConfigBadges
 
-    -- ── Close handler ────────────────────────────────────────────────
+    -- Close handler ────────────────────────────────────────────────
     local function _closeModifier()
         modOverlay.Visible = false
         expandable.Visible = true
@@ -11676,7 +11676,7 @@ local function BuildConfigTab(page)
     end
     TrackConnection(modCloseBtn.MouseButton1Click:Connect(_closeModifier))
 
-    -- ── Bulk action handlers ─────────────────────────────────────────
+    -- Bulk action handlers ─────────────────────────────────────────
     local _allEntryTables = {
         SaveModifierState.WhitelistEntries,     SaveModifierState.BlacklistEntries,
         SaveModifierState.TeamWhitelistEntries, SaveModifierState.TeamBlacklistEntries,
@@ -11699,7 +11699,7 @@ local function BuildConfigTab(page)
         _rebuildModifierContent()
     end))
 
-    -- ── Assign openModifier (forward-declared at top of BuildConfigTab) ──
+    -- Assign openModifier (forward-declared at top of BuildConfigTab) ──
     openModifier = function()
         expandable.Visible = false
         modOverlay.Visible = true
@@ -13225,7 +13225,7 @@ UI.CreateNumericInput(VisualsTab, "UI Scale", "Visuals/UIScale", Flags["Visuals/
     ApplyUIScale(ItemPanelUI.MainFrame, val)
 end)
 
--- ── Fullbright & FullDark Toggles ──────────────────────────────────────────
+-- Fullbright & FullDark Toggles ──────────────────────────────────────────
 UI.CreateSection(VisualsTab, "Fullbright / FullDark")
 UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
     if state then
@@ -13242,7 +13242,7 @@ UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visu
     end
 end)
 
--- ── Fullbright Modifier Settings ────────────────────────────────────────────
+-- Fullbright Modifier Settings ────────────────────────────────────────────
 UI.CreateSection(VisualsTab, "Fullbright Settings")
 UI.CreateNumericInput(VisualsTab, "FB: Time of Day (0-24)", "Visuals/Fullbright/ClockTime",
     Flags["Visuals/Fullbright/ClockTime"], 0, 23.99, 0.25, "h", nil)
@@ -13269,7 +13269,7 @@ UI.CreateNumericInput(VisualsTab, "FB: Sky Haze", "Visuals/Fullbright/SkyHaze",
 UI.CreateNumericInput(VisualsTab, "FB: Sky Glare", "Visuals/Fullbright/SkyGlare",
     Flags["Visuals/Fullbright/SkyGlare"], 0, 10, 0.1, "", nil)
 
--- ── FullDark Modifier Settings ───────────────────────────────────────────────
+-- FullDark Modifier Settings ───────────────────────────────────────────────
 UI.CreateSection(VisualsTab, "FullDark Settings")
 UI.CreateNumericInput(VisualsTab, "FD: Time of Day (0-24)", "Visuals/FullDark/ClockTime",
     Flags["Visuals/FullDark/ClockTime"], 0, 23.99, 0.25, "h", nil)
@@ -13298,7 +13298,7 @@ UI.CreateNumericInput(VisualsTab, "FD: Sky Haze", "Visuals/FullDark/SkyHaze",
 UI.CreateNumericInput(VisualsTab, "FD: Sky Glare", "Visuals/FullDark/SkyGlare",
     Flags["Visuals/FullDark/SkyGlare"], 0, 10, 0.1, "", nil)
 
--- ── Current World Lighting Live Editor ──────────────────────────────────────
+-- Current World Lighting Live Editor ──────────────────────────────────────
 do
     -- Local table to hold updater functions so the Refresh button can repopulate all fields
     local LiveLightingUpdaters = {}
@@ -13344,7 +13344,7 @@ do
         end
     end)
 
-    -- ── Time & Exposure ────────────────────────────────────────────────────
+    -- Time & Exposure ────────────────────────────────────────────────────
     MakeLiveLightingNumeric("Clock Time (0–24 h)", "ClockTime",
         function() return Services.Lighting.ClockTime end,
         function(v) Services.Lighting.ClockTime = v end,
@@ -13360,7 +13360,7 @@ do
         function(v) Services.Lighting.ExposureCompensation = v end,
         -5, 5, 0.1, "")
 
-    -- ── Ambient ────────────────────────────────────────────────────────────
+    -- Ambient ────────────────────────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Ambient (RGB 0–255)")
     MakeLiveLightingNumeric("Ambient  R", "Ambient_R",
         function() return math.floor(Services.Lighting.Ambient.R * 255 + 0.5) end,
@@ -13401,13 +13401,13 @@ do
             Services.Lighting.OutdoorAmbient = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
         end, 0, 255, 1, "")
 
-    -- ── Shadows ────────────────────────────────────────────────────────────
+    -- Shadows ────────────────────────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Shadows & Fog")
     MakeLiveLightingToggle("Global Shadows", "GlobalShadows",
         function() return Services.Lighting.GlobalShadows end,
         function(v) Services.Lighting.GlobalShadows = v end)
 
-    -- ── Fog ───────────────────────────────────────────────────────────────
+    -- Fog ───────────────────────────────────────────────────────────────
     MakeLiveLightingNumeric("Fog Near (FogStart)", "FogStart",
         function() return Services.Lighting.FogStart end,
         function(v) Services.Lighting.FogStart = v end,
@@ -13438,7 +13438,7 @@ do
             Services.Lighting.FogColor = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
         end, 0, 255, 1, "")
 
-    -- ── Atmosphere (if present) ────────────────────────────────────────────
+    -- Atmosphere (if present) ────────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Atmosphere")
     MakeLiveLightingNumeric("Atmo Density", "Atmo_Density",
         function()
@@ -13519,7 +13519,7 @@ do
             end
         end, 0, 255, 1, "")
 
-    -- ── Bloom (if present) ─────────────────────────────────────────────────
+    -- Bloom (if present) ─────────────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Bloom Effect")
     MakeLiveLightingNumeric("Bloom Intensity", "Bloom_Intensity",
         function()
@@ -13551,7 +13551,7 @@ do
             if b then b.Threshold = v end
         end, 0, 1, 0.01, "")
 
-    -- ── ColorCorrection (if present) ───────────────────────────────────────
+    -- ColorCorrection (if present) ───────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Color Correction")
     MakeLiveLightingNumeric("CC Brightness", "CC_Brightness",
         function()
@@ -13583,7 +13583,7 @@ do
             if cc then cc.Saturation = v end
         end, -1, 1, 0.01, "")
 
-    -- ── SunRays (if present) ───────────────────────────────────────────────
+    -- SunRays (if present) ───────────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Sun Rays")
     MakeLiveLightingNumeric("SunRays Intensity", "SunRays_Intensity",
         function()
@@ -13605,7 +13605,7 @@ do
             if sr then sr.Spread = v end
         end, 0, 1, 0.01, "")
 
-    -- ── DepthOfField (if present) ──────────────────────────────────────────
+    -- DepthOfField (if present) ──────────────────────────────────────────
     UI.CreateSection(VisualsTab, "World Depth of Field")
     MakeLiveLightingNumeric("DOF Far Intensity", "DOF_FarIntensity",
         function()
@@ -15320,7 +15320,7 @@ print(string.format("[Sp3arParvus v%s] Press RIGHT SHIFT to toggle UI visibility
 print(string.format("[Sp3arParvus v%s] Br3ak3r Controls: Ctrl+Click=Break | Ctrl+Z=Undo | Ctrl+B=Toggle", VERSION))
 print(string.format("[Sp3arParvus v%s] Distance Colors: Pink=Closest | Red≤750 | Yellow≤1875 | Green>1875", VERSION))
 
--- ── Deferred startup config notification (UI is now ready) ────────────
+-- Deferred startup config notification (UI is now ready) ────────────
 do
     local payloads = ConfigManager and ConfigManager._startupPayloads
     if payloads then
