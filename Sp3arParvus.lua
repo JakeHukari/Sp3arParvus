@@ -1719,32 +1719,27 @@ function ApplyHumanoidSettings()
 
     if not humanoid then return end
 
-    if not HumanoidState.captured then return end
+    if HumanoidState.captured then
+        for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
+            local isLocked     = Flags[flag .. "/Locked"] == true
+            local meta         = FLAG_METADATA[flag]
 
-    for flag, prop in pairs(HUMANOID_PROPERTY_MAPPING) do
-        -- Only write when the user has explicitly configured or locked this property.
-        -- The game owns all Humanoid values by default; we are read-only unless user modifies values.
-        local isLocked     = Flags[flag .. "/Locked"] == true
-        local meta         = FLAG_METADATA[flag]
+            local isConfigured
+            if meta and meta.RequiresUserAction then
+                isConfigured = USER_MODIFIED_FLAGS[flag] == true
+            else
+                isConfigured = USER_MODIFIED_FLAGS[flag] == true or PROFILE_LOADED_FLAGS[flag] == true
+            end
 
-        -- RequiresUserAction flags need direct interaction inside of current session
-        -- This prevents overriding game-controlled movement physics
-        local isConfigured
-        if meta and meta.RequiresUserAction then
-            isConfigured = USER_MODIFIED_FLAGS[flag] == true
-        else
-            isConfigured = USER_MODIFIED_FLAGS[flag] == true or PROFILE_LOADED_FLAGS[flag] == true
-        end
-
-        if isLocked or isConfigured then
-            local val = Flags[flag]
-            if val ~= nil then
-                pcall(SafeSetProp, humanoid, prop, val)
+            if isLocked or isConfigured then
+                local val = Flags[flag]
+                if val ~= nil then
+                    pcall(SafeSetProp, humanoid, prop, val)
+                end
             end
         end
     end
 
-    -- Active rotation override ─────────────────────────────────────────
     local rotXMod = USER_MODIFIED_FLAGS["Humanoid/RotationX"]
     local rotYMod = USER_MODIFIED_FLAGS["Humanoid/RotationY"]
     local rotZMod = USER_MODIFIED_FLAGS["Humanoid/RotationZ"]
@@ -1765,6 +1760,7 @@ function ApplyHumanoidSettings()
         end
     end
 end
+
 
 
 function UpdateHumanoidUI()
@@ -4176,7 +4172,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
     ClearBtn.Position = UDim2.new(0.6, -40, 0.5, -24) -- vertically centred in top 48 px
     ClearBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
     ClearBtn.BackgroundTransparency = 0
-    ClearBtn.Text = "✕"
+    ClearBtn.Text = "X"
     ClearBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     ClearBtn.TextSize = 11
     ClearBtn.TextColor3 = UI_THEME.TextDark
