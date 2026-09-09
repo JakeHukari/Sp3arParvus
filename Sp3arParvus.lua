@@ -4154,7 +4154,8 @@ function UI.CreateRotationSlider(page, text, flag, default)
 
     -- Label ────────────────────────────────────────────────────────────
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.6, -12, 0, 48)
+    -- Leave room on the right for the Clear button (28 px)
+    Label.Size = UDim2.new(0.6, -44, 0, 48)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
@@ -4165,6 +4166,26 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Label.Parent = Container
 
     -- Numeric input (right side of top row) ────────────────────────────
+    -- Clear button ──────────────────────────────────────────────────────
+    -- Visible/styled differently when the axis is actively overriding.
+    local ClearBtn = Instance.new("TextButton")
+    ClearBtn.Name = "ClearRotation"
+    ClearBtn.Size = UDim2.new(0, 28, 0, 20)
+    ClearBtn.AnchorPoint = Vector2.new(0, 0.5)
+    -- Sits between the label and the input frame (left edge of input area)
+    ClearBtn.Position = UDim2.new(0.6, -40, 0.5, -24) -- vertically centred in top 48 px
+    ClearBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+    ClearBtn.BackgroundTransparency = 0
+    ClearBtn.Text = "✕"
+    ClearBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    ClearBtn.TextSize = 11
+    ClearBtn.TextColor3 = UI_THEME.TextDark
+    ClearBtn.AutoButtonColor = false
+    ClearBtn.Parent = Container
+    local clrCorner = Instance.new("UICorner")
+    clrCorner.CornerRadius = UDim.new(0, 4)
+    clrCorner.Parent = ClearBtn
+
     local InputFrame = Instance.new("Frame")
     InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
     InputFrame.Position = UDim2.new(1, -12, 0, 9)
@@ -4187,15 +4208,17 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Input.Parent = InputFrame
 
     -- Slider track (bottom row) ─────────────────────────────────────────
-    local TrackFrame = Instance.new("Frame")
+    local TrackFrame = Instance.new("TextButton")
     TrackFrame.Name = "SliderTrack"
-    TrackFrame.Size = UDim2.new(1, -24, 0, 8)
+    TrackFrame.Size = UDim2.new(1, -24, 0, 16)
     TrackFrame.Position = UDim2.new(0, 12, 0, 56)
     TrackFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
     TrackFrame.BorderSizePixel = 0
+    TrackFrame.Text = ""
+    TrackFrame.AutoButtonColor = false
     TrackFrame.Parent = Container
     local tCorner = Instance.new("UICorner")
-    tCorner.CornerRadius = UDim.new(0, 4)
+    tCorner.CornerRadius = UDim.new(0, 6)
     tCorner.Parent = TrackFrame
 
     local Fill = Instance.new("Frame")
@@ -4203,25 +4226,41 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Fill.Size = UDim2.new(0.5, 0, 1, 0) -- 50 % = 0 degrees
     Fill.BackgroundColor3 = UI_THEME.Accent
     Fill.BorderSizePixel = 0
+    Fill.ZIndex = 2
     Fill.Parent = TrackFrame
     local fCorner = Instance.new("UICorner")
-    fCorner.CornerRadius = UDim.new(0, 4)
+    fCorner.CornerRadius = UDim.new(0, 6)
     fCorner.Parent = Fill
 
-    local Thumb = Instance.new("Frame")
+    -- Draggable thumb — also a TextButton so MakeDraggable skips it.
+    local Thumb = Instance.new("TextButton")
     Thumb.Name = "Thumb"
-    Thumb.Size = UDim2.new(0, 12, 0, 12)
+    Thumb.Size = UDim2.new(0, 16, 0, 16)
     Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
-    Thumb.Position = UDim2.new(0.5, 0, 0.5, 0) -- starts at center
+    Thumb.Position = UDim2.new(0.5, 0, 0.5, 0)
     Thumb.BackgroundColor3 = UI_THEME.Text
     Thumb.BorderSizePixel = 0
-    Thumb.ZIndex = 3
+    Thumb.Text = ""
+    Thumb.AutoButtonColor = false
+    Thumb.ZIndex = 4
     Thumb.Parent = TrackFrame
     local thCorner = Instance.new("UICorner")
     thCorner.CornerRadius = UDim.new(1, 0) -- circle
     thCorner.Parent = Thumb
 
     -- Helper: convert degree value → slider fraction ────────────────────
+    local function setOverrideVisuals(isOverriding)
+        if isOverriding then
+            Label.TextColor3 = UI_THEME.Accent
+            ClearBtn.TextColor3 = UI_THEME.Accent
+            ClearBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 45)
+        else
+            Label.TextColor3 = UI_THEME.Text
+            ClearBtn.TextColor3 = UI_THEME.TextDark
+            ClearBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+        end
+    end
+
     local function degToFrac(deg)
         return (math.clamp(deg, ROT_MIN, ROT_MAX) - ROT_MIN) / (ROT_MAX - ROT_MIN)
     end
@@ -4239,6 +4278,7 @@ function UI.CreateRotationSlider(page, text, flag, default)
         Flags[flag] = deg
         if isUserAction then
             USER_MODIFIED_FLAGS[flag] = true
+            setOverrideVisuals(true)
         end
         if not Input:IsFocused() then
             Input.Text = tostring(deg)
@@ -4258,6 +4298,12 @@ function UI.CreateRotationSlider(page, text, flag, default)
     end
 
     -- TextBox: commit on focus lost ──────────────────────────────────────
+    TrackConnection(ClearBtn.MouseButton1Click:Connect(function()
+        USER_MODIFIED_FLAGS[flag] = nil
+        PROFILE_LOADED_FLAGS[flag] = nil
+        setOverrideVisuals(false)
+    end))
+
     TrackConnection(Input.FocusLost:Connect(function()
         commitDeg(tonumber(Input.Text) or Flags[flag] or default, true)
     end))
@@ -4297,18 +4343,17 @@ function UI.CreateRotationSlider(page, text, flag, default)
         commitDeg(deg, true)
     end
 
-    TrackConnection(TrackFrame.InputBegan:Connect(function(input)
+    local function beginDrag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            UIState.ActiveDraggedFrame = nil  -- prevent window drag racing
             dragging = true
             sliderFromInput(input.Position)
         end
-    end))
-    TrackConnection(Thumb.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            sliderFromInput(input.Position)
-        end
-    end))
+    end
+
+    TrackConnection(TrackFrame.InputBegan:Connect(beginDrag))
+    TrackConnection(Thumb.InputBegan:Connect(beginDrag))
+
     TrackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             sliderFromInput(input.Position)
@@ -4325,7 +4370,9 @@ function UI.CreateRotationSlider(page, text, flag, default)
     Flags[flag] = math.clamp(math.floor(initVal + 0.5), ROT_MIN, ROT_MAX)
     Input.Text = tostring(Flags[flag])
     applyFrac(degToFrac(Flags[flag]))
+    setOverrideVisuals(USER_MODIFIED_FLAGS[flag] == true)
 end
+
 
 
 function UI.CreateButton(page, text, callback)
