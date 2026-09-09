@@ -4135,8 +4135,8 @@ end
 
 -- UI.CreateRotationSlider ─────────────────────────────────────────────────
 function UI.CreateRotationSlider(page, text, flag, default)
-    local ROT_MIN  = -180
-    local ROT_MAX  =  180
+    local ROT_MIN  = -90
+    local ROT_MAX  =  90
 
     -- Outer container (input row + slider row) ─────────────────────────
     local Container = Instance.new("Frame")
