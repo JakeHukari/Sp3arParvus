@@ -214,6 +214,9 @@ local FLAG_METADATA = {
     ["Humanoid/WalkSpeed"]  = { RequiresUserAction = true },
     ["Humanoid/JumpPower"]  = { RequiresUserAction = true },
     ["Humanoid/JumpHeight"] = { RequiresUserAction = true },
+    ["Humanoid/RotationX"]  = { RequiresUserAction = true },
+    ["Humanoid/RotationY"]  = { RequiresUserAction = true },
+    ["Humanoid/RotationZ"]  = { RequiresUserAction = true },
 }
 
 local USER_MODIFIED_FLAGS = setmetatable({}, {
@@ -1740,7 +1743,29 @@ function ApplyHumanoidSettings()
             end
         end
     end
+
+    -- ── Active rotation override ─────────────────────────────────────────
+    local rotXMod = USER_MODIFIED_FLAGS["Humanoid/RotationX"]
+    local rotYMod = USER_MODIFIED_FLAGS["Humanoid/RotationY"]
+    local rotZMod = USER_MODIFIED_FLAGS["Humanoid/RotationZ"]
+    if rotXMod or rotYMod or rotZMod then
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local ok, lrx, lry, lrz = pcall(function()
+                return root.CFrame:ToEulerAnglesXYZ()
+            end)
+            if ok then
+                local rx = rotXMod and math.rad(Flags["Humanoid/RotationX"] or 0) or lrx
+                local ry = rotYMod and math.rad(Flags["Humanoid/RotationY"] or 0) or lry
+                local rz = rotZMod and math.rad(Flags["Humanoid/RotationZ"] or 0) or lrz
+                local pos = root.CFrame.Position
+                local newCF = CFrame.new(pos) * CFrame.fromEulerAnglesXYZ(rx, ry, rz)
+                pcall(SafeSetProp, root, "CFrame", newCF)
+            end
+        end
+    end
 end
+
 
 function UpdateHumanoidUI()
     local character = LocalPlayer.Character
@@ -1760,7 +1785,35 @@ function UpdateHumanoidUI()
             end
         end
     end
+
+    -- ── Passive rotation display ─────────────────────────────────────────
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then
+        local ok, rx, ry, rz = pcall(function()
+            return root.CFrame:ToEulerAnglesXYZ()
+        end)
+        if ok then
+            local axes = {
+                ["Humanoid/RotationX"] = math.deg(rx),
+                ["Humanoid/RotationY"] = math.deg(ry),
+                ["Humanoid/RotationZ"] = math.deg(rz),
+            }
+            for flag, degVal in pairs(axes) do
+                if not USER_MODIFIED_FLAGS[flag] and not PROFILE_LOADED_FLAGS[flag] then
+                    local rounded = math.floor(degVal + 0.5)
+                    if Flags[flag] ~= rounded then
+                        Flags[flag] = rounded
+                        local updater = UIState.Updaters[flag]
+                        if updater then
+                            updater(rounded)
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
+
 
 local _nearbyHumanoids = {}
 local _nearbySeen      = {}
@@ -4084,8 +4137,200 @@ function UI.CreateNumericInput(page, text, flag, default, min, max, step, unit, 
     if Flags[flag] == nil then Flags[flag] = default end
 end
 
+-- ── UI.CreateRotationSlider ─────────────────────────────────────────────────
+function UI.CreateRotationSlider(page, text, flag, default)
+    local ROT_MIN  = -180
+    local ROT_MAX  =  180
+
+    -- ── Outer container (input row + slider row) ─────────────────────────
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 80)
+    Container.BackgroundColor3 = UI_THEME.Element
+    Container.BorderSizePixel = 0
+    Container.Parent = page
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 6)
+    cCorner.Parent = Container
+
+    -- ── Label ────────────────────────────────────────────────────────────
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.6, -12, 0, 48)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+
+    -- ── Numeric input (right side of top row) ────────────────────────────
+    local InputFrame = Instance.new("Frame")
+    InputFrame.Size = UDim2.new(0.4, -12, 0, 30)
+    InputFrame.Position = UDim2.new(1, -12, 0, 9)
+    InputFrame.AnchorPoint = Vector2.new(1, 0)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    InputFrame.Parent = Container
+    local ifCorner = Instance.new("UICorner")
+    ifCorner.CornerRadius = UDim.new(0, 4)
+    ifCorner.Parent = InputFrame
+
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.new(1, -50, 1, 0)
+    Input.Position = UDim2.new(0, 25, 0, 0)
+    Input.BackgroundTransparency = 1
+    Input.Text = tostring(math.floor(Flags[flag] ~= nil and Flags[flag] or default))
+    Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    Input.TextSize = 13
+    Input.TextColor3 = UI_THEME.Accent
+    Input.ClearTextOnFocus = false
+    Input.Parent = InputFrame
+
+    -- ── Slider track (bottom row) ─────────────────────────────────────────
+    local TrackFrame = Instance.new("Frame")
+    TrackFrame.Name = "SliderTrack"
+    TrackFrame.Size = UDim2.new(1, -24, 0, 8)
+    TrackFrame.Position = UDim2.new(0, 12, 0, 56)
+    TrackFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+    TrackFrame.BorderSizePixel = 0
+    TrackFrame.Parent = Container
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(0, 4)
+    tCorner.Parent = TrackFrame
+
+    local Fill = Instance.new("Frame")
+    Fill.Name = "Fill"
+    Fill.Size = UDim2.new(0.5, 0, 1, 0) -- 50 % = 0 degrees
+    Fill.BackgroundColor3 = UI_THEME.Accent
+    Fill.BorderSizePixel = 0
+    Fill.Parent = TrackFrame
+    local fCorner = Instance.new("UICorner")
+    fCorner.CornerRadius = UDim.new(0, 4)
+    fCorner.Parent = Fill
+
+    local Thumb = Instance.new("Frame")
+    Thumb.Name = "Thumb"
+    Thumb.Size = UDim2.new(0, 12, 0, 12)
+    Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
+    Thumb.Position = UDim2.new(0.5, 0, 0.5, 0) -- starts at center
+    Thumb.BackgroundColor3 = UI_THEME.Text
+    Thumb.BorderSizePixel = 0
+    Thumb.ZIndex = 3
+    Thumb.Parent = TrackFrame
+    local thCorner = Instance.new("UICorner")
+    thCorner.CornerRadius = UDim.new(1, 0) -- circle
+    thCorner.Parent = Thumb
+
+    -- ── Helper: convert degree value → slider fraction ────────────────────
+    local function degToFrac(deg)
+        return (math.clamp(deg, ROT_MIN, ROT_MAX) - ROT_MIN) / (ROT_MAX - ROT_MIN)
+    end
+
+    -- ── Helper: update slider visuals from a fraction ─────────────────────
+    local function applyFrac(frac)
+        frac = math.clamp(frac, 0, 1)
+        Fill.Size = UDim2.new(frac, 0, 1, 0)
+        Thumb.Position = UDim2.new(frac, 0, 0.5, 0)
+    end
+
+    -- ── Helper: clamp + snap to integer, then propagate everywhere ─────────
+    local function commitDeg(rawDeg, isUserAction)
+        local deg = math.clamp(math.floor(rawDeg + 0.5), ROT_MIN, ROT_MAX)
+        Flags[flag] = deg
+        if isUserAction then
+            USER_MODIFIED_FLAGS[flag] = true
+        end
+        if not Input:IsFocused() then
+            Input.Text = tostring(deg)
+        end
+        applyFrac(degToFrac(deg))
+    end
+
+    -- ── UIState.Updaters: passive (read-only) refresh from UpdateHumanoidUI
+    UIState.Updaters[flag] = function(val)
+        -- Never mark USER_MODIFIED_FLAGS — this is a passive display update.
+        local deg = math.clamp(math.floor(tonumber(val) or default), ROT_MIN, ROT_MAX)
+        Flags[flag] = deg
+        if not Input:IsFocused() then
+            Input.Text = tostring(deg)
+        end
+        applyFrac(degToFrac(deg))
+    end
+
+    -- ── TextBox: commit on focus lost ──────────────────────────────────────
+    TrackConnection(Input.FocusLost:Connect(function()
+        commitDeg(tonumber(Input.Text) or Flags[flag] or default, true)
+    end))
+
+    -- ── Step buttons (− / +) ──────────────────────────────────────────────
+    local function makeStepBtn(label, pos)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 25, 1, 0)
+        btn.Position = pos
+        btn.BackgroundTransparency = 1
+        btn.Text = label
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 16
+        btn.TextColor3 = UI_THEME.TextDark
+        btn.Parent = InputFrame
+        return btn
+    end
+
+    local minusBtn = makeStepBtn("-", UDim2.new(0, 0, 0, 0))
+    local plusBtn  = makeStepBtn("+", UDim2.new(1, -25, 0, 0))
+
+    TrackConnection(minusBtn.MouseButton1Click:Connect(function()
+        commitDeg((Flags[flag] or default) - 1, true)
+    end))
+    TrackConnection(plusBtn.MouseButton1Click:Connect(function()
+        commitDeg((Flags[flag] or default) + 1, true)
+    end))
+
+    -- ── Slider drag ───────────────────────────────────────────────────────
+    local dragging = false
+
+    local function sliderFromInput(inputPos)
+        local trackPos  = TrackFrame.AbsolutePosition
+        local trackSize = TrackFrame.AbsoluteSize
+        local frac = math.clamp((inputPos.X - trackPos.X) / trackSize.X, 0, 1)
+        local deg  = ROT_MIN + frac * (ROT_MAX - ROT_MIN)
+        commitDeg(deg, true)
+    end
+
+    TrackConnection(TrackFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            sliderFromInput(input.Position)
+        end
+    end))
+    TrackConnection(Thumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            sliderFromInput(input.Position)
+        end
+    end))
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            sliderFromInput(input.Position)
+        end
+    end))
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end))
+
+    -- ── Initialise visuals from current flag value ─────────────────────────
+    local initVal = Flags[flag] ~= nil and Flags[flag] or default
+    Flags[flag] = math.clamp(math.floor(initVal + 0.5), ROT_MIN, ROT_MAX)
+    Input.Text = tostring(Flags[flag])
+    applyFrac(degToFrac(Flags[flag]))
+end
+
+
 function UI.CreateButton(page, text, callback)
     local Button = Instance.new("TextButton")
+
     Button.Size = UDim2.new(1, 0, 0, 36)
     Button.BackgroundColor3 = UI_THEME.Accent
     Button.BackgroundTransparency = 0.2
@@ -13466,6 +13711,12 @@ UI.CreateNumericInput(HumanoidTab, "Max Health", "Humanoid/MaxHealth", Flags["Hu
 UI.CreateNumericInput(HumanoidTab, "Hip Height", "Humanoid/HipHeight", Flags["Humanoid/HipHeight"], 0, 100, 1, nil, function(v) _updateHum("HipHeight", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Max Slope Angle", "Humanoid/MaxSlopeAngle", Flags["Humanoid/MaxSlopeAngle"], 0, 90, 1, nil, function(v) _updateHum("MaxSlopeAngle", v) end, true)
 UI.CreateNumericInput(HumanoidTab, "Walk Speed", "Humanoid/WalkSpeed", Flags["Humanoid/WalkSpeed"], 0, 500, 1, nil, function(v) _updateHum("WalkSpeed", v) end, true)
+
+UI.CreateSection(HumanoidTab, "Rotation")
+UI.CreateRotationSlider(HumanoidTab, "Rotation X", "Humanoid/RotationX", 0)
+UI.CreateRotationSlider(HumanoidTab, "Rotation Y", "Humanoid/RotationY", 0)
+UI.CreateRotationSlider(HumanoidTab, "Rotation Z", "Humanoid/RotationZ", 0)
+
 
 UI.CreateSection(MiscTab, "Br3ak3r Tool")
 UI.CreateToggle(MiscTab, "Enable Br3ak3r", "Br3ak3r/Enabled", Flags["Br3ak3r/Enabled"], function(state)
