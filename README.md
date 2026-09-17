@@ -56,12 +56,13 @@ Execute the script in your testing environment workspace.
 *   **Closest Player Tracker**: Real-time HUD displaying the nearest player's name and worldDistance.
 *   **Local Health HUD**: Compact display of your current character health and max health.
 *   **worldLighting Modifiers**: Toggle `Fullbright` (maximum brightness, no shadows/fog) or `FullDark` (minimum brightness) to test visibility in extreme lighting conditions.
+*   **World Lighting Editor**: Live editor for all Lighting and atmospheric properties including Bloom, Color Correction, Sun Rays, and Depth of Field.
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: Create visual markers for any item, folder, or instance group in your workspace to track spawns and replication.
 
 ### Developer Utilities
-*   **PlayerPage**: Comprehensive player management including prioritizing, whitelisting, blacklisting, and detailed property viewing/spectating for testing moderation and replication.
+*   **PlayerPage**: Comprehensive player management including prioritizing, whitelisting, blacklisting, and team controls. Includes detailed property viewing, live data explorer property locking, and spectating for testing moderation and replication, along with join/leave notifications for tracked players.
 *   **Item Panel**: Robust item explorer and property editor for backpack and character tools.
-*   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC to test AI behavior and limits.
+*   **World Humanoid Editor**: Edit properties (WalkSpeed, JumpPower, Health, etc.) of any non-local Humanoid or NPC to test AI behavior and limits. Includes a Preset Manager for batch NPC editing with configurable target modes and update rates.
 *   **Br3ak3r (Collision Debugger)**: Isolate map geometry, remove physical obstacles, and disable collisions to analyze map structure and walk through walls.
 *   **H1ghL1ghter**: Highlight specific parts and instantly retrieve their full workspace paths.
 *   **D3v Tool**: Real-time HUD displaying World Time, Local Player Coordinates (LPC), and Mouse Coordinates (LMC).
@@ -71,7 +72,8 @@ Execute the script in your testing environment workspace.
 *   **Humanoid Editor**: Directly override your LocalPlayer's humanoid properties (WalkSpeed, JumpPower, MaxSlopeAngle) to test movement edge cases.
 *   **Anti-AFK**: Built-in mechanism to prevent idle disconnections during long observation sessions.
 *   **Scroll-unlocker**: Dynamically unlocks camera zoom limits, useful for surveying large maps.
-*   **Q-Teleport**: Quick teleportation to mouse cursor position (Press Ctrl+Q) for rapid map traversal.
+*   **Config System**: Save and load named profiles (Universal or Per-Game by PlaceId) with AutoLoad, Save Modifier filtering, and profile management.
+*   **Utilities**: Built-in toggles for Q-Teleport, Rejoin Server, Unload Script, and Force Reload.
 
 ## Shortcut Keys
 
@@ -89,25 +91,30 @@ Execute the script in your testing environment workspace.
 *   **Mouse Teleport**: `Ctrl + Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
 *   **Position-Force**: `Ctrl` + `Up↑`, `Down↓`, `Left←`, `Right→` (Arrow keys)
+*   **Position-Force (Forward/Back)**: `Ctrl + Shift` + `Up↑`, `Down↓`
 
 ### Visuals & Analytics
 *   **[Any-Item-ESP](https://github.com/JakeHukari/Any-Item-ESP)**: `Ctrl + E`
 *   **Fullbright**: `Ctrl + F`
 *   **FullDark**: `Ctrl + N`
-*   **Free-cam**: `Ctrl + P`
+*   **Information Display**: `Ctrl + .` (Period)
+*   **Free-cam Toggle**: `Ctrl + P`
 
-### Waypoints
+### Waypoints & Mouse Bindings
 *   **Create Waypoint**: `Ctrl + Middle Mouse Button`
 *   **Delete Waypoint**: `Ctrl + Middle Mouse Button` (On existing waypoint)
 *   **Teleport to Last-Created Waypoint**: `Ctrl + Y`
 *   **Delete all existing waypoints**: `Ctrl + Shift + Middle Mouse Button`
+*   **Br3ak3r (Break Object)**: `Ctrl + Left Click`
+*   **H1ghL1ghter (Highlight Object)**: `Ctrl + Shift + Left Click`
+*   **Undo Br3ak3r / Break via Scroll**: `Ctrl + Shift + Scroll Up / Down`
+*   **Scroll Unlocker Range Expand**: Hold `Ctrl` while scrolling
 
 ### Developer Utilities
 *   **PlayerPage**: `Ctrl + K`
 *   **Item Panel**: `Ctrl + J`
-*   **D3v Tool**: `Ctrl + .` (Period)
-*   **Br3ak3r**: `Ctrl + Left Click` to **Break** objects, `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
-*   **H1ghL1ghter**: `Ctrl + Shift + Left-Click` to **Highlight** parts, `Ctrl + Shift + Z` to **Undo** last highlight
+*   **Br3ak3r**: `Ctrl + B` to **Toggle** tool, `Ctrl + Z` to **Undo** last break, `Ctrl + X` to **Clear All** breaks
+*   **H1ghL1ghter**: `Ctrl + Shift + Z` to **Undo** last highlight, `Ctrl + Shift + X` to **Clear All** highlights
 
 ### Free-cam Controls
 *   **Free-cam Toggle**: `Ctrl + P`
@@ -115,11 +122,10 @@ Execute the script in your testing environment workspace.
 *   **Humanoid Movement**: `U`, `H`, `J`, `K`, `Space` (Jump)
 *   **Camera Speed Clutch**: `Left Shift`
 *   **Fov Control**: `Mouse Wheel`
-*   **Humanoid Crash**: `I`
+*   **Humanoid Crash (Ragdoll)**: `I`
 *   **Reset Humanoid**: `Y`
 *   **Camera Speed**: `↑/↓ (Arrow keys)`
-*   **Teleport Humanoid to Camera Position**: `Ctrl + T`
-
+*   **Teleport Humanoid to Camera Position**: `T`
 
 ## Community & Contributing
 
