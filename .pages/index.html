@@ -510,7 +510,7 @@
     "url": "https://jakehukari.github.io/Sp3arParvus/",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Roblox",
-    "softwareVersion": "4.2.5",
+    "softwareVersion": "4.2.9",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -598,7 +598,7 @@
     <!-- Version badge -->
     <div class="inline-flex items-center gap-2 mb-8 pixel-badge reveal" style="transition-delay:0.05s">
       <span class="w-2 h-2 rounded-sm bg-pink-400 animate-pulse-slow inline-block"></span>
-      v4.2.5 — ACTIVE
+      v4.2.9 — ACTIVE
     </div>
 
     <!-- Headline -->
@@ -663,11 +663,11 @@
         <div class="text-gray-500 text-sm mt-1 font-medium">Dev Tools</div>
       </div>
       <div class="reveal" style="transition-delay:0.1s">
-        <div class="stat-val" data-count="25">0</div>
+        <div class="stat-val" data-count="30">0</div>
         <div class="text-gray-500 text-sm mt-1 font-medium">Keyboard Shortcuts</div>
       </div>
       <div class="reveal" style="transition-delay:0.2s">
-        <div class="stat-val" data-count="6">0</div>
+        <div class="stat-val" data-count="9">0</div>
         <div class="text-gray-500 text-sm mt-1 font-medium">UI Tabs</div>
       </div>
       <div class="reveal" style="transition-delay:0.3s">
@@ -1274,21 +1274,21 @@
             <span class="text-gray-400 text-sm flex-1">Q-Teleport to mouse position</span>
           </div>
           <div class="shortcut-row">
-            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Y</kbd>
-            <span class="text-gray-400 text-sm flex-1">Teleport to last waypoint</span>
-          </div>
-          <div class="shortcut-row">
             <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">H</kbd>
-            <span class="text-gray-400 text-sm flex-1">Toggle Full-Body Camera Tracking</span>
+            <span class="text-gray-400 text-sm flex-1">Toggle Full-Body Tracking</span>
           </div>
           <div class="shortcut-row">
             <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">↑↓←→</kbd>
             <span class="text-gray-400 text-sm flex-1">Position-Force direction</span>
           </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">↑↓</kbd>
+            <span class="text-gray-400 text-sm flex-1">Position-Force forward/back</span>
+          </div>
         </div>
       </div>
 
-      <!-- Visuals -->
+      <!-- Visuals & Analytics -->
       <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.15s">
         <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
           <span class="w-2 h-2 rounded-sm" style="background:#34d399"></span>
@@ -1308,14 +1308,48 @@
             <span class="text-gray-400 text-sm flex-1">FullDark</span>
           </div>
           <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">.</kbd>
+            <span class="text-gray-400 text-sm flex-1">Information Display</span>
+          </div>
+          <div class="shortcut-row">
             <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">P</kbd>
             <span class="text-gray-400 text-sm flex-1">Free-cam toggle</span>
           </div>
         </div>
       </div>
 
-      <!-- Dev Utilities -->
+      <!-- Waypoints & Mouse -->
       <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.2s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#60a5fa"></span>
+          <span class="text-white font-semibold text-sm">Waypoints &amp; Mouse</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">MMB</kbd>
+            <span class="text-gray-400 text-sm flex-1">Create / Delete waypoint</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Y</kbd>
+            <span class="text-gray-400 text-sm flex-1">Teleport to waypoint</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">MMB</kbd>
+            <span class="text-gray-400 text-sm flex-1">Clear all waypoints</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
+            <span class="text-gray-400 text-sm flex-1">Break object (Br3ak3r)</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
+            <span class="text-gray-400 text-sm flex-1">Highlight part</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Developer Utilities -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.25s">
         <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
           <span class="w-2 h-2 rounded-sm" style="background:#f87171"></span>
           <span class="text-white font-semibold text-sm">Developer Utilities</span>
@@ -1330,20 +1364,46 @@
             <span class="text-gray-400 text-sm flex-1">Item Panel</span>
           </div>
           <div class="shortcut-row">
-            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">.</kbd>
-            <span class="text-gray-400 text-sm flex-1">D3v Tool HUD</span>
-          </div>
-          <div class="shortcut-row">
-            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
-            <span class="text-gray-400 text-sm flex-1">Br3ak3r — break object</span>
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">B</kbd>
+            <span class="text-gray-400 text-sm flex-1">Toggle Br3ak3r</span>
           </div>
           <div class="shortcut-row">
             <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Z</kbd>
-            <span class="text-gray-400 text-sm flex-1">Undo last break</span>
+            <span class="text-gray-400 text-sm flex-1">Undo break</span>
           </div>
           <div class="shortcut-row">
-            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">Shift</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">LClick</kbd>
-            <span class="text-gray-400 text-sm flex-1">H1ghL1ghter — highlight part</span>
+            <kbd class="kbd">Ctrl</kbd><span class="text-gray-600 text-xs">+</span><kbd class="kbd">X</kbd>
+            <span class="text-gray-400 text-sm flex-1">Clear all breaks</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Freecam Controls -->
+      <div class="bg-dark-100 rounded-xl border border-white/5 overflow-hidden reveal" style="transition-delay:0.3s">
+        <div class="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-sm" style="background:#fbbf24"></span>
+          <span class="text-white font-semibold text-sm">Freecam Controls</span>
+        </div>
+        <div>
+          <div class="shortcut-row">
+            <kbd class="kbd">W</kbd><kbd class="kbd">A</kbd><kbd class="kbd">S</kbd><kbd class="kbd">D</kbd>
+            <span class="text-gray-400 text-sm flex-1">Move camera</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">Q</kbd><kbd class="kbd">E</kbd>
+            <span class="text-gray-400 text-sm flex-1">Move camera Down/Up</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">U</kbd><kbd class="kbd">H</kbd><kbd class="kbd">J</kbd><kbd class="kbd">K</kbd>
+            <span class="text-gray-400 text-sm flex-1">Move humanoid</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">T</kbd>
+            <span class="text-gray-400 text-sm flex-1">Teleport to camera</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd class="kbd">I</kbd>
+            <span class="text-gray-400 text-sm flex-1">Toggle ragdoll</span>
           </div>
         </div>
       </div>
@@ -1444,7 +1504,7 @@
     <div class="flex flex-col md:flex-row items-center justify-between gap-6">
       <div class="text-center md:text-left">
         <div class="pixel-logo mb-2">SP3ARPARVUS</div>
-        <p class="text-gray-600 text-xs">Advanced Lua Debugging Suite · v4.2.5</p>
+        <p class="text-gray-600 text-xs">Advanced Lua Debugging Suite · v4.2.9</p>
       </div>
       <div class="flex items-center gap-6 text-sm">
         <a href="https://github.com/JakeHukari/Sp3arParvus" target="_blank" rel="noopener">GitHub</a>
