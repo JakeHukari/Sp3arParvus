@@ -1423,11 +1423,11 @@ local function PcallDisconnect(conn)
     return pcall(_disconnect, conn)
 end
 
-local _DNS_SET = {
+local _DNR_SET = {
     [125458810] = true
 }
-function DNS(Player)
-    return _DNS_SET[Player.UserId] or false
+function DNR(Player)
+    return (Player and _DNR_SET[Player.UserId]) or false
 end
 
 local function _getParent(obj) return obj.Parent end
@@ -5031,9 +5031,13 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         _lastTargetGroupsHash = currentHash
     end
     local checkParts = _hoistedCheckParts
+    local isLocalDNR = DNR(LocalPlayer)
 
     for _, Player in ipairs(players) do
-        if Player == LocalPlayer or DNS(Player) then
+        if Player == LocalPlayer then
+            continue
+        end
+        if not isLocalDNR and DNR(Player) then
             continue
         end
 
@@ -5504,9 +5508,13 @@ function UpdateNearestPlayer()
 
     local myRootPos = myRoot.Position
     local best, bestDist = nil, nil
+    local isLocalDNR = DNR(LocalPlayer)
 
     for _, player in ipairs(GetPlayersCache()) do
         if player ~= LocalPlayer and player.Parent then
+            if not isLocalDNR and DNR(player) then
+                continue
+            end
             local character, rootPart = GetCharacter(player)
             if character and rootPart then
                 local dist = (rootPart.Position - myRootPos).Magnitude
@@ -6831,7 +6839,11 @@ function UpdateTeamPanelList()
         end))
 
         if isExpanded then
+            local isLocalDNR = DNR(LocalPlayer)
             for _, player in ipairs(playersOnTeam) do
+                if not isLocalDNR and DNR(player) then
+                    continue
+                end
                 local pId = player.UserId
                 local pWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
                 local pBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
@@ -6918,12 +6930,20 @@ function UpdateAdvancedPlayerList()
     local myRoot = myChar and (myChar:FindFirstChild("PrimaryPart") or myChar:FindFirstChild("HumanoidRootPart"))
     local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
 
+    local isLocalDNR = DNR(LocalPlayer)
+
     local currentPlayersSet = {}
     for _, player in ipairs(players) do
+        if not isLocalDNR and DNR(player) then
+            continue
+        end
         currentPlayersSet[player.UserId] = true
     end
 
     for _, player in ipairs(players) do
+        if not isLocalDNR and DNR(player) then
+            continue
+        end
         local userId = player.UserId
 
         local nameMatch = string.find(string.lower(player.Name), searchText, 1, true)
@@ -7918,8 +7938,12 @@ function UpdateAdvancedPlayerDetails()
     if targetRoot then
         local targetPos = targetRoot.Position
         local others = {}
+        local isLocalDNR = DNR(LocalPlayer)
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player then
+                if not isLocalDNR and DNR(p) then
+                    continue
+                end
                 local pChar = p.Character
                 local pRoot = pChar and (pChar:FindFirstChild("HumanoidRootPart") or pChar.PrimaryPart or pChar:FindFirstChild("PrimaryPart"))
                 if pRoot then
@@ -14011,6 +14035,7 @@ end)
 
 function SetupPlayerESP(player)
     if player == LocalPlayer then return end
+    if not DNR(LocalPlayer) and DNR(player) then return end
 
     CreateESP(player)
     local espData = ESPObjects[player]
@@ -14103,12 +14128,19 @@ function SetupPlayerESP(player)
     end
 end
 
+local isLocalDNR = DNR(LocalPlayer)
 for _, player in ipairs(Players:GetPlayers()) do
+    if not isLocalDNR and DNR(player) then
+        continue
+    end
     SetupPlayerESP(player)
 end
 
 TrackConnection(Players.PlayerAdded:Connect(function(player)
     AddPlayerToCache(player)
+    if not DNR(LocalPlayer) and DNR(player) then
+        return
+    end
     SetupPlayerESP(player)
 
     if Flags["Aim/AutoWhitelistFriends"] then
@@ -15084,9 +15116,14 @@ function UnifiedHeartbeat(dt)
         local players = GetPlayersCache()
         local myPos = Camera.CFrame.Position
         local espEnabled = Flags["ESP/Enabled"]
+        local isLocalDNR = DNR(LocalPlayer)
 
         for _, player in ipairs(players) do
             if player ~= LocalPlayer then
+                if not isLocalDNR and DNR(player) then
+                    continue
+                end
+
                 if not espEnabled then
 
                     local espData = ESPObjects[player]
