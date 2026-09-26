@@ -3188,7 +3188,7 @@ do
     logoImg.Position = UDim2.new(0.5, 0, 0.47, 0)
     logoImg.BackgroundTransparency = 1
     logoImg.ImageTransparency = 1
-    logoImg.Image = "https://www.pingbird.xyz/f/Sp3arParvus.png"
+    logoImg.Image = "https://www.pingbird.org/f/Sp3arParvus.png"
     logoImg.ScaleType = Enum.ScaleType.Fit
     logoImg.ZIndex = 4
     logoImg.Parent = card
@@ -3349,7 +3349,7 @@ function UI.Notify(title, text, duration)
     icon.AnchorPoint = Vector2.new(0, 0.5)
     icon.BackgroundTransparency = 1
     icon.ImageTransparency = 1
-    icon.Image = CachedIconAsset or "https://www.pingbird.xyz/f/Sp3arParvus.png"
+    icon.Image = CachedIconAsset or "https://www.pingbird.org/f/Sp3arParvus.png"
 
     icon.Parent = frame
 
@@ -13882,7 +13882,7 @@ UI.CreateNumericInput(MiscTab, "Horizontal Position Force Distance", "Misc/Horiz
 UI.CreateNumericInput(MiscTab, "Vertical Position Force Distance", "Misc/VerticalPositionForceValue", Flags["Misc/VerticalPositionForceValue"], 0.1, 100, 0.05, "studs")
 
 UI.CreateButton(MiscTab, "Copy Sp3arParvus GitHub Link", function()
-    local url = "https://www.pingbird.xyz/~/sp3arparvus"
+    local url = "https://www.pingbird.org/~/sp3arparvus"
     local copy = setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set)
     if copy then
         pcall(function() copy(url) end)
