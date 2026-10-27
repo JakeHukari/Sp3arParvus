@@ -8719,6 +8719,679 @@ function GetServerRegion()
     return INFO_DISPLAY_CACHED_REGION
 end
 
+FormatInfoDuration = nil
+GetServerUptime = nil
+GetServerLoad = nil
+CleanupServerTelemetry = nil
+do
+    local HttpService = game:GetService("HttpService")
+    local ReplicatedStorage = game:FindService("ReplicatedStorage")
+
+    local UPTIME_ATTR_EXACT = {
+        serverstarttime = true, starttime = true, serverstart = true,
+        creationtime = true, servercreated = true, boottime = true,
+        serverboottime = true, gamestarttime = true,
+        serveruptime = true, serverage = true, gameage = true, uptime = true,
+    }
+    local LOAD_ATTR_EXACT = {
+        serverload = true, servercpu = true, serverstress = true, cpuload = true,
+    }
+
+    local state = {
+        InitialPlayerCount = #Players:GetPlayers(),
+        ExactStartServerUnix = nil,
+        RovalraFirstSeenUnix = nil,
+        SyncedUptimeBaseSec = nil,
+        SyncedUptimeBaseClock = nil,
+        LastSyncedRawKey = nil,
+        CachedUptimeAttrHost = nil,
+        CachedUptimeAttrName = nil,
+        CachedUptimeValueObj = nil,
+        CachedUptimeLabel = nil,
+
+        AuthoritativeLoadPct = nil,
+        AuthoritativeLoadClock = -100,
+        CachedLoadAttrHost = nil,
+        CachedLoadAttrName = nil,
+        CachedLoadValueObj = nil,
+        CachedLoadLabel = nil,
+        ServerApiFps = nil,
+        ServerApiPing = nil,
+        ServerApiExhausted = false,
+        ServerApiPolling = false,
+        LastServerApiPollClock = -100,
+
+        SmoothedLoadPct = nil,
+        BaselinePingMs = nil,
+        LastLoadSampleClock = -100,
+        LastSourceScanClock = -100,
+        ClientReplicatorRef = nil,
+    }
+
+    FormatInfoDuration = function(totalSec)
+        totalSec = max(0, floor(tonumber(totalSec) or 0))
+        local h = floor(totalSec / 3600)
+        local m = floor((totalSec % 3600) / 60)
+        local s = totalSec % 60
+        return string.format("%02d:%02d:%02d", h, m, s)
+    end
+
+    local function IsLiveInstance(inst)
+        if not inst then return false end
+        if inst == Workspace or inst == ReplicatedStorage then return true end
+        local ok, res = pcall(inst.IsDescendantOf, inst, game)
+        return ok and res == true
+    end
+
+    local function GetApproxServerUnix()
+        local ok, t = pcall(Workspace.GetServerTimeNow, Workspace)
+        if ok and type(t) == "number" and t > 0 then
+            return t
+        end
+        return os.time()
+    end
+
+    local function SafeHttpGet(url)
+        local ok, body = pcall(game.HttpGet, game, url)
+        if ok and type(body) == "string" and #body > 0 then
+            return body
+        end
+        local req = (syn and syn.request) or (http and http.request) or http_request or request
+        if type(req) == "function" then
+            local ok2, resp = pcall(req, { Url = url, Method = "GET" })
+            if ok2 and type(resp) == "table" and type(resp.Body) == "string" and #resp.Body > 0 then
+                if resp.StatusCode == nil or (resp.StatusCode >= 200 and resp.StatusCode < 300) then
+                    return resp.Body
+                end
+            end
+        end
+        return nil
+    end
+
+    local function ParseUnitDuration(fragment)
+        local d = tonumber(fragment:match("(%d+)%s*d"))
+        local h = tonumber(fragment:match("(%d+)%s*h"))
+        local m = tonumber(fragment:match("(%d+)%s*m"))
+        local s = tonumber(fragment:match("(%d+)%s*s"))
+        if d or h or m or s then
+            return (d or 0) * 86400 + (h or 0) * 3600 + (m or 0) * 60 + (s or 0)
+        end
+        return nil
+    end
+
+    local function ParseUptimeTextSeconds(rawText, requirePrefix)
+        if type(rawText) ~= "string" or #rawText == 0 or #rawText > 200 then return nil end
+        local lower = rawText:lower()
+
+        if requirePrefix then
+            -- Match "Server Uptime 07:24:07", "Server Age: 07:24:07", or standalone "Uptime 07:24:07"
+            -- while rejecting client/script/session uptime labels.
+            local prefixEnd = nil
+            local _, e1 = lower:find("server%s*uptime%s*:?%s*")
+            if e1 then
+                prefixEnd = e1
+            else
+                local _, e2 = lower:find("server%s*age%s*:?%s*")
+                if e2 then
+                    prefixEnd = e2
+                else
+                    local s3, e3 = lower:find("uptime%s*:?%s*")
+                    if s3 then
+                        local before = s3 > 1 and lower:sub(max(1, s3 - 12), s3 - 1) or ""
+                        if not before:match("[%a]$")
+                            and not before:find("script", 1, true)
+                            and not before:find("client", 1, true)
+                            and not before:find("session", 1, true)
+                        then
+                            prefixEnd = e3
+                        end
+                    end
+                end
+            end
+            if not prefixEnd then return nil end
+
+            local tail = lower:sub(prefixEnd + 1)
+            local h, m, s = tail:match("^(%d+):(%d%d):(%d%d)")
+            if h then
+                return tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(s)
+            end
+            local m2, s2 = tail:match("^(%d+):(%d%d)")
+            if m2 then
+                return tonumber(m2) * 60 + tonumber(s2)
+            end
+            local unitSec = ParseUnitDuration(tail:sub(1, 32))
+            if unitSec then return unitSec end
+            return nil
+        else
+            local h, m, s = lower:match("^%s*(%d+):(%d%d):(%d%d)%s*$")
+            if h then
+                return tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(s)
+            end
+            local m2, s2 = lower:match("^%s*(%d+):(%d%d)%s*$")
+            if m2 then
+                return tonumber(m2) * 60 + tonumber(s2)
+            end
+            local rec = ParseUptimeTextSeconds(rawText, true)
+            if rec then return rec end
+            return ParseUnitDuration(lower)
+        end
+    end
+
+    local function ParseLoadTextPercent(rawText, requirePrefix)
+        if type(rawText) ~= "string" or #rawText == 0 or #rawText > 200 then return nil end
+        local lower = rawText:lower()
+        local numStr = lower:match("server%s*load%s*:?%s*(%d+%.?%d*)%s*%%")
+            or lower:match("server%s*cpu%s*:?%s*(%d+%.?%d*)%s*%%")
+            or lower:match("server%s*stress%s*:?%s*(%d+%.?%d*)%s*%%")
+        if not numStr and not requirePrefix then
+            numStr = lower:match("^%s*(%d+%.?%d*)%s*%%?%s*$")
+        end
+        if numStr then
+            local n = tonumber(numStr)
+            if n and n >= 0 and n <= 1000 then
+                return min(100, max(0, n))
+            end
+        end
+        return nil
+    end
+
+    local function ResolveRawUptimeValue(val)
+        if type(val) == "number" then
+            if val > 1500000000 then
+                local sNow = GetApproxServerUnix()
+                local diffServer = sNow - val
+                if diffServer >= -10 and diffServer < 86400 * 30 then
+                    state.ExactStartServerUnix = val
+                    return max(0, diffServer), true
+                end
+                local diffTick = tick() - val
+                if diffTick >= -10 and diffTick < 86400 * 30 then
+                    return max(0, diffTick), true
+                end
+            elseif val >= 0 and val < 86400 * 30 then
+                return val, false
+            end
+        elseif type(val) == "string" then
+            local asNum = tonumber(val)
+            if asNum then
+                return ResolveRawUptimeValue(asNum)
+            end
+            local parsed = ParseUptimeTextSeconds(val, false)
+            if parsed then
+                return parsed, false
+            end
+        end
+        return nil, false
+    end
+
+    local function SyncObservedUptime(rawKey, observedSec)
+        local nowClock = os.clock()
+        if state.LastSyncedRawKey ~= rawKey or not state.SyncedUptimeBaseSec then
+            state.LastSyncedRawKey = rawKey
+            state.SyncedUptimeBaseSec = observedSec
+            state.SyncedUptimeBaseClock = nowClock
+            return observedSec
+        end
+        return state.SyncedUptimeBaseSec + max(0, nowClock - state.SyncedUptimeBaseClock)
+    end
+
+    local function IsOwnGui(gui)
+        if not gui then return true end
+        if ScreenGui and (gui == ScreenGui or gui:IsDescendantOf(ScreenGui)) then return true end
+        if NotifyGui and (gui == NotifyGui or gui:IsDescendantOf(NotifyGui)) then return true end
+        if FreecamUI and (gui == FreecamUI or gui:IsDescendantOf(FreecamUI)) then return true end
+        if InformationDisplayHUD and (gui == InformationDisplayHUD or gui:IsDescendantOf(InformationDisplayHUD)) then return true end
+        return gui.Name == "Sp3arParvusUI" or gui.Name == "FreecamKeybindsUI"
+    end
+
+    local function PruneStaleTelemetryRefs()
+        if state.CachedUptimeAttrHost then
+            local ok, v = pcall(state.CachedUptimeAttrHost.GetAttribute, state.CachedUptimeAttrHost, state.CachedUptimeAttrName)
+            if not IsLiveInstance(state.CachedUptimeAttrHost) or not ok or v == nil then
+                state.CachedUptimeAttrHost = nil
+                state.CachedUptimeAttrName = nil
+                state.ExactStartServerUnix = nil
+            end
+        end
+        if state.CachedUptimeValueObj and not IsLiveInstance(state.CachedUptimeValueObj) then
+            state.CachedUptimeValueObj = nil
+        end
+        if state.CachedUptimeLabel and not IsLiveInstance(state.CachedUptimeLabel) then
+            state.CachedUptimeLabel = nil
+        end
+        if state.CachedLoadAttrHost then
+            local ok, v = pcall(state.CachedLoadAttrHost.GetAttribute, state.CachedLoadAttrHost, state.CachedLoadAttrName)
+            if not IsLiveInstance(state.CachedLoadAttrHost) or not ok or v == nil then
+                state.CachedLoadAttrHost = nil
+                state.CachedLoadAttrName = nil
+            end
+        end
+        if state.CachedLoadValueObj and not IsLiveInstance(state.CachedLoadValueObj) then
+            state.CachedLoadValueObj = nil
+        end
+        if state.CachedLoadLabel and not IsLiveInstance(state.CachedLoadLabel) then
+            state.CachedLoadLabel = nil
+        end
+    end
+
+    local function ScanContainerForTelemetry(container, allowChildrenValues)
+        if not container then return end
+        local okAttr, attrs = pcall(container.GetAttributes, container)
+        if okAttr and type(attrs) == "table" then
+            for attrName, attrVal in pairs(attrs) do
+                local key = tostring(attrName):lower():gsub("[%s_%-]", "")
+                if not state.CachedUptimeAttrHost and UPTIME_ATTR_EXACT[key] then
+                    local sec = ResolveRawUptimeValue(attrVal)
+                    if sec then
+                        state.CachedUptimeAttrHost = container
+                        state.CachedUptimeAttrName = attrName
+                    end
+                end
+                if not state.CachedLoadAttrHost and LOAD_ATTR_EXACT[key] then
+                    local pct = type(attrVal) == "number" and attrVal or ParseLoadTextPercent(tostring(attrVal), false)
+                    if type(pct) == "number" and pct >= 0 and pct <= 1000 then
+                        state.CachedLoadAttrHost = container
+                        state.CachedLoadAttrName = attrName
+                    end
+                end
+            end
+        end
+
+        if not allowChildrenValues then return end
+        local okCh, children = pcall(container.GetChildren, container)
+        if not okCh or type(children) ~= "table" then return end
+
+        for i = 1, min(#children, 150) do
+            local child = children[i]
+            local key = child.Name:lower():gsub("[%s_%-]", "")
+            if child:IsA("ValueBase") then
+                if not state.CachedUptimeValueObj and UPTIME_ATTR_EXACT[key] then
+                    local okV, v = pcall(function() return child.Value end)
+                    if okV and ResolveRawUptimeValue(v) then
+                        state.CachedUptimeValueObj = child
+                    end
+                end
+                if not state.CachedLoadValueObj and LOAD_ATTR_EXACT[key] then
+                    local okV, v = pcall(function() return child.Value end)
+                    local pct = okV and (type(v) == "number" and v or ParseLoadTextPercent(tostring(v), false))
+                    if type(pct) == "number" and pct >= 0 and pct <= 1000 then
+                        state.CachedLoadValueObj = child
+                    end
+                end
+            elseif child:IsA("Folder") or child:IsA("Configuration") then
+                ScanContainerForTelemetry(child, false)
+                local okSub, subChildren = pcall(child.GetChildren, child)
+                if okSub and type(subChildren) == "table" then
+                    for j = 1, min(#subChildren, 80) do
+                        local sub = subChildren[j]
+                        if sub:IsA("ValueBase") then
+                            local subKey = sub.Name:lower():gsub("[%s_%-]", "")
+                            if not state.CachedUptimeValueObj and UPTIME_ATTR_EXACT[subKey] then
+                                local okV, v = pcall(function() return sub.Value end)
+                                if okV and ResolveRawUptimeValue(v) then
+                                    state.CachedUptimeValueObj = sub
+                                end
+                            end
+                            if not state.CachedLoadValueObj and LOAD_ATTR_EXACT[subKey] then
+                                local okV, v = pcall(function() return sub.Value end)
+                                local pct = okV and (type(v) == "number" and v or ParseLoadTextPercent(tostring(v), false))
+                                if type(pct) == "number" and pct >= 0 and pct <= 1000 then
+                                    state.CachedLoadValueObj = sub
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local function ScanInGameTelemetrySources()
+        PruneStaleTelemetryRefs()
+        local now = os.clock()
+        if (now - state.LastSourceScanClock) < 8 then return end
+        state.LastSourceScanClock = now
+
+        local hasUptimeSource = (state.CachedUptimeAttrHost ~= nil)
+            or (state.CachedUptimeValueObj ~= nil)
+            or (state.CachedUptimeLabel ~= nil)
+            or (state.ExactStartServerUnix ~= nil)
+        local hasLoadSource = (state.AuthoritativeLoadPct ~= nil and (now - state.AuthoritativeLoadClock) < 5)
+            or (state.CachedLoadAttrHost ~= nil)
+            or (state.CachedLoadValueObj ~= nil)
+            or (state.CachedLoadLabel ~= nil)
+
+        if hasUptimeSource and hasLoadSource then return end
+
+        ScanContainerForTelemetry(Workspace, false)
+        if not ReplicatedStorage then
+            ReplicatedStorage = game:FindService("ReplicatedStorage")
+        end
+        if ReplicatedStorage then
+            ScanContainerForTelemetry(ReplicatedStorage, true)
+        end
+
+        -- Scan PlayerGui TextLabels for game-provided HUD indicators (e.g. "Uptime 07:24:07", "Server Load 12%")
+        if not state.CachedUptimeLabel or not state.CachedLoadLabel then
+            local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if playerGui then
+                local okGuis, guis = pcall(playerGui.GetChildren, playerGui)
+                if okGuis and type(guis) == "table" then
+                    for i = 1, #guis do
+                        local gui = guis[i]
+                        if gui:IsA("LayerCollector") and not IsOwnGui(gui) then
+                            local okDesc, desc = pcall(gui.GetDescendants, gui)
+                            if okDesc and type(desc) == "table" then
+                                local limit = min(#desc, 600)
+                                for j = 1, limit do
+                                    local inst = desc[j]
+                                    if inst:IsA("TextLabel") then
+                                        local txt = inst.Text
+                                        if #txt > 0 and #txt <= 200 then
+                                            if not state.CachedUptimeLabel and ParseUptimeTextSeconds(txt, true) then
+                                                state.CachedUptimeLabel = inst
+                                            end
+                                            if not state.CachedLoadLabel and ParseLoadTextPercent(txt, true) then
+                                                state.CachedLoadLabel = inst
+                                            end
+                                            if state.CachedUptimeLabel and state.CachedLoadLabel then
+                                                return
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local function PollPublicServerStatsAsync()
+        if state.ServerApiPolling or state.ServerApiExhausted then return end
+        local placeId = game.PlaceId
+        local jobId = game.JobId
+        if not placeId or placeId <= 0 or type(jobId) ~= "string" or #jobId == 0 then return end
+
+        state.ServerApiPolling = true
+        state.LastServerApiPollClock = os.clock()
+
+        TrackThread(task.spawn(function()
+            local cursor = nil
+            local found = false
+            for _ = 1, 2 do
+                if not Sp3arParvus or not Sp3arParvus.Active then break end
+                local url = string.format(
+                    "https://games.roblox.com/v1/games/%s/servers/Public?limit=100%s",
+                    tostring(placeId),
+                    cursor and ("&cursor=" .. tostring(cursor)) or ""
+                )
+                local body = SafeHttpGet(url)
+                if not body then break end
+                local okDec, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+                if not okDec or type(decoded) ~= "table" or type(decoded.data) ~= "table" then break end
+
+                for _, srv in ipairs(decoded.data) do
+                    if type(srv) == "table" and srv.id == jobId then
+                        if type(srv.fps) == "number" then state.ServerApiFps = srv.fps end
+                        if type(srv.ping) == "number" then state.ServerApiPing = srv.ping end
+                        found = true
+                        break
+                    end
+                end
+                if found then break end
+                if type(decoded.nextPageCursor) == "string" and #decoded.nextPageCursor > 0 then
+                    cursor = decoded.nextPageCursor
+                else
+                    cursor = nil
+                    break
+                end
+            end
+            if not found and cursor ~= nil then
+                -- Large game with >200 active servers; avoid repeated pagination
+                state.ServerApiExhausted = true
+            end
+            state.ServerApiPolling = false
+        end))
+    end
+
+    -- Initialize ClientReplicator server stats listener (authoritative for place developers)
+    -- and one-shot RoValra server first-seen lookup for public servers.
+    pcall(function()
+        local netClient = game:FindService("NetworkClient")
+        local replicator = netClient and netClient:FindFirstChildOfClass("ClientReplicator")
+        if replicator then
+            state.ClientReplicatorRef = replicator
+            local conn = replicator.StatsReceived:Connect(function(stats)
+                if type(stats) ~= "table" or type(stats.Jobs) ~= "table" then return end
+                local frameStepMs = 0
+                local maxJobDuty = 0
+                local hasJob = false
+                for jobName, jobData in pairs(stats.Jobs) do
+                    if type(jobData) == "table" and type(jobData[1]) == "number" then
+                        local lname = tostring(jobName):lower()
+                        if not lname:find("sleep", 1, true) then
+                            hasJob = true
+                            if jobData[1] > maxJobDuty then
+                                maxJobDuty = jobData[1]
+                            end
+                            if type(jobData[3]) == "number" and (
+                                lname == "heartbeat"
+                                or lname:find("physics", 1, true)
+                                or lname:find("waitinghybridscripts", 1, true)
+                                or lname:find("replicator", 1, true)
+                            ) then
+                                frameStepMs = frameStepMs + jobData[3]
+                            end
+                        end
+                    end
+                end
+                if hasJob then
+                    local frameBudgetPct = (frameStepMs / (1000 / 60)) * 100
+                    local loadPct = min(100, max(0, max(frameBudgetPct, maxJobDuty)))
+                    state.AuthoritativeLoadPct = state.AuthoritativeLoadPct
+                        and (state.AuthoritativeLoadPct * 0.6 + loadPct * 0.4)
+                        or loadPct
+                    state.AuthoritativeLoadClock = os.clock()
+                end
+            end)
+            TrackConnection(conn)
+            replicator:RequestServerStats(true)
+        end
+    end)
+
+    TrackThread(task.spawn(function()
+        local placeId = game.PlaceId
+        local jobId = game.JobId
+        if not placeId or placeId <= 0 or type(jobId) ~= "string" or #jobId == 0 then return end
+        local url = string.format(
+            "https://apis.rovalra.com/v1/servers/details?place_id=%s&server_ids=%s",
+            tostring(placeId),
+            tostring(jobId)
+        )
+        local body = SafeHttpGet(url)
+        if not body then return end
+        local okDec, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+        if not okDec or type(decoded) ~= "table" or type(decoded.servers) ~= "table" then return end
+        local srv = decoded.servers[1]
+        if type(srv) == "table" and type(srv.first_seen) == "string" then
+            local y, mo, d, h, mi, s = srv.first_seen:match("^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)")
+            if y then
+                local okDt, dt = pcall(
+                    DateTime.fromUniversalTime,
+                    tonumber(y), tonumber(mo), tonumber(d),
+                    tonumber(h), tonumber(mi), tonumber(s)
+                )
+                if okDt and dt and dt.UnixTimestamp and dt.UnixTimestamp > 1500000000 then
+                    state.RovalraFirstSeenUnix = dt.UnixTimestamp
+                end
+            end
+        end
+    end))
+
+    GetServerUptime = function()
+        ScanInGameTelemetrySources()
+
+        if state.CachedUptimeAttrHost then
+            local okA, raw = pcall(state.CachedUptimeAttrHost.GetAttribute, state.CachedUptimeAttrHost, state.CachedUptimeAttrName)
+            local sec, isTs = ResolveRawUptimeValue(okA and raw or nil)
+            if sec then
+                if isTs then return FormatInfoDuration(max(Workspace.DistributedGameTime, sec)) end
+                return FormatInfoDuration(SyncObservedUptime("attr:" .. tostring(raw), sec))
+            end
+            state.CachedUptimeAttrHost = nil
+            state.CachedUptimeAttrName = nil
+        end
+
+        if state.CachedUptimeValueObj then
+            local okV, raw = pcall(function() return state.CachedUptimeValueObj.Value end)
+            local sec, isTs = ResolveRawUptimeValue(okV and raw or nil)
+            if sec then
+                if isTs then return FormatInfoDuration(max(Workspace.DistributedGameTime, sec)) end
+                return FormatInfoDuration(SyncObservedUptime("val:" .. tostring(raw), sec))
+            end
+            state.CachedUptimeValueObj = nil
+        end
+
+        if state.CachedUptimeLabel then
+            local rawTxt = state.CachedUptimeLabel.Text
+            local sec = ParseUptimeTextSeconds(rawTxt, true)
+            if sec then
+                return FormatInfoDuration(SyncObservedUptime("lbl:" .. rawTxt, sec))
+            end
+            state.CachedUptimeLabel = nil
+        end
+
+        if state.ExactStartServerUnix then
+            local sec = max(Workspace.DistributedGameTime, GetApproxServerUnix() - state.ExactStartServerUnix)
+            return FormatInfoDuration(sec)
+        end
+
+        if state.RovalraFirstSeenUnix then
+            local sec = max(Workspace.DistributedGameTime, GetApproxServerUnix() - state.RovalraFirstSeenUnix)
+            return FormatInfoDuration(sec)
+        end
+
+        -- Universal fallback: DistributedGameTime is exact in Studio or when this client started the server;
+        -- otherwise prefix with '~' to denote client-observed minimum server age.
+        local dgt = max(0, Workspace.DistributedGameTime)
+        local isFreshOrStudio = (type(game.JobId) ~= "string" or #game.JobId == 0) or (state.InitialPlayerCount <= 1)
+        if isFreshOrStudio then
+            return FormatInfoDuration(dgt)
+        end
+        return "~" .. FormatInfoDuration(dgt)
+    end
+
+    GetServerLoad = function()
+        ScanInGameTelemetrySources()
+        local now = os.clock()
+
+        -- 1. Authoritative server scheduler telemetry (place developers)
+        if state.AuthoritativeLoadPct ~= nil and (now - state.AuthoritativeLoadClock) < 5 then
+            return string.format("%d%%", floor(state.AuthoritativeLoadPct + 0.5))
+        end
+
+        -- 2. Replicated attribute / ValueBase / PlayerGui HUD label
+        if state.CachedLoadAttrHost then
+            local okA, raw = pcall(state.CachedLoadAttrHost.GetAttribute, state.CachedLoadAttrHost, state.CachedLoadAttrName)
+            local pct = okA and (type(raw) == "number" and raw or ParseLoadTextPercent(tostring(raw), false))
+            if type(pct) == "number" then
+                return string.format("%d%%", floor(min(100, max(0, pct)) + 0.5))
+            end
+            state.CachedLoadAttrHost = nil
+            state.CachedLoadAttrName = nil
+        end
+
+        if state.CachedLoadValueObj then
+            local okV, raw = pcall(function() return state.CachedLoadValueObj.Value end)
+            local pct = okV and (type(raw) == "number" and raw or ParseLoadTextPercent(tostring(raw), false))
+            if type(pct) == "number" then
+                return string.format("%d%%", floor(min(100, max(0, pct)) + 0.5))
+            end
+            state.CachedLoadValueObj = nil
+        end
+
+        if state.CachedLoadLabel then
+            local pct = ParseLoadTextPercent(state.CachedLoadLabel.Text, true)
+            if type(pct) == "number" then
+                return string.format("%d%%", floor(pct + 0.5))
+            end
+            state.CachedLoadLabel = nil
+        end
+
+        -- 3. Universal real-time server load estimation from replication throughput,
+        --    ping stall above baseline, physics throttling, and public server FPS.
+        if (now - state.LastServerApiPollClock) > 45 then
+            PollPublicServerStatsAsync()
+        end
+
+        if (now - state.LastLoadSampleClock) >= 0.5 or state.SmoothedLoadPct == nil then
+            state.LastLoadSampleClock = now
+
+            local recvKbps, physRecvKbps, movingPrims = 0, 0, 0
+            pcall(function()
+                recvKbps     = max(0, Stats.DataReceiveKbps or 0)
+                physRecvKbps = max(0, Stats.PhysicsReceiveKbps or 0)
+                movingPrims  = max(0, Stats.MovingPrimitivesCount or 0)
+            end)
+
+            local pingMs = GetPing()
+            if pingMs > 0 then
+                if not state.BaselinePingMs or pingMs < state.BaselinePingMs then
+                    state.BaselinePingMs = pingMs
+                else
+                    state.BaselinePingMs = state.BaselinePingMs + 0.05
+                end
+            end
+
+            local clientFps = GetFPS and GetFPS() or 60
+            local netActivity = (recvKbps * 0.6) + (physRecvKbps * 0.8) + min(8, movingPrims * 0.015)
+
+            local pingStall = 0
+            if clientFps >= 20 and state.BaselinePingMs and pingMs > 0 then
+                pingStall = max(0, (pingMs - state.BaselinePingMs) - 8) * 0.55
+            end
+
+            local physThrottle = 0
+            if clientFps >= 45 then
+                local okPhys, physFps = pcall(Workspace.GetRealPhysicsFPS, Workspace)
+                if okPhys and type(physFps) == "number" and physFps < 57 then
+                    physThrottle = (60 - physFps) * 1.5
+                end
+            end
+
+            local rawLoad = max(1, netActivity + pingStall + physThrottle)
+            if state.ServerApiFps and state.ServerApiFps < 58.5 then
+                local serverTickLoad = 50 + (60 - state.ServerApiFps) * 2.5
+                if serverTickLoad > rawLoad then
+                    rawLoad = serverTickLoad
+                end
+            end
+
+            local clamped = min(100, max(1, rawLoad))
+            state.SmoothedLoadPct = state.SmoothedLoadPct
+                and (state.SmoothedLoadPct * 0.75 + clamped * 0.25)
+                or clamped
+        end
+
+        return string.format("%d%%", floor((state.SmoothedLoadPct or 1) + 0.5))
+    end
+
+    CleanupServerTelemetry = function()
+        if state.ClientReplicatorRef then
+            pcall(function()
+                local coreGui = game:GetService("CoreGui")
+                local devConsole = coreGui and coreGui:FindFirstChild("DevConsoleMaster")
+                if not devConsole then
+                    state.ClientReplicatorRef:RequestServerStats(false)
+                end
+            end)
+            state.ClientReplicatorRef = nil
+        end
+    end
+end
+
 function CreateInformationDisplayHUD(parent)
     InformationDisplayHUD = Instance.new("Frame")
     InformationDisplayHUD.Name = "InformationDisplayHUD"
@@ -8777,15 +9450,13 @@ function UpdateInformationDisplay()
     -- Region: latency-inferred data-center label
     local regionStr = GetServerRegion()
 
-    local uptimeSec = math.floor(Workspace.DistributedGameTime)
-    local uptimeH   = math.floor(uptimeSec / 3600)
-    local uptimeM   = math.floor((uptimeSec % 3600) / 60)
-    local uptimeS   = uptimeSec % 60
-    local uptimeStr = string.format("%d:%02d:%02d", uptimeH, uptimeM, uptimeS)
+    local scriptUptimeStr = FormatInfoDuration(max(0, floor(tick() - initStartTime)))
+    local serverUptimeStr = GetServerUptime()
+    local serverLoadStr   = GetServerLoad()
 
     local newText = string.format(
-        "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s] Uptime[%s]",
-        timeStr, lpcStr, lmcStr, regionStr, uptimeStr
+        "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s] ScriptUptime[%s] ServerUptime[%s] ServerLoad[%s]",
+        timeStr, lpcStr, lmcStr, regionStr, scriptUptimeStr, serverUptimeStr, serverLoadStr
     )
     if InformationDisplayLabel.Text ~= newText then
         InformationDisplayLabel.Text = newText
@@ -9928,6 +10599,9 @@ function Cleanup()
     CachedTarget = nil
     NearestPlayerRef = nil
     PerformanceLabel = nil
+    if CleanupServerTelemetry then
+        pcall(CleanupServerTelemetry)
+    end
     if InformationDisplayHUD then
         pcall(function() InformationDisplayHUD:Destroy() end)
     end
