@@ -6197,7 +6197,7 @@ do
         nameLbl.Position = UDim2.fromOffset(0, subPathText and 2 or 0)
         nameLbl.BackgroundTransparency = 1
         nameLbl.Text = iconText .. " " .. mainText
-        nameLbl.FontFace = Font.fromName("Montserrat", (stateKind == "ON" or stateKind == "AUTO") and Enum.FontWeight.SemiBold or Enum.FontStyle.Normal, Enum.FontStyle.Normal)
+        nameLbl.FontFace = Font.fromName("Montserrat", (stateKind == "ON" or stateKind == "AUTO") and Enum.FontWeight.SemiBold or Enum.FontWeight.Regular, Enum.FontStyle.Normal)
         nameLbl.TextSize = 11
         nameLbl.TextColor3 = (stateKind == "EXCL") and UI_THEME.TextDark or UI_THEME.Text
         nameLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -6749,10 +6749,13 @@ do
         EnsureGlobalWatchers()
         CreateBrowserWindow()
         WorkspaceTracker.Visible = true
-        RebuildEntities(os.clock())
-        WorkspaceTracker.RefreshBrowserTree()
         if WorkspaceTracker.MainFrame then
             WorkspaceTracker.MainFrame.Visible = not Flags["Settings/GhostMode"]
+        end
+        RebuildEntities(os.clock())
+        local ok, err = pcall(WorkspaceTracker.RefreshBrowserTree)
+        if not ok then
+            warn("[Sp3arParvus] Workspace Target Browser refresh warning: " .. tostring(err))
         end
         UpdateStatusLabels()
     end
@@ -6766,7 +6769,7 @@ do
     end
 
     function WorkspaceTracker.ToggleBrowser()
-        if WorkspaceTracker.Visible then
+        if WorkspaceTracker.Visible and WorkspaceTracker.MainFrame and WorkspaceTracker.MainFrame.Visible then
             WorkspaceTracker.CloseBrowser()
         else
             WorkspaceTracker.OpenBrowser()
@@ -13569,7 +13572,7 @@ local KeyboardRows = {
         {Text = "D", Width = 1},
         {Text = "F", Key = "F", Width = 1, KeyCode = Enum.KeyCode.F, Name = "Toggle Fullbright", Action = "Ctrl + F", Desc = "Toggles full bright lighting, removing shadows.", StatusKey = "Visuals/Fullbright"},
         {Text = "G", Key = "G", Width = 1, KeyCode = Enum.KeyCode.G, Name = "Toggle Ghost Mode", Action = "Ctrl + G", Desc = "Toggles Ghost Mode (character transparency & noclip).", StatusKey = "Settings/GhostMode"},
-        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "Toggle Headshot Only", Action = "Ctrl + H", Desc = "Toggles between headshot-only and all-body tracking.", StatusKey = "Aim/HeadshotOnlyState"},
+        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "Headshot Mode / World Humanoids", Action = "Ctrl+H / Ctrl+Shift+H", Desc = "Toggles headshot-only vs all-body tracking (Ctrl+H), or nearby World Humanoid tracking & visuals (Ctrl+Shift+H).", StatusKey = "H_DualStatus"},
         {Text = "J", Key = "J", Width = 1, KeyCode = Enum.KeyCode.J, Name = "Toggle Item Panel", Action = "Ctrl + J", Desc = "Toggles visibility of the item panel HUD.", StatusKey = "Misc/ItemPanel"},
         {Text = "K", Key = "K", Width = 1, KeyCode = Enum.KeyCode.K, Name = "PlayerPage Shortcut", Action = "Ctrl + K", Desc = "Opens menu and navigates directly to the PlayerPage tab."},
         {Text = "L", Width = 1},
@@ -13777,7 +13780,7 @@ function InitializeShortcutsPage(page)
     local sdCorner = Instance.new("UICorner"); sdCorner.CornerRadius = UDim.new(1, 0); sdCorner.Parent = statusDot
 
     local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(0.8, 0, 1, 0)
+    statusLabel.Size = UDim2.new(1, -16, 1, 0)
     statusLabel.BackgroundTransparency = 1
     statusLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     statusLabel.TextSize = 11
@@ -13798,6 +13801,7 @@ function InitializeShortcutsPage(page)
 
         local function updateStatus()
             local status = nil
+            local customStatusText = nil
             if keyData.StatusKey then
                 if keyData.StatusKey == "FreecamActive" then
                     status = _G.FreecamActive
@@ -13805,6 +13809,12 @@ function InitializeShortcutsPage(page)
                     status = ItemPanelState.Visible
                 elseif keyData.StatusKey == "MouseButton1" or keyData.StatusKey == "MouseButton3" then
                     status = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+                elseif keyData.StatusKey == "H_DualStatus" then
+                    local hsActive = Flags["Aim/HeadshotOnlyState"] ~= false
+                    local whActive = (Flags["Aim/TrackWorldHumanoids"] == true) or (Flags["Visuals/HighlightWorldHumanoids"] == true)
+                    local shiftDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+                    status = shiftDown and whActive or hsActive
+                    customStatusText = string.format("Headshot: %s  •  World Hum: %s", hsActive and "ON" or "OFF", whActive and "ON" or "OFF")
                 else
                     status = Flags[keyData.StatusKey]
                 end
@@ -13812,8 +13822,8 @@ function InitializeShortcutsPage(page)
 
             if status ~= nil then
                 statusDot.BackgroundColor3 = status and UI_THEME.Success or UI_THEME.Fail
-                statusLabel.Text = status and "Active" or "Inactive"
-                statusLabel.TextColor3 = status and UI_THEME.Success or UI_THEME.Fail
+                statusLabel.Text = customStatusText or (status and "Active" or "Inactive")
+                statusLabel.TextColor3 = customStatusText and UI_THEME.Text or (status and UI_THEME.Success or UI_THEME.Fail)
                 statusFrame.Visible = true
             else
                 statusFrame.Visible = false
@@ -16537,7 +16547,7 @@ UI.CreateSection(AimTab, "Camera Tracking Assistant")
 UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Stop Inside Humanoid Area (If OFF: Lock Part Center)", "Aim/HumanoidAreaLock", Flags["Aim/HumanoidAreaLock"])
-UI.CreateToggle(AimTab, "Track Nearby World Humanoids (NPCs / Animals / Mobs)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
+UI.CreateToggle(AimTab, "Track Nearby World Humanoids (Ctrl+Shift+H)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
     CachedTarget = nil
     if not state and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
         table.clear(WorkspaceTracker.WorldHumEntities)
@@ -16752,7 +16762,7 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
 end)
 
 UI.CreateSection(VisualsTab, "Non-Player & Workspace Target ESP")
-UI.CreateToggle(VisualsTab, "Highlight Humanoids", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
+UI.CreateToggle(VisualsTab, "Highlight Humanoids (Ctrl+Shift+H)", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
     if WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
         WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
     end
@@ -18044,37 +18054,81 @@ local function handleShortcuts(actionName, inputState, inputObject)
             UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.H then
-            if Flags["Aim/HeadshotOnlyState"] == nil then
-                Flags["Aim/HeadshotOnlyState"] = true
-            end
+            if shiftHeld then
+                local newState
+                local trackState
+                if SAFE_MODE then
+                    newState = not Flags["Visuals/HighlightWorldHumanoids"]
+                    trackState = false
+                    Flags["Aim/TrackWorldHumanoids"] = false
+                    Flags["Visuals/HighlightWorldHumanoids"] = newState
+                    USER_MODIFIED_FLAGS["Visuals/HighlightWorldHumanoids"] = true
+                else
+                    newState = not (Flags["Aim/TrackWorldHumanoids"] and Flags["Visuals/HighlightWorldHumanoids"])
+                    trackState = newState
+                    Flags["Aim/TrackWorldHumanoids"] = newState
+                    Flags["Visuals/HighlightWorldHumanoids"] = newState
+                    USER_MODIFIED_FLAGS["Aim/TrackWorldHumanoids"] = true
+                    USER_MODIFIED_FLAGS["Visuals/HighlightWorldHumanoids"] = true
+                end
 
-            Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
-            local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
+                CachedTarget = nil
+                if WorkspaceTracker and WorkspaceTracker.ForceRefreshWorldHumanoids then
+                    WorkspaceTracker.ForceRefreshWorldHumanoids()
+                end
 
-            for k in pairs(Flags["Aim/TargetGroups"]) do
-                Flags["Aim/TargetGroups"][k] = false
-            end
-            Flags["Aim/TargetGroups"]["Head"] = true
+                local aimUpdater = UIState.Updaters["Aim/TrackWorldHumanoids"]
+                if aimUpdater then
+                    aimUpdater(trackState)
+                elseif not trackState and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
+                    table.clear(WorkspaceTracker.WorldHumEntities)
+                end
 
-            if isHeadshotOnly then
-                Flags["Aim/BodyParts"] = {"Head"}
-                Flags["Aim/Priority"] = "Head"
-                UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
+                local visUpdater = UIState.Updaters["Visuals/HighlightWorldHumanoids"]
+                if visUpdater then
+                    visUpdater(newState)
+                elseif WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
+                    WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
+                end
+
+                if SAFE_MODE then
+                    UI.Notify("World Humanoids", string.format("World Humanoid Visuals %s with 'Ctrl+Shift+H' (Tracking disabled in Safe Mode)", newState and "activated" or "deactivated"))
+                else
+                    UI.Notify("World Humanoids", string.format("World Humanoid Tracking & Visuals %s with 'Ctrl+Shift+H'", newState and "activated" or "deactivated"))
+                end
             else
-                Flags["Aim/TargetGroups"]["Torso"] = true
-                Flags["Aim/TargetGroups"]["LeftArm"] = true
-                Flags["Aim/TargetGroups"]["RightArm"] = true
-                Flags["Aim/TargetGroups"]["LeftLeg"] = true
-                Flags["Aim/TargetGroups"]["RightLeg"] = true
-                Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-                Flags["Aim/Priority"] = "Head"
-                UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
-            end
+                if Flags["Aim/HeadshotOnlyState"] == nil then
+                    Flags["Aim/HeadshotOnlyState"] = true
+                end
 
-            if UIState.Updaters["Aim/TargetGroups"] then
-                for k, v in pairs(Flags["Aim/TargetGroups"]) do
-                    if UIState.Updaters["Aim/TargetGroups"][k] then
-                        UIState.Updaters["Aim/TargetGroups"][k](v)
+                Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
+                local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
+
+                for k in pairs(Flags["Aim/TargetGroups"]) do
+                    Flags["Aim/TargetGroups"][k] = false
+                end
+                Flags["Aim/TargetGroups"]["Head"] = true
+
+                if isHeadshotOnly then
+                    Flags["Aim/BodyParts"] = {"Head"}
+                    Flags["Aim/Priority"] = "Head"
+                    UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
+                else
+                    Flags["Aim/TargetGroups"]["Torso"] = true
+                    Flags["Aim/TargetGroups"]["LeftArm"] = true
+                    Flags["Aim/TargetGroups"]["RightArm"] = true
+                    Flags["Aim/TargetGroups"]["LeftLeg"] = true
+                    Flags["Aim/TargetGroups"]["RightLeg"] = true
+                    Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+                    Flags["Aim/Priority"] = "Head"
+                    UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
+                end
+
+                if UIState.Updaters["Aim/TargetGroups"] then
+                    for k, v in pairs(Flags["Aim/TargetGroups"]) do
+                        if UIState.Updaters["Aim/TargetGroups"][k] then
+                            UIState.Updaters["Aim/TargetGroups"][k](v)
+                        end
                     end
                 end
             end
