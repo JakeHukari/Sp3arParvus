@@ -4,7 +4,7 @@
 -- ║  Version: 4.2.9                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
-local VERSION = "4.2.9" -- Fixed config loading issues
+local VERSION = "4.3.0" -- World Humanoid & Workspace Targeting Config Support
 local SAFE_MODE = false  -- ←SafeMode Flag, Change 'false' to 'true' before executing to enable SafeMode
 
 print(string.format("[Sp3arParvus v%s] Loading...", VERSION))
@@ -133,6 +133,7 @@ local Flags = {
     ["Visuals/WorldHumanoidDistance"] = 2500,
     ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(252, 149, 175),
     ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(80, 220, 255),
+    ["Visuals/TargetLockColor"] = Color3.fromRGB(45, 245, 105),
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
     -- Fullbright modifiers
@@ -212,6 +213,7 @@ end
 local UIState
 local AdvancedPlayerPanelState
 local WorldHumState
+local WorkspaceTracker
 
 local FLAG_METADATA = {
     ["Humanoid/Health"]     = { ReadOnly = true },
@@ -243,6 +245,7 @@ local SaveModifierState = {
         teamBlacklist    = true,
         priorityList     = true,
         worldHumPresets  = true,
+        workspaceTracking = true,
         flags            = true,
     },
     WhitelistEntries     = {},      -- [tostring(userId)]  = bool; false = excluded
@@ -251,6 +254,7 @@ local SaveModifierState = {
     TeamBlacklistEntries = {},
     PriorityEntries      = {},      -- [tostring(index)] = bool
     PresetEntries        = {},      -- [tostring(presetId)] = bool
+    WorkspaceEntries     = {},      -- [pathKey] = bool
     FlagEntries          = {},      -- [flagKey] = bool  (/Locked companions excluded too)
 }
 local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
@@ -472,6 +476,19 @@ do
             end
             payload.worldHumPresets = stripped
         end
+        -- Workspace Tracking
+        if filter.workspaceTracking == false then
+            payload.workspaceTracking = nil
+        elseif type(filter.workspaceEntries) == "table" and type(payload.workspaceTracking) == "table" then
+            local strippedTracked = {}
+            for _, entry in ipairs(payload.workspaceTracking.tracked or {}) do
+                local pKey = entry.pathKey or (entry.pathSegments and table.concat(entry.pathSegments, "\30")) or entry.displayPath
+                if filter.workspaceEntries[pKey] ~= false then
+                    table.insert(strippedTracked, entry)
+                end
+            end
+            payload.workspaceTracking.tracked = strippedTracked
+        end
     end
 
     -- Public API ────────────────────────────────────────────────────
@@ -520,7 +537,8 @@ do
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
             priorityList    = AdvancedPlayerPanelState.PriorityList,
-            worldHumPresets = safePresets
+            worldHumPresets = safePresets,
+            workspaceTracking = WorkspaceTracker and WorkspaceTracker.ExportState and WorkspaceTracker.ExportState() or nil
         }
         applyFilterToPayload(payload, filter)
         local ok, err = pcall(writefile, fileName, encode(payload))
@@ -572,7 +590,8 @@ do
             teamWhitelist   = AdvancedPlayerPanelState.TeamWhitelist,
             teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist,
             priorityList    = AdvancedPlayerPanelState.PriorityList,
-            worldHumPresets = safePresets
+            worldHumPresets = safePresets,
+            workspaceTracking = WorkspaceTracker and WorkspaceTracker.ExportState and WorkspaceTracker.ExportState() or nil
         }
         applyFilterToPayload(payload, filter)
         local ok, err = pcall(writefile, fileName, encode(payload))
@@ -663,12 +682,33 @@ do
         if type(parsed.priorityList) == "table" then
             AdvancedPlayerPanelState.PriorityList = parsed.priorityList
         end
-        WorldHumState.Presets = type(parsed.worldHumPresets) == "table" and parsed.worldHumPresets or {}
-        
+        if type(parsed.worldHumPresets) == "table" then
+            WorldHumState.Presets = parsed.worldHumPresets
+        end
+
+        if WorkspaceTracker then
+            if WorkspaceTracker.ImportState and parsed.workspaceTracking ~= nil then
+                WorkspaceTracker.ImportState(parsed.workspaceTracking)
+            end
+            if WorkspaceTracker.RefreshIndicatorColors then
+                WorkspaceTracker.RefreshIndicatorColors()
+            end
+            if WorkspaceTracker.UpdateVisualIndicators then
+                WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
+            end
+        end
+
         pcall(function()
             if type(UpdateAdvancedPlayerList) == "function" then UpdateAdvancedPlayerList() end
             if type(UpdateSettingsPanelList) == "function" then UpdateSettingsPanelList() end
             if type(UpdateTeamPanelList) == "function" then UpdateTeamPanelList() end
+            if WorldHumState and WorldHumState.Page then
+                if WorldHumState.SubPage == "Manager" and type(ShowPresetManager) == "function" then
+                    ShowPresetManager(WorldHumState.Page)
+                elseif WorldHumState.SubPage == "List" and type(ShowWorldHumList) == "function" then
+                    ShowWorldHumList(WorldHumState.Page)
+                end
+            end
         end)
         
         do
@@ -696,6 +736,7 @@ do
         end
 
 
+        if ConfigManager then ConfigManager.IsDirty = false end
         return true, parsed.name or "Unknown"
     end
 
@@ -803,6 +844,7 @@ do
         parsed.teamBlacklist   = AdvancedPlayerPanelState.TeamBlacklist
         parsed.priorityList    = AdvancedPlayerPanelState.PriorityList
         parsed.worldHumPresets = safePresets
+        parsed.workspaceTracking = WorkspaceTracker and WorkspaceTracker.ExportState and WorkspaceTracker.ExportState() or nil
         parsed.savedAt = os.time()
         parsed.version = VERSION
         applyFilterToPayload(parsed, filter)
@@ -5469,6 +5511,7 @@ do
     local ToggledItems = {}       -- [Instance] = record
     local PendingContainers = {}  -- [pathKey] = record (auto-rebinds if a toggled folder is recreated)
     local ExcludedItems = {}      -- [Instance] = true (excludes specific child items inside a toggled folder)
+    local PendingExclusions = {}  -- [pathKey] = pathSegments (deferred binding if excluded child not yet spawned)
     local ExpandedNodes = {}      -- [Instance] = true
     local FolderPageLimits = {}   -- [Instance] = maxRows
     local WaypointPartsSet = {}   -- [BasePart] = true
@@ -5745,7 +5788,7 @@ do
             if not inst:IsDescendantOf(Workspace) then
                 DisconnectList(record.conns)
                 ToggledItems[inst] = nil
-                if record.isContainer and record.pathKey and record.pathSegments and #record.pathSegments > 0 then
+                if record.pathKey and record.pathSegments and #record.pathSegments > 0 then
                     PendingContainers[record.pathKey] = record
                 end
                 Dirty = true
@@ -5831,9 +5874,22 @@ do
     end
 
     local function RebindPendingContainers()
-        if next(PendingContainers) == nil then return false end
-        RefreshWaypointSet()
         local reboundAny = false
+        if next(PendingExclusions) ~= nil then
+            for pKey, segs in pairs(PendingExclusions) do
+                local cur = Workspace
+                for i = 1, #segs do
+                    cur = cur and cur:FindFirstChild(segs[i])
+                end
+                if cur and cur ~= Workspace then
+                    ExcludedItems[cur] = true
+                    PendingExclusions[pKey] = nil
+                    reboundAny = true
+                end
+            end
+        end
+        if next(PendingContainers) == nil then return reboundAny end
+        RefreshWaypointSet()
         for pathKey, record in pairs(PendingContainers) do
             local segs = record.pathSegments
             if segs and #segs > 0 then
@@ -5936,7 +5992,7 @@ do
             if not inst or not inst.Parent or not inst:IsDescendantOf(Workspace) then
                 DisconnectList(record.conns)
                 ToggledItems[inst] = nil
-                if record.isContainer and record.pathKey and record.pathSegments and #record.pathSegments > 0 then
+                if record.pathKey and record.pathSegments and #record.pathSegments > 0 then
                     PendingContainers[record.pathKey] = record
                 end
             else
@@ -6056,6 +6112,9 @@ do
             AttachItemListeners(rec)
         end
 
+        if ConfigManager and type(ConfigManager) == "table" then
+            ConfigManager.IsDirty = true
+        end
         CachedTarget = nil
         local now = os.clock()
         RebuildEntities(now)
@@ -6072,6 +6131,10 @@ do
         end
         table.clear(PendingContainers)
         table.clear(ExcludedItems)
+        table.clear(PendingExclusions)
+        if ConfigManager and type(ConfigManager) == "table" then
+            ConfigManager.IsDirty = true
+        end
         CachedTarget = nil
         local now = os.clock()
         RebuildEntities(now)
@@ -6079,6 +6142,145 @@ do
             WorkspaceTracker.UpdateVisualIndicators(now, true)
         end
         WorkspaceTracker.RefreshBrowserTree()
+    end
+
+    function WorkspaceTracker.ExportState()
+        local tracked = {}
+        local seenKeys = {}
+
+        for inst, rec in pairs(ToggledItems) do
+            local segs, pKey, disp = GetRelativePathInfo(inst)
+            local key = pKey or (rec and rec.pathKey)
+            if key and not seenKeys[key] then
+                seenKeys[key] = true
+                table.insert(tracked, {
+                    pathSegments = segs or rec.pathSegments,
+                    pathKey      = key,
+                    displayPath  = disp or (rec and rec.displayPath) or inst.Name,
+                    classLabel   = inst.ClassName or (rec and rec.classLabel),
+                    isContainer  = (rec and rec.isContainer ~= nil) and rec.isContainer or IsPureContainer(inst),
+                })
+            end
+        end
+
+        for pKey, rec in pairs(PendingContainers) do
+            if not seenKeys[pKey] and rec and rec.pathSegments and #rec.pathSegments > 0 then
+                seenKeys[pKey] = true
+                table.insert(tracked, {
+                    pathSegments = rec.pathSegments,
+                    pathKey      = pKey,
+                    displayPath  = rec.displayPath or table.concat(rec.pathSegments, " / "),
+                    classLabel   = rec.classLabel or "Folder",
+                    isContainer  = rec.isContainer ~= false,
+                })
+            end
+        end
+
+        local excluded = {}
+        local seenExcluded = {}
+        for inst in pairs(ExcludedItems) do
+            if inst and inst.Parent then
+                local segs, pKey, disp = GetRelativePathInfo(inst)
+                if pKey and not seenExcluded[pKey] then
+                    seenExcluded[pKey] = true
+                    table.insert(excluded, {
+                        pathSegments = segs,
+                        pathKey      = pKey,
+                        displayPath  = disp or inst.Name,
+                        classLabel   = inst.ClassName,
+                    })
+                end
+            end
+        end
+
+        for pKey, segs in pairs(PendingExclusions) do
+            if not seenExcluded[pKey] and segs and #segs > 0 then
+                seenExcluded[pKey] = true
+                table.insert(excluded, {
+                    pathSegments = segs,
+                    pathKey      = pKey,
+                    displayPath  = table.concat(segs, " / "),
+                })
+            end
+        end
+
+        return {
+            tracked  = tracked,
+            excluded = excluded,
+        }
+    end
+
+    function WorkspaceTracker.ImportState(state)
+        ClearAllTracked()
+        if type(state) ~= "table" then return end
+        EnsureGlobalWatchers()
+
+        if type(state.excluded) == "table" then
+            for _, item in ipairs(state.excluded) do
+                local segs = item.pathSegments
+                if type(segs) == "table" and #segs > 0 then
+                    local cur = Workspace
+                    for i = 1, #segs do
+                        cur = cur and cur:FindFirstChild(segs[i])
+                    end
+                    if cur and cur ~= Workspace then
+                        ExcludedItems[cur] = true
+                    else
+                        local pKey = item.pathKey or table.concat(segs, "\30")
+                        PendingExclusions[pKey] = segs
+                    end
+                end
+            end
+        end
+
+        if type(state.tracked) == "table" then
+            for _, item in ipairs(state.tracked) do
+                local segs = item.pathSegments
+                if type(segs) == "table" and #segs > 0 then
+                    local cur = Workspace
+                    for i = 1, #segs do
+                        cur = cur and cur:FindFirstChild(segs[i])
+                    end
+                    local pKey = item.pathKey or table.concat(segs, "\30")
+                    local disp = item.displayPath or table.concat(segs, " / ")
+                    if cur and cur ~= Workspace and not IsSystemOrPlayerIgnored(cur) then
+                        local actualSegs, actualPKey, actualDisp = GetRelativePathInfo(cur)
+                        local rec = {
+                            inst         = cur,
+                            isContainer  = (item.isContainer ~= nil) and item.isContainer or IsPureContainer(cur),
+                            pathSegments = actualSegs or segs,
+                            pathKey      = actualPKey or pKey,
+                            displayPath  = actualDisp or disp,
+                            classLabel   = cur.ClassName,
+                            conns        = {},
+                        }
+                        ToggledItems[cur] = rec
+                        AttachItemListeners(rec)
+                    else
+                        local rec = {
+                            inst         = nil,
+                            isContainer  = item.isContainer ~= false,
+                            pathSegments = segs,
+                            pathKey      = pKey,
+                            displayPath  = disp,
+                            classLabel   = item.classLabel or "Instance",
+                            conns        = {},
+                        }
+                        PendingContainers[pKey] = rec
+                    end
+                end
+            end
+        end
+
+        CachedTarget = nil
+        local now = os.clock()
+        RebuildEntities(now)
+        if WorkspaceTracker.UpdateVisualIndicators then
+            WorkspaceTracker.UpdateVisualIndicators(now, true)
+        end
+        if WorkspaceTracker.RefreshBrowserTree then
+            WorkspaceTracker.RefreshBrowserTree()
+        end
     end
 
     local function GetSortBucket(inst)
@@ -6797,6 +6999,11 @@ do
         end
     end
 
+    local function GetLockColor()
+        local c = Flags["Visuals/TargetLockColor"]
+        return (typeof(c) == "Color3") and c or COLOR_LOCKED
+    end
+
     local function DestroyIndicatorEntry(idObj, entry)
         if not entry then return end
         if entry.hl then
@@ -6822,7 +7029,7 @@ do
 
     local function ApplyEntryColorState(entry, isLocked)
         local groupColor = GetGroupColor(entry.kind)
-        local lockColor = isLocked and COLOR_LOCKED or nil
+        local lockColor = isLocked and GetLockColor() or nil
         local primaryColor = lockColor or groupColor
         local distColor = lockColor or groupColor:Lerp(COLOR_WHITE, 0.35)
 
@@ -6851,6 +7058,12 @@ do
     function WorkspaceTracker.RefreshIndicatorColors()
         for _, entry in pairs(IndicatorObjects) do
             ApplyEntryColorState(entry, entry.isLocked == true)
+        end
+        if NonPlayerLockDot then
+            local dotFrame = NonPlayerLockDot:FindFirstChild("Dot")
+            if dotFrame then
+                dotFrame.BackgroundColor3 = GetLockColor()
+            end
         end
     end
 
@@ -7159,7 +7372,7 @@ do
             local dotFrame = Instance.new("Frame")
             dotFrame.Name = "Dot"
             dotFrame.Size = UDim2.new(1, 0, 1, 0)
-            dotFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            dotFrame.BackgroundColor3 = GetLockColor()
             dotFrame.BorderSizePixel = 0
             dotFrame.Parent = bg
 
@@ -7172,6 +7385,10 @@ do
 
         if NonPlayerLockDot.Adornee ~= CachedTarget[3] then
             NonPlayerLockDot.Adornee = CachedTarget[3]
+        end
+        local curDotFrame = NonPlayerLockDot:FindFirstChild("Dot")
+        if curDotFrame and curDotFrame.BackgroundColor3 ~= GetLockColor() then
+            curDotFrame.BackgroundColor3 = GetLockColor()
         end
         if not NonPlayerLockDot.Enabled then
             NonPlayerLockDot.Enabled = true
@@ -14054,6 +14271,7 @@ local function UpdateSaveModifierActive()
         SaveModifierState.WhitelistEntries,     SaveModifierState.BlacklistEntries,
         SaveModifierState.TeamWhitelistEntries, SaveModifierState.TeamBlacklistEntries,
         SaveModifierState.PriorityEntries,      SaveModifierState.PresetEntries,
+        SaveModifierState.WorkspaceEntries,
         SaveModifierState.FlagEntries,
     }) do
         for _, v in pairs(tbl) do
@@ -14081,6 +14299,7 @@ local function BuildSaveFilter()
     if not cats.teamBlacklist   then filter.teamBlacklist   = false else local ex = makeEx(SaveModifierState.TeamBlacklistEntries);  if ex then filter.teamBlacklistEntries  = ex end end
     if not cats.priorityList    then filter.priorityList    = false else local ex = makeEx(SaveModifierState.PriorityEntries);       if ex then filter.priorityEntries       = ex end end
     if not cats.worldHumPresets then filter.worldHumPresets = false else local ex = makeEx(SaveModifierState.PresetEntries);         if ex then filter.presetEntries         = ex end end
+    if not cats.workspaceTracking then filter.workspaceTracking = false else local ex = makeEx(SaveModifierState.WorkspaceEntries);   if ex then filter.workspaceEntries     = ex end end
     return filter
 end
 
@@ -15186,6 +15405,19 @@ local function BuildConfigTab(page)
             end; return out
         end))
 
+    table.insert(_modRebuilders, buildModSection("workspaceTracking", "Workspace Targets",
+        SaveModifierState.WorkspaceEntries, function()
+            local out = {}
+            if WorkspaceTracker and WorkspaceTracker.ExportState then
+                local st = WorkspaceTracker.ExportState()
+                for _, item in ipairs(st.tracked or {}) do
+                    local key = item.pathKey or (item.pathSegments and table.concat(item.pathSegments, "\30")) or item.displayPath
+                    local lbl = (item.displayPath or key) .. "  [" .. (item.classLabel or (item.isContainer and "Folder" or "Item")) .. "]"
+                    table.insert(out, {key = key, label = lbl})
+                end
+            end; return out
+        end))
+
     table.insert(_modRebuilders, buildModSection("flags", "Flags / Settings",
         SaveModifierState.FlagEntries, function()
             local seen, out = {}, {}
@@ -15240,6 +15472,7 @@ local function BuildConfigTab(page)
         SaveModifierState.WhitelistEntries,     SaveModifierState.BlacklistEntries,
         SaveModifierState.TeamWhitelistEntries, SaveModifierState.TeamBlacklistEntries,
         SaveModifierState.PriorityEntries,      SaveModifierState.PresetEntries,
+        SaveModifierState.WorkspaceEntries,
         SaveModifierState.FlagEntries,
     }
     TrackConnection(modSelectAllBtn.MouseButton1Click:Connect(function()
@@ -16781,6 +17014,11 @@ UI.CreateToggle(VisualsTab, "Highlight Tracked Workspace Items", "Visuals/Highli
     end
 end)
 UI.CreateColorPicker(VisualsTab, "Workspace Target Highlight / Label Color", "Visuals/WorkspaceTargetColor", DEFAULT_FLAGS["Visuals/WorkspaceTargetColor"], function()
+    if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
+        WorkspaceTracker.RefreshIndicatorColors()
+    end
+end)
+UI.CreateColorPicker(VisualsTab, "Target Lock-On Indicator / Label Color", "Visuals/TargetLockColor", DEFAULT_FLAGS["Visuals/TargetLockColor"], function()
     if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
         WorkspaceTracker.RefreshIndicatorColors()
     end
