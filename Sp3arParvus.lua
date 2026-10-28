@@ -128,6 +128,11 @@ local Flags = {
     ["ESP/ShowEquipped"] = true,
     ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
+    ["Visuals/HighlightWorldHumanoids"] = false,
+    ["Visuals/HighlightWorkspaceTargets"] = false,
+    ["Visuals/WorldHumanoidDistance"] = 500,
+    ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(80, 220, 255),
+    ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(115, 245, 160),
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
     -- Fullbright modifiers
@@ -1826,9 +1831,15 @@ local _nearbyFilterBuf = {}
 local _nearbyOverlapParams = OverlapParams.new()
 _nearbyOverlapParams.MaxParts = 0
 
-function GetNearbyHumanoids()
+function GetNearbyHumanoids(customRadius)
     table.clear(_nearbyHumanoids)
     table.clear(_nearbySeen)
+
+    local radius = customRadius or Flags["Visuals/WorldHumanoidDistance"] or 500
+    if radius > 600 and WorkspaceTracker and WorkspaceTracker.CollectNearbyHumanoidsInto then
+        WorkspaceTracker.CollectNearbyHumanoidsInto(_nearbyHumanoids, radius)
+        return _nearbyHumanoids
+    end
 
     local myChar = LocalPlayer.Character
     _nearbyFilterBuf[1] = myChar
@@ -1837,7 +1848,7 @@ function GetNearbyHumanoids()
         _nearbyOverlapParams.FilterType = CachedFilterType
     end
 
-    local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, 500, _nearbyOverlapParams)
+    local parts = Services.Workspace:GetPartBoundsInRadius(Camera.CFrame.Position, radius, _nearbyOverlapParams)
     for i = 1, #parts do
         local part = parts[i]
         local model = part:FindFirstAncestorOfClass("Model")
@@ -4382,7 +4393,490 @@ function UI.CreateRotationSlider(page, text, flag, default)
     setOverrideVisuals(USER_MODIFIED_FLAGS[flag] == true)
 end
 
+function UI.CreateSlider(page, text, flag, default, minVal, maxVal, step, unit, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 76)
+    Container.BackgroundColor3 = UI_THEME.Element
+    Container.BorderSizePixel = 0
+    Container.Parent = page
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 6)
+    cCorner.Parent = Container
 
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.6, -12, 0, 44)
+    Label.Position = UDim2.new(0, 12, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = unit and unit ~= "" and (text .. " (" .. unit:gsub("^%s+", "") .. ")") or text
+    Label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+
+    local InputFrame = Instance.new("Frame")
+    InputFrame.Size = UDim2.new(0.4, -12, 0, 28)
+    InputFrame.Position = UDim2.new(1, -12, 0, 8)
+    InputFrame.AnchorPoint = Vector2.new(1, 0)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    InputFrame.BorderSizePixel = 0
+    InputFrame.Parent = Container
+    local ifCorner = Instance.new("UICorner")
+    ifCorner.CornerRadius = UDim.new(0, 4)
+    ifCorner.Parent = InputFrame
+
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.new(1, -50, 1, 0)
+    Input.Position = UDim2.new(0, 25, 0, 0)
+    Input.BackgroundTransparency = 1
+    Input.Text = tostring(Flags[flag] ~= nil and Flags[flag] or default)
+    Input.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    Input.TextSize = 13
+    Input.TextColor3 = UI_THEME.Accent
+    Input.ClearTextOnFocus = false
+    Input.Parent = InputFrame
+
+    local TrackFrame = Instance.new("TextButton")
+    TrackFrame.Name = "SliderTrack"
+    TrackFrame.Size = UDim2.new(1, -24, 0, 14)
+    TrackFrame.Position = UDim2.new(0, 12, 0, 50)
+    TrackFrame.BackgroundColor3 = Color3.fromRGB(52, 52, 56)
+    TrackFrame.BorderSizePixel = 0
+    TrackFrame.Text = ""
+    TrackFrame.AutoButtonColor = false
+    TrackFrame.Parent = Container
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(1, 0)
+    tCorner.Parent = TrackFrame
+
+    local Fill = Instance.new("Frame")
+    Fill.Name = "Fill"
+    Fill.Size = UDim2.new(0, 0, 1, 0)
+    Fill.BackgroundColor3 = UI_THEME.Accent
+    Fill.BorderSizePixel = 0
+    Fill.ZIndex = 2
+    Fill.Parent = TrackFrame
+    local fCorner = Instance.new("UICorner")
+    fCorner.CornerRadius = UDim.new(1, 0)
+    fCorner.Parent = Fill
+
+    local Thumb = Instance.new("TextButton")
+    Thumb.Name = "Thumb"
+    Thumb.Size = UDim2.new(0, 16, 0, 16)
+    Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
+    Thumb.Position = UDim2.new(0, 0, 0.5, 0)
+    Thumb.BackgroundColor3 = UI_THEME.Text
+    Thumb.BorderSizePixel = 0
+    Thumb.Text = ""
+    Thumb.AutoButtonColor = false
+    Thumb.ZIndex = 4
+    Thumb.Parent = TrackFrame
+    local thCorner = Instance.new("UICorner")
+    thCorner.CornerRadius = UDim.new(1, 0)
+    thCorner.Parent = Thumb
+
+    local span = math.max(1e-6, maxVal - minVal)
+    local function applyVisuals(val)
+        local frac = math.clamp((val - minVal) / span, 0, 1)
+        Fill.Size = UDim2.new(frac, 0, 1, 0)
+        Thumb.Position = UDim2.new(frac, 0, 0.5, 0)
+        if not Input:IsFocused() then
+            Input.Text = tostring(val)
+        end
+    end
+
+    local function commitVal(rawVal, snapToStep, isUser)
+        local v = math.clamp(tonumber(rawVal) or default, minVal, maxVal)
+        if snapToStep and step and step > 0 then
+            v = math.clamp(math.floor((v - minVal) / step + 0.5) * step + minVal, minVal, maxVal)
+        else
+            v = math.floor(v + 0.5)
+        end
+        Flags[flag] = v
+        if isUser then
+            USER_MODIFIED_FLAGS[flag] = true
+        end
+        applyVisuals(v)
+        if callback then callback(v) end
+    end
+
+    UIState.Updaters[flag] = function(val)
+        local v = math.clamp(math.floor((tonumber(val) or default) + 0.5), minVal, maxVal)
+        Flags[flag] = v
+        applyVisuals(v)
+        if callback then pcall(callback, v) end
+    end
+
+    local function makeStepBtn(lbl, pos)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 25, 1, 0)
+        btn.Position = pos
+        btn.BackgroundTransparency = 1
+        btn.Text = lbl
+        btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        btn.TextSize = 16
+        btn.TextColor3 = UI_THEME.TextDark
+        btn.Parent = InputFrame
+        return btn
+    end
+
+    local minusBtn = makeStepBtn("-", UDim2.new(0, 0, 0, 0))
+    local plusBtn = makeStepBtn("+", UDim2.new(1, -25, 0, 0))
+
+    TrackConnection(minusBtn.MouseButton1Click:Connect(function()
+        commitVal((Flags[flag] or default) - (step or 1), true, true)
+    end))
+    TrackConnection(plusBtn.MouseButton1Click:Connect(function()
+        commitVal((Flags[flag] or default) + (step or 1), true, true)
+    end))
+    TrackConnection(Input.FocusLost:Connect(function()
+        commitVal(Input.Text, false, true)
+    end))
+
+    local dragging = false
+    local function updateFromMouse(pos)
+        local tPos = TrackFrame.AbsolutePosition
+        local tSize = TrackFrame.AbsoluteSize
+        if tSize.X <= 0 then return end
+        local frac = math.clamp((pos.X - tPos.X) / tSize.X, 0, 1)
+        commitVal(minVal + frac * span, true, true)
+    end
+
+    local function beginDrag(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            UIState.ActiveDraggedFrame = nil
+            dragging = true
+            updateFromMouse(input.Position)
+        end
+    end
+
+    TrackConnection(TrackFrame.InputBegan:Connect(beginDrag))
+    TrackConnection(Thumb.InputBegan:Connect(beginDrag))
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateFromMouse(input.Position)
+        end
+    end))
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end))
+
+    local initV = Flags[flag] ~= nil and Flags[flag] or default
+    Flags[flag] = math.clamp(math.floor(initV + 0.5), minVal, maxVal)
+    applyVisuals(Flags[flag])
+    return Container
+end
+
+function UI.CreateColorPicker(page, text, flag, defaultColor, callback)
+    local COLLAPSED_H = 48
+    local EXPANDED_H = 176
+    local isOpen = false
+
+    local initColor = (typeof(Flags[flag]) == "Color3") and Flags[flag] or defaultColor
+    Flags[flag] = initColor
+    local curH, curS, curV = initColor:ToHSV()
+
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, COLLAPSED_H)
+    Container.BackgroundColor3 = UI_THEME.Element
+    Container.BorderSizePixel = 0
+    Container.ClipsDescendants = true
+    Container.Parent = page
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 6)
+    cCorner.Parent = Container
+
+    local HeaderBtn = Instance.new("TextButton")
+    HeaderBtn.Size = UDim2.new(1, 0, 0, COLLAPSED_H)
+    HeaderBtn.BackgroundTransparency = 1
+    HeaderBtn.Text = ""
+    HeaderBtn.AutoButtonColor = false
+    HeaderBtn.Parent = Container
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -155, 1, 0)
+    Label.Position = UDim2.fromOffset(12, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    Label.TextSize = 13
+    Label.TextColor3 = UI_THEME.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextTruncate = Enum.TextTruncate.AtEnd
+    Label.Parent = HeaderBtn
+
+    local HexPreview = Instance.new("TextLabel")
+    HexPreview.Size = UDim2.fromOffset(64, COLLAPSED_H)
+    HexPreview.Position = UDim2.new(1, -138, 0, 0)
+    HexPreview.BackgroundTransparency = 1
+    HexPreview.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    HexPreview.TextSize = 11
+    HexPreview.TextColor3 = UI_THEME.TextDark
+    HexPreview.TextXAlignment = Enum.TextXAlignment.Right
+    HexPreview.Parent = HeaderBtn
+
+    local Swatch = Instance.new("TextButton")
+    Swatch.Size = UDim2.fromOffset(56, 24)
+    Swatch.Position = UDim2.new(1, -68, 0.5, -12)
+    Swatch.BackgroundColor3 = initColor
+    Swatch.BorderSizePixel = 0
+    Swatch.Text = "▼"
+    Swatch.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    Swatch.TextSize = 10
+    Swatch.TextColor3 = Color3.fromRGB(20, 20, 24)
+    Swatch.TextStrokeColor3 = Color3.new(1, 1, 1)
+    Swatch.TextStrokeTransparency = 0.65
+    Swatch.Parent = HeaderBtn
+    local swCorner = Instance.new("UICorner")
+    swCorner.CornerRadius = UDim.new(0, 5)
+    swCorner.Parent = Swatch
+    local swStroke = Instance.new("UIStroke")
+    swStroke.Color = Color3.fromRGB(95, 95, 105)
+    swStroke.Thickness = 1
+    swStroke.Parent = Swatch
+
+    local function ColorToHex(c)
+        return string.format("#%02X%02X%02X",
+            math.clamp(math.floor(c.R * 255 + 0.5), 0, 255),
+            math.clamp(math.floor(c.G * 255 + 0.5), 0, 255),
+            math.clamp(math.floor(c.B * 255 + 0.5), 0, 255))
+    end
+
+    local function MakeChannelBar(yOffset, labelShort)
+        local rowLbl = Instance.new("TextLabel")
+        rowLbl.Size = UDim2.fromOffset(18, 14)
+        rowLbl.Position = UDim2.fromOffset(12, yOffset)
+        rowLbl.BackgroundTransparency = 1
+        rowLbl.Text = labelShort
+        rowLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        rowLbl.TextSize = 10
+        rowLbl.TextColor3 = UI_THEME.TextDark
+        rowLbl.TextXAlignment = Enum.TextXAlignment.Left
+        rowLbl.Parent = Container
+
+        local track = Instance.new("TextButton")
+        track.Size = UDim2.new(1, -44, 0, 14)
+        track.Position = UDim2.fromOffset(32, yOffset)
+        track.BackgroundColor3 = Color3.new(1, 1, 1)
+        track.BorderSizePixel = 0
+        track.Text = ""
+        track.AutoButtonColor = false
+        track.Parent = Container
+        local tc = Instance.new("UICorner")
+        tc.CornerRadius = UDim.new(1, 0)
+        tc.Parent = track
+
+        local grad = Instance.new("UIGradient")
+        grad.Parent = track
+
+        local thumb = Instance.new("TextButton")
+        thumb.Size = UDim2.fromOffset(14, 14)
+        thumb.AnchorPoint = Vector2.new(0.5, 0.5)
+        thumb.Position = UDim2.new(0, 0, 0.5, 0)
+        thumb.BackgroundColor3 = Color3.new(1, 1, 1)
+        thumb.BorderSizePixel = 0
+        thumb.Text = ""
+        thumb.AutoButtonColor = false
+        thumb.ZIndex = 3
+        thumb.Parent = track
+        local thc = Instance.new("UICorner")
+        thc.CornerRadius = UDim.new(1, 0)
+        thc.Parent = thumb
+        local ths = Instance.new("UIStroke")
+        ths.Color = Color3.fromRGB(20, 20, 24)
+        ths.Thickness = 1.5
+        ths.Parent = thumb
+
+        return track, grad, thumb
+    end
+
+    local hueTrack, hueGrad, hueThumb = MakeChannelBar(56, "H")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
+    })
+
+    local satTrack, satGrad, satThumb = MakeChannelBar(80, "S")
+    local valTrack, valGrad, valThumb = MakeChannelBar(104, "V")
+
+    local HexInputFrame = Instance.new("Frame")
+    HexInputFrame.Size = UDim2.fromOffset(82, 24)
+    HexInputFrame.Position = UDim2.fromOffset(32, 134)
+    HexInputFrame.BackgroundColor3 = Color3.fromRGB(42, 42, 46)
+    HexInputFrame.BorderSizePixel = 0
+    HexInputFrame.Parent = Container
+    local hifC = Instance.new("UICorner")
+    hifC.CornerRadius = UDim.new(0, 4)
+    hifC.Parent = HexInputFrame
+
+    local HexInput = Instance.new("TextBox")
+    HexInput.Size = UDim2.new(1, -8, 1, 0)
+    HexInput.Position = UDim2.fromOffset(4, 0)
+    HexInput.BackgroundTransparency = 1
+    HexInput.ClearTextOnFocus = false
+    HexInput.Text = ColorToHex(initColor)
+    HexInput.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    HexInput.TextSize = 11
+    HexInput.TextColor3 = UI_THEME.Text
+    HexInput.Parent = HexInputFrame
+
+    local presets = {
+        Color3.fromRGB(80, 220, 255),
+        Color3.fromRGB(115, 245, 160),
+        Color3.fromRGB(252, 149, 175),
+        Color3.fromRGB(255, 205, 70),
+        Color3.fromRGB(185, 115, 255),
+        Color3.fromRGB(255, 255, 255),
+    }
+
+    local ResetBtn = Instance.new("TextButton")
+    ResetBtn.Size = UDim2.fromOffset(52, 24)
+    ResetBtn.Position = UDim2.new(1, -64, 0, 134)
+    ResetBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    ResetBtn.BorderSizePixel = 0
+    ResetBtn.Text = "Reset"
+    ResetBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    ResetBtn.TextSize = 10
+    ResetBtn.TextColor3 = UI_THEME.TextDark
+    ResetBtn.Parent = Container
+    local rbC = Instance.new("UICorner")
+    rbC.CornerRadius = UDim.new(0, 4)
+    rbC.Parent = ResetBtn
+
+    local function syncPickerVisuals(c)
+        Swatch.BackgroundColor3 = c
+        local hex = ColorToHex(c)
+        HexPreview.Text = hex
+        if not HexInput:IsFocused() then
+            HexInput.Text = hex
+        end
+        hueThumb.Position = UDim2.new(math.clamp(curH, 0, 1), 0, 0.5, 0)
+        satThumb.Position = UDim2.new(math.clamp(curS, 0, 1), 0, 0.5, 0)
+        valThumb.Position = UDim2.new(math.clamp(curV, 0, 1), 0, 0.5, 0)
+        satGrad.Color = ColorSequence.new(Color3.fromHSV(curH, 0, curV), Color3.fromHSV(curH, 1, curV))
+        valGrad.Color = ColorSequence.new(Color3.new(0, 0, 0), Color3.fromHSV(curH, curS, 1))
+    end
+
+    local function applyNewColor(c, fromHSV, isUser)
+        if not fromHSV then
+            local nh, ns, nv = c:ToHSV()
+            if nv > 0.001 then
+                if ns > 0.001 then curH = nh end
+                curS = ns
+            end
+            curV = nv
+        end
+        Flags[flag] = c
+        if isUser then
+            USER_MODIFIED_FLAGS[flag] = true
+        end
+        syncPickerVisuals(c)
+        if callback then callback(c) end
+    end
+
+    for idx, pCol in ipairs(presets) do
+        local pBtn = Instance.new("TextButton")
+        pBtn.Size = UDim2.fromOffset(18, 18)
+        pBtn.Position = UDim2.fromOffset(122 + (idx - 1) * 23, 137)
+        pBtn.BackgroundColor3 = pCol
+        pBtn.BorderSizePixel = 0
+        pBtn.Text = ""
+        pBtn.Parent = Container
+        local pc = Instance.new("UICorner")
+        pc.CornerRadius = UDim.new(1, 0)
+        pc.Parent = pBtn
+        TrackConnection(pBtn.MouseButton1Click:Connect(function()
+            applyNewColor(pCol, false, true)
+        end))
+    end
+
+    TrackConnection(ResetBtn.MouseButton1Click:Connect(function()
+        applyNewColor(defaultColor, false, true)
+    end))
+
+    TrackConnection(HexInput.FocusLost:Connect(function()
+        local cleaned = HexInput.Text:gsub("[^%x]", "")
+        if #cleaned == 6 then
+            local r = tonumber(cleaned:sub(1, 2), 16)
+            local g = tonumber(cleaned:sub(3, 4), 16)
+            local b = tonumber(cleaned:sub(5, 6), 16)
+            if r and g and b then
+                applyNewColor(Color3.fromRGB(r, g, b), false, true)
+                return
+            end
+        end
+        HexInput.Text = ColorToHex(Flags[flag] or defaultColor)
+    end))
+
+    local activeDragChannel = nil
+    local function updateDragChannel(pos)
+        local track = (activeDragChannel == "H" and hueTrack) or (activeDragChannel == "S" and satTrack) or valTrack
+        if not track then return end
+        local tSize = track.AbsoluteSize
+        if tSize.X <= 0 then return end
+        local frac = math.clamp((pos.X - track.AbsolutePosition.X) / tSize.X, 0, 1)
+        if activeDragChannel == "H" then
+            curH = frac
+        elseif activeDragChannel == "S" then
+            curS = frac
+        else
+            curV = frac
+        end
+        applyNewColor(Color3.fromHSV(curH, curS, curV), true, true)
+    end
+
+    local function bindChannelDrag(track, thumb, channelId)
+        local function onBegin(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                UIState.ActiveDraggedFrame = nil
+                activeDragChannel = channelId
+                updateDragChannel(input.Position)
+            end
+        end
+        TrackConnection(track.InputBegan:Connect(onBegin))
+        TrackConnection(thumb.InputBegan:Connect(onBegin))
+    end
+
+    bindChannelDrag(hueTrack, hueThumb, "H")
+    bindChannelDrag(satTrack, satThumb, "S")
+    bindChannelDrag(valTrack, valThumb, "V")
+
+    TrackConnection(UserInputService.InputChanged:Connect(function(input)
+        if activeDragChannel and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateDragChannel(input.Position)
+        end
+    end))
+    TrackConnection(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            activeDragChannel = nil
+        end
+    end))
+
+    local function toggleOpen()
+        isOpen = not isOpen
+        Swatch.Text = isOpen and "▲" or "▼"
+        TweenService:Create(Container, TWEENS.FAST, {Size = UDim2.new(1, 0, 0, isOpen and EXPANDED_H or COLLAPSED_H)}):Play()
+    end
+
+    TrackConnection(HeaderBtn.MouseButton1Click:Connect(toggleOpen))
+    TrackConnection(Swatch.MouseButton1Click:Connect(toggleOpen))
+
+    UIState.Updaters[flag] = function(val)
+        if typeof(val) == "Color3" then
+            applyNewColor(val, false, false)
+        end
+    end
+
+    syncPickerVisuals(initColor)
+    return Container
+end
 
 function UI.CreateButton(page, text, callback)
     local Button = Instance.new("TextButton")
@@ -4979,6 +5473,8 @@ do
     local FolderPageLimits = {}   -- [Instance] = maxRows
     local WaypointPartsSet = {}   -- [BasePart] = true
     local SeenEntities = {}       -- [Instance] = true
+    local KnownWorldHumanoids = {} -- [Humanoid] = true (O(#Humanoids) lookup at any distance)
+    local WorldHumanoidsSeeded = false
     local GlobalWatchConns = {}
 
     local Dirty = false
@@ -5278,6 +5774,60 @@ do
         GlobalWatchConns[2] = Workspace.ChildRemoved:Connect(function()
             TreeDirty = true
         end)
+        GlobalWatchConns[3] = Workspace.DescendantAdded:Connect(function(inst)
+            if WorldHumanoidsSeeded and inst then
+                if inst:IsA("Humanoid") then
+                    KnownWorldHumanoids[inst] = true
+                elseif inst:IsA("Model") then
+                    local h = inst:FindFirstChildOfClass("Humanoid")
+                    if h then KnownWorldHumanoids[h] = true end
+                end
+            end
+        end)
+        GlobalWatchConns[4] = Workspace.DescendantRemoving:Connect(function(inst)
+            if WorldHumanoidsSeeded and inst and KnownWorldHumanoids[inst] then
+                KnownWorldHumanoids[inst] = nil
+            end
+        end)
+    end
+
+    local function EnsureWorldHumanoidRegistry()
+        EnsureGlobalWatchers()
+        if WorldHumanoidsSeeded then return end
+        WorldHumanoidsSeeded = true
+        local ok, desc = pcall(Workspace.GetDescendants, Workspace)
+        if ok and desc then
+            for i = 1, #desc do
+                local inst = desc[i]
+                if inst:IsA("Humanoid") then
+                    KnownWorldHumanoids[inst] = true
+                end
+            end
+        end
+    end
+
+    function WorkspaceTracker.CollectNearbyHumanoidsInto(outList, maxRadius)
+        EnsureWorldHumanoidRegistry()
+        local camPos = Camera and Camera.CFrame.Position
+        if not camPos then return end
+        local myChar = LocalPlayer and LocalPlayer.Character
+        local limitSq = maxRadius * maxRadius
+        for hum in pairs(KnownWorldHumanoids) do
+            if not hum or not hum.Parent or not hum:IsDescendantOf(Workspace) then
+                KnownWorldHumanoids[hum] = nil
+            else
+                local model = hum.Parent
+                if model and model:IsA("Model") and model ~= myChar and not Players:GetPlayerFromCharacter(model) then
+                    local refPart = hum.RootPart or model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart", true)
+                    if refPart then
+                        local delta = refPart.Position - camPos
+                        if (delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z) <= limitSq then
+                            outList[#outList + 1] = hum
+                        end
+                    end
+                end
+            end
+        end
     end
 
     local function RebindPendingContainers()
@@ -5362,7 +5912,7 @@ do
         end
 
         if WorkspaceTracker.AimTabButton then
-            local prefix = WorkspaceTracker.Visible and "📂 Close Workspace Target Browser" or "📁 Open Workspace Target Browser"
+            local prefix = WorkspaceTracker.Visible and "Close Workspace Target Browser" or "Open Workspace Target Browser"
             local suffix = totalSelections > 0 and string.format(" (%d Tracked)", entityCount) or ""
             local btnText = prefix .. suffix
             if btnText ~= LastBtnText then
@@ -5420,8 +5970,12 @@ do
         return WorkspaceTracker.ActiveEntities
     end
 
+    function WorkspaceTracker.ForceRefreshWorldHumanoids()
+        LastWorldHumRefresh = 0
+    end
+
     function WorkspaceTracker.GetWorldHumEntities(now)
-        if not Flags["Aim/TrackWorldHumanoids"] then
+        if not Flags["Aim/TrackWorldHumanoids"] and not Flags["Visuals/HighlightWorldHumanoids"] then
             if #WorkspaceTracker.WorldHumEntities > 0 then
                 table.clear(WorkspaceTracker.WorldHumEntities)
             end
@@ -5431,20 +5985,33 @@ do
         if (now - LastWorldHumRefresh) >= 0.25 then
             LastWorldHumRefresh = now
             table.clear(WorkspaceTracker.WorldHumEntities)
-            local hums = GetNearbyHumanoids()
-            for i = 1, #hums do
-                local hum = hums[i]
-                local model = hum and hum.Parent
-                if model and model:IsA("Model") and hum.Health > 0 and not WorkspaceTracker.IsExcluded(model) then
-                    local fp = FindBestFallbackPart(model, hum)
-                    if fp then
-                        WorkspaceTracker.WorldHumEntities[#WorkspaceTracker.WorldHumEntities + 1] = {
-                            idObj = model,
-                            ignoreObj = model,
-                            hum = hum,
-                            isBasePart = false,
-                            fallbackPart = fp,
-                        }
+            EnsureWorldHumanoidRegistry()
+            local camPos = Camera and Camera.CFrame.Position
+            local maxRadius = Flags["Visuals/WorldHumanoidDistance"] or 500
+            local maxRadiusSq = maxRadius * maxRadius
+            local myChar = LocalPlayer and LocalPlayer.Character
+
+            if camPos then
+                for hum in pairs(KnownWorldHumanoids) do
+                    if not hum or not hum.Parent or not hum:IsDescendantOf(Workspace) then
+                        KnownWorldHumanoids[hum] = nil
+                    else
+                        local model = hum.Parent
+                        if model and model:IsA("Model") and model ~= myChar and hum.Health > 0 and not WorkspaceTracker.IsExcluded(model) and not Players:GetPlayerFromCharacter(model) then
+                            local fp = FindBestFallbackPart(model, hum)
+                            if fp then
+                                local d = fp.Position - camPos
+                                if (d.X * d.X + d.Y * d.Y + d.Z * d.Z) <= maxRadiusSq then
+                                    WorkspaceTracker.WorldHumEntities[#WorkspaceTracker.WorldHumEntities + 1] = {
+                                        idObj = model,
+                                        ignoreObj = model,
+                                        hum = hum,
+                                        isBasePart = false,
+                                        fallbackPart = fp,
+                                    }
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -5490,7 +6057,11 @@ do
         end
 
         CachedTarget = nil
-        RebuildEntities(os.clock())
+        local now = os.clock()
+        RebuildEntities(now)
+        if WorkspaceTracker.UpdateVisualIndicators then
+            WorkspaceTracker.UpdateVisualIndicators(now, true)
+        end
         WorkspaceTracker.RefreshBrowserTree()
     end
 
@@ -5502,7 +6073,11 @@ do
         table.clear(PendingContainers)
         table.clear(ExcludedItems)
         CachedTarget = nil
-        RebuildEntities(os.clock())
+        local now = os.clock()
+        RebuildEntities(now)
+        if WorkspaceTracker.UpdateVisualIndicators then
+            WorkspaceTracker.UpdateVisualIndicators(now, true)
+        end
         WorkspaceTracker.RefreshBrowserTree()
     end
 
@@ -6198,7 +6773,361 @@ do
         end
     end
 
+    local IndicatorObjects = {}   -- [Instance] = { hl, bg, nameLbl, distLbl, lastName, lastDist, kind, isLocked }
+    local VisualCandidates = {}   -- scratch list for distance-sorted Highlight budgeting
+    local VisualSeenSet = {}      -- [Instance] = true
+    local LastIndicatorUpdate = 0
+    local LastLockedVisualObj = nil
+
+    local DEFAULT_WORLD_HUM_COLOR = Color3.fromRGB(80, 220, 255)
+    local DEFAULT_WS_TARGET_COLOR = Color3.fromRGB(115, 245, 160)
+    local COLOR_LOCKED            = Color3.fromRGB(255, 70, 85)
+    local COLOR_LOCKED_ALT        = Color3.fromRGB(255, 225, 75)
+    local COLOR_WHITE             = Color3.new(1, 1, 1)
+
+    local function GetGroupColor(kind)
+        if kind == "Workspace" then
+            local c = Flags["Visuals/WorkspaceTargetColor"]
+            return (typeof(c) == "Color3") and c or DEFAULT_WS_TARGET_COLOR
+        else
+            local c = Flags["Visuals/WorldHumanoidColor"]
+            return (typeof(c) == "Color3") and c or DEFAULT_WORLD_HUM_COLOR
+        end
+    end
+
+    local function GetLockContrastColor(groupColor)
+        if groupColor.R > 0.80 and groupColor.G < 0.42 and groupColor.B < 0.45 then
+            return COLOR_LOCKED_ALT
+        end
+        return COLOR_LOCKED
+    end
+
+    local function DestroyIndicatorEntry(idObj, entry)
+        if not entry then return end
+        if entry.hl then
+            pcall(function() entry.hl:Destroy() end)
+            entry.hl = nil
+        end
+        if entry.bg then
+            pcall(function() entry.bg:Destroy() end)
+            entry.bg = nil
+        end
+        if idObj ~= nil then
+            IndicatorObjects[idObj] = nil
+        end
+    end
+
+    local function ClearAllIndicators()
+        for idObj, entry in pairs(IndicatorObjects) do
+            DestroyIndicatorEntry(idObj, entry)
+        end
+        table.clear(IndicatorObjects)
+        LastLockedVisualObj = nil
+    end
+
+    local function ApplyEntryColorState(entry, isLocked)
+        local groupColor = GetGroupColor(entry.kind)
+        local lockColor = isLocked and GetLockContrastColor(groupColor) or nil
+        local primaryColor = lockColor or groupColor
+        local distColor = lockColor or groupColor:Lerp(COLOR_WHITE, 0.35)
+
+        if entry.hl then
+            if entry.hl.OutlineColor ~= primaryColor then
+                entry.hl.OutlineColor = primaryColor
+            end
+            if entry.hl.FillColor ~= primaryColor then
+                entry.hl.FillColor = primaryColor
+            end
+            local fillTrans = isLocked and 0.80 or 0.92
+            if entry.hl.FillTransparency ~= fillTrans then
+                entry.hl.FillTransparency = fillTrans
+            end
+        end
+
+        if entry.nameLbl and entry.nameLbl.TextColor3 ~= primaryColor then
+            entry.nameLbl.TextColor3 = primaryColor
+        end
+        if entry.distLbl and entry.distLbl.TextColor3 ~= distColor then
+            entry.distLbl.TextColor3 = distColor
+        end
+        entry.isLocked = isLocked
+    end
+
+    function WorkspaceTracker.RefreshIndicatorColors()
+        for _, entry in pairs(IndicatorObjects) do
+            ApplyEntryColorState(entry, entry.isLocked == true)
+        end
+    end
+
+    function WorkspaceTracker.RefreshIndicatorOpacities()
+        local opacity = (Flags["ESP/NametagOpacity"] or 90) / 100
+        local transparency = 1 - opacity
+        for _, entry in pairs(IndicatorObjects) do
+            if entry.nameLbl then
+                entry.nameLbl.TextTransparency = transparency
+                entry.nameLbl.TextStrokeTransparency = transparency
+            end
+            if entry.distLbl then
+                entry.distLbl.TextTransparency = transparency
+                entry.distLbl.TextStrokeTransparency = transparency
+            end
+        end
+    end
+
+    local function GetActiveLockedNonPlayer(now)
+        if Flags["Aim/AimLock"]
+            and not SAFE_MODE
+            and CachedTarget ~= nil
+            and (now - CachedTargetTime) < 0.1
+            and CachedTarget[1] ~= nil
+            and not CachedTarget[1]:IsA("Player")
+        then
+            return CachedTarget[1]
+        end
+        return nil
+    end
+
+    function WorkspaceTracker.UpdateVisualIndicators(now, forceNow)
+        local showWorldHums = Flags["Visuals/HighlightWorldHumanoids"]
+        local showWsTargets = Flags["Visuals/HighlightWorkspaceTargets"]
+        local ghostMode = Flags["Settings/GhostMode"]
+
+        if (not showWorldHums and not showWsTargets) or ghostMode then
+            if next(IndicatorObjects) ~= nil then
+                ClearAllIndicators()
+            end
+            return
+        end
+
+        if not forceNow and (now - LastIndicatorUpdate) < 0.15 then
+            return
+        end
+        LastIndicatorUpdate = now
+
+        local screenGui = EnsureScreenGui()
+        if not screenGui or not Camera then return end
+
+        local camPos = Camera.CFrame.Position
+        local maxDist = Flags["ESP/MaxDistance"] or 10000
+        local maxWorldHumDist = min(Flags["Visuals/WorldHumanoidDistance"] or 500, maxDist)
+        local opacity = (Flags["ESP/NametagOpacity"] or 90) / 100
+        local transparency = 1 - opacity
+        local lockedObj = GetActiveLockedNonPlayer(now)
+        LastLockedVisualObj = lockedObj
+
+        table.clear(VisualCandidates)
+        table.clear(VisualSeenSet)
+
+        local function QueueVisualCandidate(ent, kind, kindMaxDist)
+            local idObj = ent and ent.idObj
+            if not idObj or not idObj.Parent or VisualSeenSet[idObj] then return end
+            local hum = ent.hum
+            if hum and (not hum.Parent or hum.Health <= 0) then return end
+
+            local anchorPart
+            if ent.isBasePart then
+                anchorPart = idObj
+            else
+                local head = idObj:FindFirstChild("Head")
+                if head and head:IsA("BasePart") then
+                    anchorPart = head
+                else
+                    anchorPart = ent.fallbackPart
+                    if not anchorPart or not anchorPart.Parent or not anchorPart:IsDescendantOf(idObj) then
+                        anchorPart = WorkspaceTracker.RefreshFallbackPart(ent)
+                    end
+                end
+            end
+            if not anchorPart or not anchorPart.Parent then return end
+
+            local dist = (anchorPart.Position - camPos).Magnitude
+            if dist > kindMaxDist then return end
+
+            VisualSeenSet[idObj] = true
+            VisualCandidates[#VisualCandidates + 1] = {
+                idObj = idObj,
+                anchorPart = anchorPart,
+                isBasePart = ent.isBasePart,
+                hasHum = (hum ~= nil),
+                dist = dist,
+                kind = kind,
+                isLocked = (idObj == lockedObj),
+            }
+        end
+
+        if showWsTargets then
+            local wsEnts = WorkspaceTracker.GetWorkspaceEntities(now)
+            for i = 1, #wsEnts do
+                QueueVisualCandidate(wsEnts[i], "Workspace", maxDist)
+            end
+        end
+
+        if showWorldHums then
+            local whEnts = WorkspaceTracker.GetWorldHumEntities(now)
+            for i = 1, #whEnts do
+                QueueVisualCandidate(whEnts[i], "WorldHum", maxWorldHumDist)
+            end
+        end
+
+        for idObj, entry in pairs(IndicatorObjects) do
+            if not VisualSeenSet[idObj] or not idObj.Parent then
+                DestroyIndicatorEntry(idObj, entry)
+            end
+        end
+
+        if #VisualCandidates == 0 then
+            return
+        end
+
+        if #VisualCandidates > 1 then
+            table.sort(VisualCandidates, function(a, b)
+                if a.isLocked ~= b.isLocked then
+                    return a.isLocked
+                end
+                return a.dist < b.dist
+            end)
+        end
+
+        local highlightBudget = math.clamp(29 - (ActiveHighlightCount or 0), 8, 28)
+
+        for i = 1, #VisualCandidates do
+            local cand = VisualCandidates[i]
+            local idObj = cand.idObj
+            local anchorPart = cand.anchorPart
+            local allowHighlight = (i <= highlightBudget)
+            local entry = IndicatorObjects[idObj]
+
+            if not entry then
+                entry = {
+                    hl = nil,
+                    bg = nil,
+                    nameLbl = nil,
+                    distLbl = nil,
+                    lastName = nil,
+                    lastDist = -1,
+                    kind = cand.kind,
+                    isLocked = nil,
+                }
+                IndicatorObjects[idObj] = entry
+            else
+                entry.kind = cand.kind
+            end
+
+            if allowHighlight then
+                local hlAdornee = idObj:IsA("PVInstance") and idObj or anchorPart
+                if not entry.hl or not entry.hl.Parent then
+                    if entry.hl then pcall(function() entry.hl:Destroy() end) end
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "Sp3arTargetHighlight"
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.OutlineTransparency = 0
+                    hl.FillTransparency = 0.92
+                    hl.Adornee = hlAdornee
+                    hl.Enabled = true
+                    hl.Parent = screenGui
+                    entry.hl = hl
+                    entry.isLocked = nil
+                else
+                    if entry.hl.Parent ~= screenGui then entry.hl.Parent = screenGui end
+                    if entry.hl.Adornee ~= hlAdornee then entry.hl.Adornee = hlAdornee end
+                    if not entry.hl.Enabled then entry.hl.Enabled = true end
+                end
+            elseif entry.hl then
+                pcall(function() entry.hl:Destroy() end)
+                entry.hl = nil
+            end
+
+            if not entry.bg or not entry.bg.Parent then
+                if entry.bg then pcall(function() entry.bg:Destroy() end) end
+                local bg = Instance.new("BillboardGui")
+                bg.Name = "Sp3arTargetNametag"
+                bg.AlwaysOnTop = true
+                bg.Size = UDim2.fromOffset(200, 38)
+                bg.Adornee = anchorPart
+                bg.Enabled = true
+                bg.Parent = screenGui
+
+                local nameLbl = Instance.new("TextLabel")
+                nameLbl.Name = "NameLabel"
+                nameLbl.Size = UDim2.new(1, 0, 0, 20)
+                nameLbl.Position = UDim2.fromOffset(0, 0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+                nameLbl.TextSize = 13
+                nameLbl.TextTransparency = transparency
+                nameLbl.TextStrokeTransparency = transparency
+                nameLbl.Text = ""
+                nameLbl.Parent = bg
+
+                local distLbl = Instance.new("TextLabel")
+                distLbl.Name = "DistanceLabel"
+                distLbl.Size = UDim2.new(1, 0, 0, 17)
+                distLbl.Position = UDim2.fromOffset(0, 19)
+                distLbl.BackgroundTransparency = 1
+                distLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+                distLbl.TextSize = 12
+                distLbl.TextTransparency = transparency
+                distLbl.TextStrokeTransparency = transparency
+                distLbl.Text = ""
+                distLbl.Parent = bg
+
+                entry.bg = bg
+                entry.nameLbl = nameLbl
+                entry.distLbl = distLbl
+                entry.lastName = nil
+                entry.lastDist = -1
+                entry.isLocked = nil
+            else
+                if entry.bg.Parent ~= screenGui then entry.bg.Parent = screenGui end
+                if entry.bg.Adornee ~= anchorPart then entry.bg.Adornee = anchorPart end
+                if not entry.bg.Enabled then entry.bg.Enabled = true end
+                if entry.nameLbl.TextTransparency ~= transparency then
+                    entry.nameLbl.TextTransparency = transparency
+                    entry.nameLbl.TextStrokeTransparency = transparency
+                    entry.distLbl.TextTransparency = transparency
+                    entry.distLbl.TextStrokeTransparency = transparency
+                end
+            end
+
+            local offsetY = cand.hasHum and 2.4 or math.clamp(anchorPart.Size.Y * 0.5 + 1.6, 1.6, 8.0)
+            local curOffset = entry.bg.StudsOffset
+            if abs(curOffset.Y - offsetY) > 0.1 then
+                entry.bg.StudsOffset = Vector3.new(0, offsetY, 0)
+            end
+
+            local objName = idObj.Name
+            if entry.lastName ~= objName then
+                entry.lastName = objName
+                entry.nameLbl.Text = objName
+            end
+
+            local distRounded = floor(cand.dist + 0.5)
+            if entry.lastDist ~= distRounded then
+                entry.lastDist = distRounded
+                entry.distLbl.Text = distRounded .. " studs"
+            end
+
+            if entry.isLocked ~= cand.isLocked then
+                ApplyEntryColorState(entry, cand.isLocked)
+            end
+        end
+    end
+
     function WorkspaceTracker.SyncLockDot()
+        local now = os.clock()
+        local lockedObj = GetActiveLockedNonPlayer(now)
+        if lockedObj ~= LastLockedVisualObj then
+            local prevEntry = LastLockedVisualObj and IndicatorObjects[LastLockedVisualObj]
+            if prevEntry then
+                ApplyEntryColorState(prevEntry, false)
+            end
+            local nextEntry = lockedObj and IndicatorObjects[lockedObj]
+            if nextEntry then
+                ApplyEntryColorState(nextEntry, true)
+            end
+            LastLockedVisualObj = lockedObj
+        end
+
         if not Flags["Aim/ShowAssistDots"] then
             if NonPlayerLockDot and NonPlayerLockDot.Enabled then
                 NonPlayerLockDot.Enabled = false
@@ -6207,13 +7136,8 @@ do
             return
         end
 
-        local showDot = Flags["Aim/AimLock"]
-            and not SAFE_MODE
+        local showDot = lockedObj ~= nil
             and not Flags["Settings/GhostMode"]
-            and CachedTarget ~= nil
-            and (os.clock() - CachedTargetTime) < 0.1
-            and CachedTarget[1] ~= nil
-            and not CachedTarget[1]:IsA("Player")
             and CachedTarget[3] ~= nil
             and CachedTarget[3].Parent ~= nil
 
@@ -6278,6 +7202,7 @@ do
             UpdateStatusLabels()
         end
 
+        WorkspaceTracker.UpdateVisualIndicators(now, ghostModeChanged)
         WorkspaceTracker.SyncLockDot()
     end
 
@@ -6287,6 +7212,11 @@ do
             DisconnectList(rec.conns)
             ToggledItems[inst] = nil
         end
+        ClearAllIndicators()
+        table.clear(VisualCandidates)
+        table.clear(VisualSeenSet)
+        table.clear(KnownWorldHumanoids)
+        WorldHumanoidsSeeded = false
         table.clear(PendingContainers)
         table.clear(ExcludedItems)
         table.clear(ExpandedNodes)
@@ -11674,6 +12604,9 @@ function UpdateAllNametagOpacities()
             end
         end
     end
+    if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorOpacities then
+        WorkspaceTracker.RefreshIndicatorOpacities()
+    end
 end
 
 local FreecamProxy = {}
@@ -15610,7 +16543,7 @@ UI.CreateToggle(AimTab, "Track Nearby World Humanoids (NPCs / Animals / Mobs)", 
         table.clear(WorkspaceTracker.WorldHumEntities)
     end
 end)
-WorkspaceTracker.AimTabButton = UI.CreateButton(AimTab, "📁 Open Workspace Target Browser", function()
+WorkspaceTracker.AimTabButton = UI.CreateButton(AimTab, "Open Workspace Target Browser", function()
     WorkspaceTracker.ToggleBrowser()
 end)
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
@@ -15815,6 +16748,38 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
         end
         table.clear(PlayerOutlineObjects)
         ActiveHighlightCount = 0
+    end
+end)
+
+UI.CreateSection(VisualsTab, "Non-Player & Workspace Target ESP")
+UI.CreateToggle(VisualsTab, "Highlight Humanoids", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
+    if WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
+        WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
+    end
+end)
+UI.CreateSlider(VisualsTab, "Humanoid Detection Distance", "Visuals/WorldHumanoidDistance", Flags["Visuals/WorldHumanoidDistance"], 25, 5000, 25, "studs", function()
+    if WorkspaceTracker then
+        if WorkspaceTracker.ForceRefreshWorldHumanoids then
+            WorkspaceTracker.ForceRefreshWorldHumanoids()
+        end
+        if WorkspaceTracker.UpdateVisualIndicators then
+            WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
+        end
+    end
+end)
+UI.CreateColorPicker(VisualsTab, "Humanoid Highlight / Label Color", "Visuals/WorldHumanoidColor", Flags["Visuals/WorldHumanoidColor"], function()
+    if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
+        WorkspaceTracker.RefreshIndicatorColors()
+    end
+end)
+UI.CreateToggle(VisualsTab, "Highlight Tracked Workspace Items", "Visuals/HighlightWorkspaceTargets", Flags["Visuals/HighlightWorkspaceTargets"], function()
+    if WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
+        WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
+    end
+end)
+UI.CreateColorPicker(VisualsTab, "Workspace Target Highlight / Label Color", "Visuals/WorkspaceTargetColor", Flags["Visuals/WorkspaceTargetColor"], function()
+    if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
+        WorkspaceTracker.RefreshIndicatorColors()
     end
 end)
 
