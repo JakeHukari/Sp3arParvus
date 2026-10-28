@@ -131,8 +131,8 @@ local Flags = {
     ["Visuals/HighlightWorldHumanoids"] = false,
     ["Visuals/HighlightWorkspaceTargets"] = false,
     ["Visuals/WorldHumanoidDistance"] = 2500,
-    ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(80, 220, 255),
-    ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(115, 245, 160),
+    ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(252, 149, 175),
+    ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(80, 220, 255),
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
     -- Fullbright modifiers
@@ -4728,9 +4728,9 @@ function UI.CreateColorPicker(page, text, flag, defaultColor, callback)
     HexInput.Parent = HexInputFrame
 
     local presets = {
+        Color3.fromRGB(252, 149, 175),
         Color3.fromRGB(80, 220, 255),
         Color3.fromRGB(115, 245, 160),
-        Color3.fromRGB(252, 149, 175),
         Color3.fromRGB(255, 205, 70),
         Color3.fromRGB(185, 115, 255),
         Color3.fromRGB(255, 255, 255),
@@ -6782,10 +6782,9 @@ do
     local LastIndicatorUpdate = 0
     local LastLockedVisualObj = nil
 
-    local DEFAULT_WORLD_HUM_COLOR = Color3.fromRGB(80, 220, 255)
-    local DEFAULT_WS_TARGET_COLOR = Color3.fromRGB(115, 245, 160)
-    local COLOR_LOCKED            = Color3.fromRGB(255, 70, 85)
-    local COLOR_LOCKED_ALT        = Color3.fromRGB(255, 225, 75)
+    local DEFAULT_WORLD_HUM_COLOR = UI_THEME.Accent -- Color3.fromRGB(252, 149, 175)
+    local DEFAULT_WS_TARGET_COLOR = Color3.fromRGB(80, 220, 255)
+    local COLOR_LOCKED            = Color3.fromRGB(45, 245, 105)
     local COLOR_WHITE             = Color3.new(1, 1, 1)
 
     local function GetGroupColor(kind)
@@ -6796,13 +6795,6 @@ do
             local c = Flags["Visuals/WorldHumanoidColor"]
             return (typeof(c) == "Color3") and c or DEFAULT_WORLD_HUM_COLOR
         end
-    end
-
-    local function GetLockContrastColor(groupColor)
-        if groupColor.R > 0.80 and groupColor.G < 0.42 and groupColor.B < 0.45 then
-            return COLOR_LOCKED_ALT
-        end
-        return COLOR_LOCKED
     end
 
     local function DestroyIndicatorEntry(idObj, entry)
@@ -6830,7 +6822,7 @@ do
 
     local function ApplyEntryColorState(entry, isLocked)
         local groupColor = GetGroupColor(entry.kind)
-        local lockColor = isLocked and GetLockContrastColor(groupColor) or nil
+        local lockColor = isLocked and COLOR_LOCKED or nil
         local primaryColor = lockColor or groupColor
         local distColor = lockColor or groupColor:Lerp(COLOR_WHITE, 0.35)
 
@@ -16777,7 +16769,7 @@ UI.CreateSlider(VisualsTab, "Humanoid Detection Distance", "Visuals/WorldHumanoi
         end
     end
 end)
-UI.CreateColorPicker(VisualsTab, "Humanoid Highlight / Label Color", "Visuals/WorldHumanoidColor", Flags["Visuals/WorldHumanoidColor"], function()
+UI.CreateColorPicker(VisualsTab, "Humanoid Highlight / Label Color", "Visuals/WorldHumanoidColor", DEFAULT_FLAGS["Visuals/WorldHumanoidColor"], function()
     if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
         WorkspaceTracker.RefreshIndicatorColors()
     end
@@ -16787,7 +16779,7 @@ UI.CreateToggle(VisualsTab, "Highlight Tracked Workspace Items", "Visuals/Highli
         WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
     end
 end)
-UI.CreateColorPicker(VisualsTab, "Workspace Target Highlight / Label Color", "Visuals/WorkspaceTargetColor", Flags["Visuals/WorkspaceTargetColor"], function()
+UI.CreateColorPicker(VisualsTab, "Workspace Target Highlight / Label Color", "Visuals/WorkspaceTargetColor", DEFAULT_FLAGS["Visuals/WorkspaceTargetColor"], function()
     if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorColors then
         WorkspaceTracker.RefreshIndicatorColors()
     end
