@@ -14036,6 +14036,7 @@ CreateClosestPlayerTracker()
 
 local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
+local WorldLightingTab = UI.CreateTab("WorldLighting")
 local HumanoidTab = UI.CreateTab("Humanoid")
 WorldHumState.Page = UI.CreateTab("WorldHumanoids")
 local PlayerPage = UI.CreateTab("PlayerPage")
@@ -16825,16 +16826,40 @@ UI.CreateNumericInput(VisualsTab, "UI Scale", "Visuals/UIScale", Flags["Visuals/
     end
 end)
 
+UI.CreateSection(VisualsTab, "Closest Player Panel Settings")
+UI.CreateToggle(VisualsTab, "Show Display Name", "LocalUI/ClosestPlayer/ShowDisplayName", Flags["LocalUI/ClosestPlayer/ShowDisplayName"], function(state)
+    UpdateClosestPlayerTracker()
+end)
+UI.CreateToggle(VisualsTab, "Show Username", "LocalUI/ClosestPlayer/ShowUsername", Flags["LocalUI/ClosestPlayer/ShowUsername"], function(state)
+    UpdateClosestPlayerTracker()
+end)
+UI.CreateToggle(VisualsTab, "Show Distance", "LocalUI/ClosestPlayer/ShowDistance", Flags["LocalUI/ClosestPlayer/ShowDistance"], function(state)
+    UpdateClosestPlayerTracker()
+end)
+UI.CreateToggle(VisualsTab, "Show Health", "LocalUI/ClosestPlayer/ShowHealth", Flags["LocalUI/ClosestPlayer/ShowHealth"], function(state)
+    UpdateClosestPlayerTracker()
+end)
+UI.CreateToggle(VisualsTab, "Show Equipped Item", "LocalUI/ClosestPlayer/ShowEquipped", Flags["LocalUI/ClosestPlayer/ShowEquipped"], function(state)
+    UpdateClosestPlayerTracker()
+end)
+
+UI.CreateSection(VisualsTab, "Waypoints Settings(Ctrl+Middle Mouse Button)")
+UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
+    RefreshWaypointUI()
+end)
+
+
+-- WorldLighting Tab ──────────────────────────────────────────────────────────
 -- Fullbright & FullDark Toggles ──────────────────────────────────────────
-UI.CreateSection(VisualsTab, "Fullbright / FullDark")
-UI.CreateToggle(VisualsTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
+UI.CreateSection(WorldLightingTab, "Fullbright / FullDark")
+UI.CreateToggle(WorldLightingTab, "Fullbright (Ctrl+F)", "Visuals/Fullbright", Flags["Visuals/Fullbright"], function(state)
     if state then
         Flags["Visuals/FullDark"] = false
         local updater = UIState.Updaters["Visuals/FullDark"]
         if updater then updater(false) end
     end
 end)
-UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
+UI.CreateToggle(WorldLightingTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visuals/FullDark"], function(state)
     if state then
         Flags["Visuals/Fullbright"] = false
         local updater = UIState.Updaters["Visuals/Fullbright"]
@@ -16843,59 +16868,59 @@ UI.CreateToggle(VisualsTab, "FullDark (Ctrl+N)", "Visuals/FullDark", Flags["Visu
 end)
 
 -- Fullbright Modifier Settings ────────────────────────────────────────────
-UI.CreateSection(VisualsTab, "Fullbright Settings")
-UI.CreateNumericInput(VisualsTab, "FB: Time of Day (0-24)", "Visuals/Fullbright/ClockTime",
+UI.CreateSection(WorldLightingTab, "Fullbright Settings")
+UI.CreateNumericInput(WorldLightingTab, "FB: Time of Day (0-24)", "Visuals/Fullbright/ClockTime",
     Flags["Visuals/Fullbright/ClockTime"], 0, 23.99, 0.25, "h", nil)
-UI.CreateNumericInput(VisualsTab, "FB: Brightness", "Visuals/Fullbright/Brightness",
+UI.CreateNumericInput(WorldLightingTab, "FB: Brightness", "Visuals/Fullbright/Brightness",
     Flags["Visuals/Fullbright/Brightness"], 0, 10, 0.1, "", nil)
-UI.CreateToggle(VisualsTab, "FB: Set Exposure", "Visuals/Fullbright/SetExposure",
+UI.CreateToggle(WorldLightingTab, "FB: Set Exposure", "Visuals/Fullbright/SetExposure",
     Flags["Visuals/Fullbright/SetExposure"], nil)
-UI.CreateNumericInput(VisualsTab, "FB: Exposure Compensation", "Visuals/Fullbright/ExposureCompensation",
+UI.CreateNumericInput(WorldLightingTab, "FB: Exposure Compensation", "Visuals/Fullbright/ExposureCompensation",
     Flags["Visuals/Fullbright/ExposureCompensation"], -5, 5, 0.1, "", nil)
-UI.CreateToggle(VisualsTab, "FB: Remove Fog", "Visuals/Fullbright/RemoveFog",
+UI.CreateToggle(WorldLightingTab, "FB: Remove Fog", "Visuals/Fullbright/RemoveFog",
     Flags["Visuals/Fullbright/RemoveFog"], nil)
-UI.CreateNumericInput(VisualsTab, "FB: Fog Far Distance", "Visuals/Fullbright/FogEnd",
+UI.CreateNumericInput(WorldLightingTab, "FB: Fog Far Distance", "Visuals/Fullbright/FogEnd",
     Flags["Visuals/Fullbright/FogEnd"], 0, 1000000, 1000, "m", nil)
-UI.CreateNumericInput(VisualsTab, "FB: Fog Near Distance", "Visuals/Fullbright/FogStart",
+UI.CreateNumericInput(WorldLightingTab, "FB: Fog Near Distance", "Visuals/Fullbright/FogStart",
     Flags["Visuals/Fullbright/FogStart"], 0, 100000, 100, "m", nil)
-UI.CreateToggle(VisualsTab, "FB: Remove Shadows", "Visuals/Fullbright/RemoveShadows",
+UI.CreateToggle(WorldLightingTab, "FB: Remove Shadows", "Visuals/Fullbright/RemoveShadows",
     Flags["Visuals/Fullbright/RemoveShadows"], nil)
-UI.CreateToggle(VisualsTab, "FB: White Ambient Light", "Visuals/Fullbright/WhiteAmbient",
+UI.CreateToggle(WorldLightingTab, "FB: White Ambient Light", "Visuals/Fullbright/WhiteAmbient",
     Flags["Visuals/Fullbright/WhiteAmbient"], nil)
-UI.CreateToggle(VisualsTab, "FB: Remove Atmosphere", "Visuals/Fullbright/RemoveAtmosphere",
+UI.CreateToggle(WorldLightingTab, "FB: Remove Atmosphere", "Visuals/Fullbright/RemoveAtmosphere",
     Flags["Visuals/Fullbright/RemoveAtmosphere"], nil)
-UI.CreateNumericInput(VisualsTab, "FB: Sky Haze", "Visuals/Fullbright/SkyHaze",
+UI.CreateNumericInput(WorldLightingTab, "FB: Sky Haze", "Visuals/Fullbright/SkyHaze",
     Flags["Visuals/Fullbright/SkyHaze"], 0, 10, 0.1, "", nil)
-UI.CreateNumericInput(VisualsTab, "FB: Sky Glare", "Visuals/Fullbright/SkyGlare",
+UI.CreateNumericInput(WorldLightingTab, "FB: Sky Glare", "Visuals/Fullbright/SkyGlare",
     Flags["Visuals/Fullbright/SkyGlare"], 0, 10, 0.1, "", nil)
 
 -- FullDark Modifier Settings ───────────────────────────────────────────────
-UI.CreateSection(VisualsTab, "FullDark Settings")
-UI.CreateNumericInput(VisualsTab, "FD: Time of Day (0-24)", "Visuals/FullDark/ClockTime",
+UI.CreateSection(WorldLightingTab, "FullDark Settings")
+UI.CreateNumericInput(WorldLightingTab, "FD: Time of Day (0-24)", "Visuals/FullDark/ClockTime",
     Flags["Visuals/FullDark/ClockTime"], 0, 23.99, 0.25, "h", nil)
-UI.CreateNumericInput(VisualsTab, "FD: Brightness", "Visuals/FullDark/Brightness",
+UI.CreateNumericInput(WorldLightingTab, "FD: Brightness", "Visuals/FullDark/Brightness",
     Flags["Visuals/FullDark/Brightness"], 0, 10, 0.1, "", nil)
-UI.CreateToggle(VisualsTab, "FD: Set Exposure", "Visuals/FullDark/SetExposure",
+UI.CreateToggle(WorldLightingTab, "FD: Set Exposure", "Visuals/FullDark/SetExposure",
     Flags["Visuals/FullDark/SetExposure"], nil)
-UI.CreateNumericInput(VisualsTab, "FD: Exposure Compensation", "Visuals/FullDark/ExposureCompensation",
+UI.CreateNumericInput(WorldLightingTab, "FD: Exposure Compensation", "Visuals/FullDark/ExposureCompensation",
     Flags["Visuals/FullDark/ExposureCompensation"], -5, 5, 0.1, "", nil)
-UI.CreateToggle(VisualsTab, "FD: Black Ambient Light", "Visuals/FullDark/BlackAmbient",
+UI.CreateToggle(WorldLightingTab, "FD: Black Ambient Light", "Visuals/FullDark/BlackAmbient",
     Flags["Visuals/FullDark/BlackAmbient"], nil)
-UI.CreateToggle(VisualsTab, "FD: Enable Shadows", "Visuals/FullDark/SetShadows",
+UI.CreateToggle(WorldLightingTab, "FD: Enable Shadows", "Visuals/FullDark/SetShadows",
     Flags["Visuals/FullDark/SetShadows"], nil)
-UI.CreateToggle(VisualsTab, "FD: Apply Fog", "Visuals/FullDark/SetFog",
+UI.CreateToggle(WorldLightingTab, "FD: Apply Fog", "Visuals/FullDark/SetFog",
     Flags["Visuals/FullDark/SetFog"], nil)
-UI.CreateNumericInput(VisualsTab, "FD: Fog Far Distance", "Visuals/FullDark/FogEnd",
+UI.CreateNumericInput(WorldLightingTab, "FD: Fog Far Distance", "Visuals/FullDark/FogEnd",
     Flags["Visuals/FullDark/FogEnd"], 0, 1000000, 100, "m", nil)
-UI.CreateNumericInput(VisualsTab, "FD: Fog Near Distance", "Visuals/FullDark/FogStart",
+UI.CreateNumericInput(WorldLightingTab, "FD: Fog Near Distance", "Visuals/FullDark/FogStart",
     Flags["Visuals/FullDark/FogStart"], 0, 100000, 10, "m", nil)
-UI.CreateToggle(VisualsTab, "FD: Apply Atmosphere", "Visuals/FullDark/SetAtmosphere",
+UI.CreateToggle(WorldLightingTab, "FD: Apply Atmosphere", "Visuals/FullDark/SetAtmosphere",
     Flags["Visuals/FullDark/SetAtmosphere"], nil)
-UI.CreateNumericInput(VisualsTab, "FD: Atmosphere Density", "Visuals/FullDark/AtmosphereDensity",
+UI.CreateNumericInput(WorldLightingTab, "FD: Atmosphere Density", "Visuals/FullDark/AtmosphereDensity",
     Flags["Visuals/FullDark/AtmosphereDensity"], 0, 1, 0.05, "", nil)
-UI.CreateNumericInput(VisualsTab, "FD: Sky Haze", "Visuals/FullDark/SkyHaze",
+UI.CreateNumericInput(WorldLightingTab, "FD: Sky Haze", "Visuals/FullDark/SkyHaze",
     Flags["Visuals/FullDark/SkyHaze"], 0, 10, 0.1, "", nil)
-UI.CreateNumericInput(VisualsTab, "FD: Sky Glare", "Visuals/FullDark/SkyGlare",
+UI.CreateNumericInput(WorldLightingTab, "FD: Sky Glare", "Visuals/FullDark/SkyGlare",
     Flags["Visuals/FullDark/SkyGlare"], 0, 10, 0.1, "", nil)
 
 -- Current World Lighting Live Editor ──────────────────────────────────────
@@ -16908,7 +16933,7 @@ do
     -- setter(v) -> applies v to the world immediately
     local function MakeLiveLightingNumeric(labelText, key, getter, setter, minV, maxV, stepV, unit)
         local currentVal = math.clamp(tonumber(getter()) or 0, minV, maxV)
-        UI.CreateNumericInput(VisualsTab, labelText, "LiveLight/" .. key, currentVal, minV, maxV, stepV, unit,
+        UI.CreateNumericInput(WorldLightingTab, labelText, "LiveLight/" .. key, currentVal, minV, maxV, stepV, unit,
             function(val)
                 pcall(setter, val)
             end
@@ -16923,7 +16948,7 @@ do
     -- Helper: create a toggle that reads/writes a boolean property on Services.Lighting
     local function MakeLiveLightingToggle(labelText, key, getter, setter)
         local currentVal = getter()
-        UI.CreateToggle(VisualsTab, labelText, "LiveLight/" .. key, currentVal,
+        UI.CreateToggle(WorldLightingTab, labelText, "LiveLight/" .. key, currentVal,
             function(val)
                 pcall(setter, val)
             end
@@ -16935,10 +16960,10 @@ do
         end
     end
 
-    UI.CreateSection(VisualsTab, "Current World Lighting")
+    UI.CreateSection(WorldLightingTab, "Current World Lighting")
 
     -- Refresh button — re-reads all live lighting values from the world and updates every input
-    UI.CreateButton(VisualsTab, "⟳  Refresh Values from World", function()
+    UI.CreateButton(WorldLightingTab, "⟳  Refresh Values from World", function()
         for _, fn in pairs(LiveLightingUpdaters) do
             pcall(fn)
         end
@@ -16961,7 +16986,7 @@ do
         -5, 5, 0.1, "")
 
     -- Ambient ────────────────────────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Ambient (RGB 0–255)")
+    UI.CreateSection(WorldLightingTab, "World Ambient (RGB 0–255)")
     MakeLiveLightingNumeric("Ambient  R", "Ambient_R",
         function() return math.floor(Services.Lighting.Ambient.R * 255 + 0.5) end,
         function(v)
@@ -16981,7 +17006,7 @@ do
             Services.Lighting.Ambient = Color3.fromRGB(math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), v)
         end, 0, 255, 1, "")
 
-    UI.CreateSection(VisualsTab, "World Outdoor Ambient (RGB 0–255)")
+    UI.CreateSection(WorldLightingTab, "World Outdoor Ambient (RGB 0–255)")
     MakeLiveLightingNumeric("Outdoor Ambient  R", "OutdoorAmbient_R",
         function() return math.floor(Services.Lighting.OutdoorAmbient.R * 255 + 0.5) end,
         function(v)
@@ -17002,7 +17027,7 @@ do
         end, 0, 255, 1, "")
 
     -- Shadows ────────────────────────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Shadows & Fog")
+    UI.CreateSection(WorldLightingTab, "World Shadows & Fog")
     MakeLiveLightingToggle("Global Shadows", "GlobalShadows",
         function() return Services.Lighting.GlobalShadows end,
         function(v) Services.Lighting.GlobalShadows = v end)
@@ -17018,7 +17043,7 @@ do
         function(v) Services.Lighting.FogEnd = v end,
         0, 1000000, 1000, "m")
 
-    UI.CreateSection(VisualsTab, "World Fog Color (RGB 0–255)")
+    UI.CreateSection(WorldLightingTab, "World Fog Color (RGB 0–255)")
     MakeLiveLightingNumeric("Fog Color  R", "FogColor_R",
         function() return math.floor(Services.Lighting.FogColor.R * 255 + 0.5) end,
         function(v)
@@ -17039,7 +17064,7 @@ do
         end, 0, 255, 1, "")
 
     -- Atmosphere (if present) ────────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Atmosphere")
+    UI.CreateSection(WorldLightingTab, "World Atmosphere")
     MakeLiveLightingNumeric("Atmo Density", "Atmo_Density",
         function()
             local a = Services.Lighting:FindFirstChildOfClass("Atmosphere")
@@ -17120,7 +17145,7 @@ do
         end, 0, 255, 1, "")
 
     -- Bloom (if present) ─────────────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Bloom Effect")
+    UI.CreateSection(WorldLightingTab, "World Bloom Effect")
     MakeLiveLightingNumeric("Bloom Intensity", "Bloom_Intensity",
         function()
             local b = Services.Lighting:FindFirstChildOfClass("BloomEffect")
@@ -17152,7 +17177,7 @@ do
         end, 0, 1, 0.01, "")
 
     -- ColorCorrection (if present) ───────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Color Correction")
+    UI.CreateSection(WorldLightingTab, "World Color Correction")
     MakeLiveLightingNumeric("CC Brightness", "CC_Brightness",
         function()
             local cc = Services.Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
@@ -17184,7 +17209,7 @@ do
         end, -1, 1, 0.01, "")
 
     -- SunRays (if present) ───────────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Sun Rays")
+    UI.CreateSection(WorldLightingTab, "World Sun Rays")
     MakeLiveLightingNumeric("SunRays Intensity", "SunRays_Intensity",
         function()
             local sr = Services.Lighting:FindFirstChildOfClass("SunRaysEffect")
@@ -17206,7 +17231,7 @@ do
         end, 0, 1, 0.01, "")
 
     -- DepthOfField (if present) ──────────────────────────────────────────
-    UI.CreateSection(VisualsTab, "World Depth of Field")
+    UI.CreateSection(WorldLightingTab, "World Depth of Field")
     MakeLiveLightingNumeric("DOF Far Intensity", "DOF_FarIntensity",
         function()
             local d = Services.Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
@@ -17247,28 +17272,6 @@ do
             if d then d.InFocusRadius = v end
         end, 0, 1000, 1, "m")
 end
-
-UI.CreateSection(VisualsTab, "Closest Player Panel Settings")
-UI.CreateToggle(VisualsTab, "Show Display Name", "LocalUI/ClosestPlayer/ShowDisplayName", Flags["LocalUI/ClosestPlayer/ShowDisplayName"], function(state)
-    UpdateClosestPlayerTracker()
-end)
-UI.CreateToggle(VisualsTab, "Show Username", "LocalUI/ClosestPlayer/ShowUsername", Flags["LocalUI/ClosestPlayer/ShowUsername"], function(state)
-    UpdateClosestPlayerTracker()
-end)
-UI.CreateToggle(VisualsTab, "Show Distance", "LocalUI/ClosestPlayer/ShowDistance", Flags["LocalUI/ClosestPlayer/ShowDistance"], function(state)
-    UpdateClosestPlayerTracker()
-end)
-UI.CreateToggle(VisualsTab, "Show Health", "LocalUI/ClosestPlayer/ShowHealth", Flags["LocalUI/ClosestPlayer/ShowHealth"], function(state)
-    UpdateClosestPlayerTracker()
-end)
-UI.CreateToggle(VisualsTab, "Show Equipped Item", "LocalUI/ClosestPlayer/ShowEquipped", Flags["LocalUI/ClosestPlayer/ShowEquipped"], function(state)
-    UpdateClosestPlayerTracker()
-end)
-
-UI.CreateSection(VisualsTab, "Waypoints Settings(Ctrl+Middle Mouse Button)")
-UI.CreateToggle(VisualsTab, "Enable Waypoints", "Waypoints/Enabled", Flags["Waypoints/Enabled"], function(state)
-    RefreshWaypointUI()
-end)
 
 -- Assign the module-level _updateHum upvalue (forward-declared at the top of the file).
 -- ConfigManager.LoadProfile references it by upvalue, so it must NOT be local here.
