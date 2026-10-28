@@ -92,6 +92,7 @@ local Flags = {
     ["Aim/FOV/Radius"] = 50,
     ["Aim/FOV/ShowCircle"] = true,
     ["Aim/HumanoidAreaLock"] = true,
+    ["Aim/TrackWorldHumanoids"] = false,
     ["Aim/Priority"] = "Head",
     ["Aim/TargetBlacklistedThroughTerrain"] = true,
     ["Aim/BypassBlacklistPriorityIfOccludedOrFar"] = false,
@@ -180,10 +181,11 @@ local Flags = {
 }
 
 if SAFE_MODE then
-    Flags["Aim/AimLock"]        = false
-    Flags["Aim/AlwaysEnabled"]  = false
-    Flags["ShootBot/Enabled"]   = false
-    Flags["Misc/QTeleport"]     = false
+    Flags["Aim/AimLock"]             = false
+    Flags["Aim/AlwaysEnabled"]       = false
+    Flags["Aim/TrackWorldHumanoids"] = false
+    Flags["ShootBot/Enabled"]        = false
+    Flags["Misc/QTeleport"]          = false
 end
 
 -- ╔══════════════════════════════════════════════════════════════════╗
@@ -1839,12 +1841,17 @@ function GetNearbyHumanoids()
     for i = 1, #parts do
         local part = parts[i]
         local model = part:FindFirstAncestorOfClass("Model")
-        if model and model ~= myChar and not _nearbySeen[model] then
+        while model and model ~= myChar do
+            if _nearbySeen[model] then break end
             _nearbySeen[model] = true
             local hum = model:FindFirstChildOfClass("Humanoid")
-            if hum and not Players:GetPlayerFromCharacter(model) then
-                _nearbyHumanoids[#_nearbyHumanoids + 1] = hum
+            if hum then
+                if not Players:GetPlayerFromCharacter(model) then
+                    _nearbyHumanoids[#_nearbyHumanoids + 1] = hum
+                end
+                break
             end
+            model = model:FindFirstAncestorOfClass("Model")
         end
     end
 
@@ -4407,6 +4414,8 @@ function UI.CreateButton(page, text, callback)
         TweenService:Create(Button, TWEENS.INSTANT, {Size = UDim2.new(1, 0, 0, 36)}):Play()
         if callback then callback() end
     end))
+
+    return Button
 end
 
 function GetPing()
@@ -4946,11 +4955,1367 @@ function ObjectOccluded(Enabled, Origin, Position, Object)
     OcclusionFilter[2] = Object
     local hit = Raycast(Origin, Position - Origin, OcclusionFilter)
 
-    if hit and hit.Instance and not hit.Instance:IsDescendantOf(Object) then
+    if hit and hit.Instance and hit.Instance ~= Object and not hit.Instance:IsDescendantOf(Object) then
         return true
     end
 
     return false
+end
+
+WorkspaceTracker = {
+    Visible = false,
+    MainFrame = nil,
+    AimTabButton = nil,
+    ActiveEntities = {},
+    ActiveEntitySet = {},
+    WorldHumEntities = {},
+}
+
+do
+    local ToggledItems = {}       -- [Instance] = record
+    local PendingContainers = {}  -- [pathKey] = record (auto-rebinds if a toggled folder is recreated)
+    local ExcludedItems = {}      -- [Instance] = true (excludes specific child items inside a toggled folder)
+    local ExpandedNodes = {}      -- [Instance] = true
+    local FolderPageLimits = {}   -- [Instance] = maxRows
+    local WaypointPartsSet = {}   -- [BasePart] = true
+    local SeenEntities = {}       -- [Instance] = true
+    local GlobalWatchConns = {}
+
+    local Dirty = false
+    local TreeDirty = false
+    local LastRebuildClock = 0
+    local LastPeriodicReconcile = 0
+    local LastWorldHumRefresh = 0
+    local LastTreeRenderClock = 0
+    local LastStatusText = ""
+    local LastBtnText = ""
+
+    local FilterMode = "All"      -- "All" | "Containers" | "Active"
+    local SearchText = ""
+    local DEFAULT_PAGE_LIMIT = 150
+    local MAX_SEARCH_RESULTS = 150
+
+    local HeaderBadgeLabel = nil
+    local TreeScrollFrame = nil
+    local TreeLayout = nil
+    local SearchBox = nil
+    local ClearSearchBtn = nil
+    local FilterButtons = {}
+    local NonPlayerLockDot = nil
+
+    local function DisconnectList(list)
+        if not list then return end
+        for i = 1, #list do
+            local c = list[i]
+            if c then pcall(function() c:Disconnect() end) end
+            list[i] = nil
+        end
+    end
+
+    local function RefreshWaypointSet()
+        table.clear(WaypointPartsSet)
+        if ActiveWaypoints then
+            for _, wp in pairs(ActiveWaypoints) do
+                if wp and wp.Part then
+                    WaypointPartsSet[wp.Part] = true
+                end
+            end
+        end
+    end
+
+    local function IsSystemOrPlayerIgnored(inst)
+        if not inst then return true end
+        if inst == Camera or (Camera and inst:IsDescendantOf(Camera)) then return true end
+        if inst:IsA("Terrain") or inst:IsA("Highlight") or inst:IsA("BillboardGui") then return true end
+        local myChar = LocalPlayer and LocalPlayer.Character
+        if myChar and (inst == myChar or inst:IsDescendantOf(myChar)) then return true end
+        if WaypointPartsSet[inst] then return true end
+        if inst:IsA("Model") and Players:GetPlayerFromCharacter(inst) ~= nil then return true end
+        local ancModel = inst:FindFirstAncestorOfClass("Model")
+        while ancModel do
+            if ancModel == myChar or Players:GetPlayerFromCharacter(ancModel) ~= nil then
+                return true
+            end
+            ancModel = ancModel:FindFirstAncestorOfClass("Model")
+        end
+        return false
+    end
+
+    local function IsBrowsableClass(inst, containersOnly)
+        if not inst then return false end
+        if inst:IsA("Folder") or inst:IsA("Configuration") or inst:IsA("WorldModel") then
+            return true
+        end
+        if inst:IsA("Model") then
+            return true
+        end
+        if containersOnly then
+            return false
+        end
+        return inst:IsA("BasePart") or inst:IsA("Tool") or inst:IsA("Accessory") or inst:IsA("Accoutrement")
+    end
+
+    local function IsPureContainer(inst)
+        if not inst then return false end
+        if inst:IsA("Folder") or inst:IsA("Configuration") or inst:IsA("WorldModel") then
+            return true
+        end
+        if inst:IsA("Model") then
+            if inst:FindFirstChildOfClass("Humanoid") or inst:FindFirstChildOfClass("AnimationController") then
+                return false
+            end
+            local hasDirectPart = false
+            local hasChildModel = false
+            local ok, children = pcall(inst.GetChildren, inst)
+            if ok and children then
+                for i = 1, #children do
+                    local ch = children[i]
+                    if ch:IsA("Folder") or ch:IsA("Configuration") or ch:IsA("WorldModel") then
+                        return true
+                    elseif ch:IsA("Model") then
+                        hasChildModel = true
+                        if ch:FindFirstChildOfClass("Humanoid") or ch:FindFirstChildOfClass("AnimationController") then
+                            return true
+                        end
+                    elseif ch:IsA("BasePart") then
+                        hasDirectPart = true
+                    end
+                end
+            end
+            if not hasDirectPart and hasChildModel then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function GetRelativePathInfo(inst)
+        local segs = {}
+        local cur = inst
+        while cur and cur ~= Workspace and cur ~= game do
+            table.insert(segs, 1, cur.Name)
+            cur = cur.Parent
+        end
+        if cur ~= Workspace or #segs == 0 then
+            return nil, nil, inst and inst.Name or "?"
+        end
+        return segs, table.concat(segs, "\30"), table.concat(segs, " / ")
+    end
+
+    local function FindBestFallbackPart(entityInst, hum)
+        if not entityInst then return nil end
+        if entityInst:IsA("BasePart") then return entityInst end
+
+        local head = entityInst:FindFirstChild("Head")
+        if head and head:IsA("BasePart") then return head end
+
+        local root = (hum and hum.RootPart) or entityInst:FindFirstChild("HumanoidRootPart")
+        if root and root:IsA("BasePart") then return root end
+
+        if entityInst:IsA("Model") and entityInst.PrimaryPart then
+            return entityInst.PrimaryPart
+        end
+
+        local torso = entityInst:FindFirstChild("UpperTorso") or entityInst:FindFirstChild("Torso") or entityInst:FindFirstChild("Handle")
+        if torso and torso:IsA("BasePart") then return torso end
+
+        local deepHead = entityInst:FindFirstChild("Head", true)
+        if deepHead and deepHead:IsA("BasePart") then return deepHead end
+
+        local deepRoot = entityInst:FindFirstChild("HumanoidRootPart", true)
+        if deepRoot and deepRoot:IsA("BasePart") then return deepRoot end
+
+        local anyPart = nil
+        local ok, desc = pcall(entityInst.GetDescendants, entityInst)
+        if ok and desc then
+            for i = 1, #desc do
+                local d = desc[i]
+                if d:IsA("BasePart") then
+                    if not anyPart then anyPart = d end
+                    if d.Transparency < 1 then
+                        return d
+                    end
+                end
+            end
+        end
+        return anyPart
+    end
+
+    function WorkspaceTracker.RefreshFallbackPart(ent)
+        if not ent or not ent.idObj or not ent.idObj.Parent then return nil end
+        if ent.isBasePart then
+            ent.fallbackPart = ent.idObj
+            return ent.idObj
+        end
+        if not ent.hum or not ent.hum.Parent then
+            ent.hum = ent.idObj:FindFirstChildOfClass("Humanoid")
+        end
+        local fp = FindBestFallbackPart(ent.idObj, ent.hum)
+        ent.fallbackPart = fp
+        return fp
+    end
+
+    local function IsCoveredByToggledAncestor(inst)
+        local cur = inst and inst.Parent
+        while cur and cur ~= Workspace and cur ~= game do
+            if ToggledItems[cur] then
+                return true
+            end
+            cur = cur.Parent
+        end
+        return false
+    end
+
+    local function IsExcludedOrAncestorExcluded(inst)
+        local cur = inst
+        while cur and cur ~= Workspace and cur ~= game do
+            if ExcludedItems[cur] then
+                return true
+            end
+            if ToggledItems[cur] then
+                return false
+            end
+            cur = cur.Parent
+        end
+        return false
+    end
+
+    function WorkspaceTracker.IsExcluded(inst)
+        return ExcludedItems[inst] == true or IsExcludedOrAncestorExcluded(inst)
+    end
+
+    local function AddResolvedEntity(idObj, ignoreObj, isBasePart)
+        if not idObj or SeenEntities[idObj] then return end
+        SeenEntities[idObj] = true
+
+        local hum = (not isBasePart) and idObj:FindFirstChildOfClass("Humanoid") or nil
+        local fallbackPart = isBasePart and idObj or FindBestFallbackPart(idObj, hum)
+        if not fallbackPart then return end
+
+        local ent = {
+            idObj = idObj,
+            ignoreObj = ignoreObj,
+            hum = hum,
+            isBasePart = isBasePart,
+            fallbackPart = fallbackPart,
+        }
+        WorkspaceTracker.ActiveEntities[#WorkspaceTracker.ActiveEntities + 1] = ent
+        WorkspaceTracker.ActiveEntitySet[idObj] = ent
+    end
+
+    local function CollectFromInstance(node, isDirectToggle, depth)
+        if depth > 16 or not node or not node.Parent then return end
+        if not isDirectToggle and ExcludedItems[node] then return end
+        if IsSystemOrPlayerIgnored(node) then return end
+
+        if node:IsA("BasePart") then
+            AddResolvedEntity(node, node, true)
+            return
+        end
+
+        if node:IsA("Tool") or node:IsA("Accessory") or node:IsA("Accoutrement") then
+            AddResolvedEntity(node, node, false)
+            return
+        end
+
+        if node:IsA("Model") and not node:IsA("WorldModel") then
+            if not IsPureContainer(node) then
+                AddResolvedEntity(node, node, false)
+                return
+            end
+        end
+
+        if node:IsA("Folder") or node:IsA("Configuration") or node:IsA("WorldModel") or node:IsA("Model") then
+            local ok, children = pcall(node.GetChildren, node)
+            if not ok or not children then return end
+            for i = 1, #children do
+                CollectFromInstance(children[i], false, depth + 1)
+            end
+        end
+    end
+
+    local function OnTrackedSubtreeChanged()
+        Dirty = true
+        TreeDirty = true
+    end
+
+    local function AttachItemListeners(record)
+        DisconnectList(record.conns)
+        local inst = record.inst
+        if not inst then return end
+        record.conns[1] = inst.DescendantAdded:Connect(OnTrackedSubtreeChanged)
+        record.conns[2] = inst.DescendantRemoving:Connect(OnTrackedSubtreeChanged)
+        record.conns[3] = inst.AncestryChanged:Connect(function()
+            if not inst:IsDescendantOf(Workspace) then
+                DisconnectList(record.conns)
+                ToggledItems[inst] = nil
+                if record.isContainer and record.pathKey and record.pathSegments and #record.pathSegments > 0 then
+                    PendingContainers[record.pathKey] = record
+                end
+                Dirty = true
+                TreeDirty = true
+            else
+                local segs, pKey, disp = GetRelativePathInfo(inst)
+                if segs then
+                    record.pathSegments = segs
+                    record.pathKey = pKey
+                    record.displayPath = disp
+                end
+                Dirty = true
+                TreeDirty = true
+            end
+        end)
+    end
+
+    local function EnsureGlobalWatchers()
+        if #GlobalWatchConns > 0 then return end
+        GlobalWatchConns[1] = Workspace.ChildAdded:Connect(function()
+            TreeDirty = true
+            if next(PendingContainers) ~= nil then
+                Dirty = true
+            end
+        end)
+        GlobalWatchConns[2] = Workspace.ChildRemoved:Connect(function()
+            TreeDirty = true
+        end)
+    end
+
+    local function RebindPendingContainers()
+        if next(PendingContainers) == nil then return false end
+        RefreshWaypointSet()
+        local reboundAny = false
+        for pathKey, record in pairs(PendingContainers) do
+            local segs = record.pathSegments
+            if segs and #segs > 0 then
+                local cur = Workspace
+                for i = 1, #segs do
+                    cur = cur and cur:FindFirstChild(segs[i])
+                end
+                if cur and cur ~= Workspace and not ToggledItems[cur] and not IsSystemOrPlayerIgnored(cur) then
+                    PendingContainers[pathKey] = nil
+                    record.inst = cur
+                    record.isContainer = IsPureContainer(cur)
+                    record.classLabel = cur.ClassName
+                    ToggledItems[cur] = record
+                    AttachItemListeners(record)
+                    reboundAny = true
+                end
+            else
+                PendingContainers[pathKey] = nil
+            end
+        end
+        if reboundAny then
+            Dirty = true
+            TreeDirty = true
+        end
+        return reboundAny
+    end
+
+    local function CountToggledAndLive()
+        local rootCount = 0
+        for _ in pairs(ToggledItems) do rootCount = rootCount + 1 end
+        local pendingCount = 0
+        for _ in pairs(PendingContainers) do pendingCount = pendingCount + 1 end
+        local excludedCount = 0
+        for inst in pairs(ExcludedItems) do
+            if inst and inst.Parent and IsCoveredByToggledAncestor(inst) then
+                excludedCount = excludedCount + 1
+            else
+                ExcludedItems[inst] = nil
+            end
+        end
+        local liveEntityCount = 0
+        local ents = WorkspaceTracker.ActiveEntities
+        for i = 1, #ents do
+            local e = ents[i]
+            if e.idObj and e.idObj.Parent and (not e.hum or (e.hum.Parent and e.hum.Health > 0)) then
+                liveEntityCount = liveEntityCount + 1
+            end
+        end
+        return rootCount, pendingCount, excludedCount, liveEntityCount
+    end
+
+    local function UpdateStatusLabels()
+        local rootCount, pendingCount, excludedCount, entityCount = CountToggledAndLive()
+        local totalSelections = rootCount + pendingCount
+
+        local badgeText
+        if totalSelections == 0 then
+            badgeText = "0 Active"
+        elseif entityCount > 0 then
+            badgeText = string.format("%d Target%s (%d Selected)", entityCount, entityCount == 1 and "" or "s", totalSelections)
+        else
+            badgeText = string.format("0 Targets (%d Selected)", totalSelections)
+        end
+
+        if HeaderBadgeLabel and badgeText ~= LastStatusText then
+            LastStatusText = badgeText
+            HeaderBadgeLabel.Text = badgeText
+            HeaderBadgeLabel.TextColor3 = entityCount > 0 and UI_THEME.Success or (totalSelections > 0 and UI_THEME.Accent or UI_THEME.TextDark)
+        end
+
+        if FilterButtons.Active then
+            local activeTabLabel = string.format("Active (%d)", totalSelections + excludedCount)
+            if FilterButtons.Active.Text ~= activeTabLabel then
+                FilterButtons.Active.Text = activeTabLabel
+            end
+        end
+
+        if WorkspaceTracker.AimTabButton then
+            local prefix = WorkspaceTracker.Visible and "📂 Close Workspace Target Browser" or "📁 Open Workspace Target Browser"
+            local suffix = totalSelections > 0 and string.format(" (%d Tracked)", entityCount) or ""
+            local btnText = prefix .. suffix
+            if btnText ~= LastBtnText then
+                LastBtnText = btnText
+                WorkspaceTracker.AimTabButton.Text = btnText
+            end
+        end
+    end
+
+    local function RebuildEntities(now)
+        Dirty = false
+        LastRebuildClock = now or os.clock()
+        RefreshWaypointSet()
+        RebindPendingContainers()
+
+        table.clear(WorkspaceTracker.ActiveEntities)
+        table.clear(WorkspaceTracker.ActiveEntitySet)
+        table.clear(SeenEntities)
+
+        for inst, record in pairs(ToggledItems) do
+            if not inst or not inst.Parent or not inst:IsDescendantOf(Workspace) then
+                DisconnectList(record.conns)
+                ToggledItems[inst] = nil
+                if record.isContainer and record.pathKey and record.pathSegments and #record.pathSegments > 0 then
+                    PendingContainers[record.pathKey] = record
+                end
+            else
+                CollectFromInstance(inst, true, 0)
+            end
+        end
+
+        UpdateStatusLabels()
+    end
+
+    function WorkspaceTracker.GetWorkspaceEntities(now)
+        local hasToggles = next(ToggledItems) ~= nil or next(PendingContainers) ~= nil
+        if not hasToggles then
+            if #WorkspaceTracker.ActiveEntities > 0 then
+                table.clear(WorkspaceTracker.ActiveEntities)
+                table.clear(WorkspaceTracker.ActiveEntitySet)
+                UpdateStatusLabels()
+            end
+            return WorkspaceTracker.ActiveEntities
+        end
+
+        if (now - LastPeriodicReconcile) >= 1.0 then
+            LastPeriodicReconcile = now
+            Dirty = true
+        end
+
+        if Dirty and (now - LastRebuildClock) >= 0.05 then
+            RebuildEntities(now)
+        end
+
+        return WorkspaceTracker.ActiveEntities
+    end
+
+    function WorkspaceTracker.GetWorldHumEntities(now)
+        if not Flags["Aim/TrackWorldHumanoids"] then
+            if #WorkspaceTracker.WorldHumEntities > 0 then
+                table.clear(WorkspaceTracker.WorldHumEntities)
+            end
+            return WorkspaceTracker.WorldHumEntities
+        end
+
+        if (now - LastWorldHumRefresh) >= 0.25 then
+            LastWorldHumRefresh = now
+            table.clear(WorkspaceTracker.WorldHumEntities)
+            local hums = GetNearbyHumanoids()
+            for i = 1, #hums do
+                local hum = hums[i]
+                local model = hum and hum.Parent
+                if model and model:IsA("Model") and hum.Health > 0 and not WorkspaceTracker.IsExcluded(model) then
+                    local fp = FindBestFallbackPart(model, hum)
+                    if fp then
+                        WorkspaceTracker.WorldHumEntities[#WorkspaceTracker.WorldHumEntities + 1] = {
+                            idObj = model,
+                            ignoreObj = model,
+                            hum = hum,
+                            isBasePart = false,
+                            fallbackPart = fp,
+                        }
+                    end
+                end
+            end
+        end
+
+        return WorkspaceTracker.WorldHumEntities
+    end
+
+    local function ToggleInstanceTracking(inst)
+        if not inst or not inst.Parent then return end
+        EnsureGlobalWatchers()
+
+        if ToggledItems[inst] then
+            local rec = ToggledItems[inst]
+            DisconnectList(rec.conns)
+            ToggledItems[inst] = nil
+            if rec.pathKey then
+                PendingContainers[rec.pathKey] = nil
+            end
+        elseif IsCoveredByToggledAncestor(inst) then
+            if ExcludedItems[inst] then
+                ExcludedItems[inst] = nil
+            else
+                ExcludedItems[inst] = true
+            end
+        else
+            ExcludedItems[inst] = nil
+            local segs, pKey, disp = GetRelativePathInfo(inst)
+            if pKey then
+                PendingContainers[pKey] = nil
+            end
+            local rec = {
+                inst = inst,
+                isContainer = IsPureContainer(inst),
+                pathSegments = segs,
+                pathKey = pKey,
+                displayPath = disp or inst.Name,
+                classLabel = inst.ClassName,
+                conns = {},
+            }
+            ToggledItems[inst] = rec
+            AttachItemListeners(rec)
+        end
+
+        CachedTarget = nil
+        RebuildEntities(os.clock())
+        WorkspaceTracker.RefreshBrowserTree()
+    end
+
+    local function ClearAllTracked()
+        for inst, rec in pairs(ToggledItems) do
+            DisconnectList(rec.conns)
+            ToggledItems[inst] = nil
+        end
+        table.clear(PendingContainers)
+        table.clear(ExcludedItems)
+        CachedTarget = nil
+        RebuildEntities(os.clock())
+        WorkspaceTracker.RefreshBrowserTree()
+    end
+
+    local function GetSortBucket(inst)
+        if inst:IsA("Folder") or inst:IsA("Configuration") or inst:IsA("WorldModel") then
+            return 1
+        elseif inst:IsA("Model") then
+            if inst:FindFirstChildOfClass("Humanoid") then
+                return 2
+            elseif IsPureContainer(inst) then
+                return 1
+            end
+            return 3
+        elseif inst:IsA("Tool") or inst:IsA("Accessory") or inst:IsA("Accoutrement") then
+            return 4
+        end
+        return 5
+    end
+
+    local function SortBrowserItems(list)
+        table.sort(list, function(a, b)
+            local ba, bb = GetSortBucket(a), GetSortBucket(b)
+            if ba ~= bb then return ba < bb end
+            local na, nb = a.Name:lower(), b.Name:lower()
+            if na ~= nb then return na < nb end
+            return a.ClassName < b.ClassName
+        end)
+    end
+
+    local function DescribeNode(inst, visibleChildCount)
+        if inst:IsA("Folder") or inst:IsA("Configuration") or inst:IsA("WorldModel") then
+            return "📁", string.format("%s  [%s · %d]", inst.Name, inst.ClassName, visibleChildCount)
+        elseif inst:IsA("Model") then
+            local hum = inst:FindFirstChildOfClass("Humanoid")
+            if hum then
+                return "🧍", string.format("%s  [Humanoid · %d HP]", inst.Name, floor(hum.Health + 0.5))
+            elseif IsPureContainer(inst) then
+                return "📂", string.format("%s  [Model Group · %d]", inst.Name, visibleChildCount)
+            else
+                return "📦", string.format("%s  [Model · %d]", inst.Name, visibleChildCount)
+            end
+        elseif inst:IsA("Tool") or inst:IsA("Accessory") or inst:IsA("Accoutrement") then
+            return "🔧", string.format("%s  [%s]", inst.Name, inst.ClassName)
+        else
+            return "🧱", string.format("%s  [%s]", inst.Name, inst.ClassName)
+        end
+    end
+
+    local function GetFilteredChildren(parentInst, containersOnly)
+        local out = {}
+        local ok, children = pcall(parentInst.GetChildren, parentInst)
+        if not ok or not children then return out end
+        for i = 1, #children do
+            local ch = children[i]
+            if IsBrowsableClass(ch, containersOnly) and not IsSystemOrPlayerIgnored(ch) then
+                out[#out + 1] = ch
+            end
+        end
+        return out
+    end
+
+    local function CreateBrowserRow(orderIdx, indentPx, hasExpand, isExpanded, iconText, mainText, subPathText, stateKind, onExpandClick, onLabelClick, onToggleClick)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -6, 0, subPathText and 36 or 28)
+        row.BorderSizePixel = 0
+        row.LayoutOrder = orderIdx
+
+        if stateKind == "ON" or stateKind == "WAIT" then
+            row.BackgroundColor3 = Color3.fromRGB(48, 30, 38)
+        elseif stateKind == "AUTO" then
+            row.BackgroundColor3 = Color3.fromRGB(26, 40, 34)
+        elseif stateKind == "EXCL" then
+            row.BackgroundColor3 = Color3.fromRGB(42, 26, 28)
+        else
+            row.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        end
+        row.Parent = TreeScrollFrame
+
+        local rCorner = Instance.new("UICorner")
+        rCorner.CornerRadius = UDim.new(0, 5)
+        rCorner.Parent = row
+
+        if stateKind == "ON" or stateKind == "WAIT" then
+            local rStroke = Instance.new("UIStroke")
+            rStroke.Color = UI_THEME.Accent
+            rStroke.Transparency = 0.45
+            rStroke.Thickness = 1
+            rStroke.Parent = row
+        end
+
+        if hasExpand then
+            local expBtn = Instance.new("TextButton")
+            expBtn.Size = UDim2.new(0, 22, 1, 0)
+            expBtn.Position = UDim2.fromOffset(indentPx + 2, 0)
+            expBtn.BackgroundTransparency = 1
+            expBtn.Text = isExpanded and "▼" or "▶"
+            expBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+            expBtn.TextSize = 10
+            expBtn.TextColor3 = UI_THEME.Accent
+            expBtn.Parent = row
+            if onExpandClick then
+                expBtn.MouseButton1Click:Connect(onExpandClick)
+            end
+        end
+
+        local textLeft = indentPx + (hasExpand and 24 or 8)
+        local labelBtn = Instance.new("TextButton")
+        labelBtn.Size = UDim2.new(1, -(textLeft + 68), 1, 0)
+        labelBtn.Position = UDim2.fromOffset(textLeft, 0)
+        labelBtn.BackgroundTransparency = 1
+        labelBtn.Text = ""
+        labelBtn.AutoButtonColor = false
+        labelBtn.Parent = row
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, 0, 0, subPathText and 19 or 28)
+        nameLbl.Position = UDim2.fromOffset(0, subPathText and 2 or 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = iconText .. " " .. mainText
+        nameLbl.FontFace = Font.fromName("Montserrat", (stateKind == "ON" or stateKind == "AUTO") and Enum.FontWeight.SemiBold or Enum.FontStyle.Normal, Enum.FontStyle.Normal)
+        nameLbl.TextSize = 11
+        nameLbl.TextColor3 = (stateKind == "EXCL") and UI_THEME.TextDark or UI_THEME.Text
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.Parent = labelBtn
+
+        if subPathText then
+            local pathLbl = Instance.new("TextLabel")
+            pathLbl.Size = UDim2.new(1, 0, 0, 13)
+            pathLbl.Position = UDim2.fromOffset(0, 19)
+            pathLbl.BackgroundTransparency = 1
+            pathLbl.Text = subPathText
+            pathLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+            pathLbl.TextSize = 9
+            pathLbl.TextColor3 = UI_THEME.TextDark
+            pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+            pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+            pathLbl.Parent = labelBtn
+        end
+
+        if onLabelClick then
+            labelBtn.MouseButton1Click:Connect(onLabelClick)
+        end
+
+        local toggleBtn = Instance.new("TextButton")
+        toggleBtn.Size = UDim2.fromOffset(56, 20)
+        toggleBtn.Position = UDim2.new(1, -62, 0.5, -10)
+        toggleBtn.BorderSizePixel = 0
+        toggleBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        toggleBtn.TextSize = 10
+
+        if stateKind == "ON" then
+            toggleBtn.BackgroundColor3 = UI_THEME.Accent
+            toggleBtn.TextColor3 = UI_THEME.Background
+            toggleBtn.Text = "ON"
+        elseif stateKind == "AUTO" then
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 130, 85)
+            toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+            toggleBtn.Text = "IN DIR"
+        elseif stateKind == "EXCL" then
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(130, 50, 55)
+            toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+            toggleBtn.Text = "SKIP"
+        elseif stateKind == "WAIT" then
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(160, 115, 40)
+            toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+            toggleBtn.Text = "WAIT"
+        else
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 56)
+            toggleBtn.TextColor3 = UI_THEME.TextDark
+            toggleBtn.Text = "OFF"
+        end
+        toggleBtn.Parent = row
+
+        local tCorner = Instance.new("UICorner")
+        tCorner.CornerRadius = UDim.new(1, 0)
+        tCorner.Parent = toggleBtn
+
+        if onToggleClick then
+            toggleBtn.MouseButton1Click:Connect(onToggleClick)
+        end
+    end
+
+    local function GetNodeStateKind(inst)
+        if ToggledItems[inst] then
+            return "ON"
+        elseif IsCoveredByToggledAncestor(inst) then
+            if IsExcludedOrAncestorExcluded(inst) then
+                return "EXCL"
+            end
+            return "AUTO"
+        end
+        return "OFF"
+    end
+
+    function WorkspaceTracker.RefreshBrowserTree()
+        if not TreeScrollFrame then return end
+        TreeDirty = false
+        LastTreeRenderClock = os.clock()
+        RefreshWaypointSet()
+
+        local prevCanvas = TreeScrollFrame.CanvasPosition
+        for _, ch in ipairs(TreeScrollFrame:GetChildren()) do
+            if not ch:IsA("UIListLayout") and not ch:IsA("UIPadding") then
+                ch:Destroy()
+            end
+        end
+
+        local orderIdx = 0
+        local containersOnly = (FilterMode == "Containers")
+
+        local function AddInfoMessage(msg)
+            orderIdx = orderIdx + 1
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, -10, 0, 34)
+            lbl.BackgroundTransparency = 1
+            lbl.LayoutOrder = orderIdx
+            lbl.Text = msg
+            lbl.TextWrapped = true
+            lbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Italic)
+            lbl.TextSize = 11
+            lbl.TextColor3 = UI_THEME.TextDark
+            lbl.Parent = TreeScrollFrame
+        end
+
+        if FilterMode == "Active" then
+            local activeList = {}
+            for inst, rec in pairs(ToggledItems) do
+                if inst and inst.Parent then
+                    activeList[#activeList + 1] = { kind = "LIVE", inst = inst, rec = rec, sortKey = (rec.displayPath or inst.Name):lower() }
+                end
+            end
+            for pathKey, rec in pairs(PendingContainers) do
+                activeList[#activeList + 1] = { kind = "WAIT", pathKey = pathKey, rec = rec, sortKey = (rec.displayPath or pathKey):lower() }
+            end
+            for inst in pairs(ExcludedItems) do
+                if inst and inst.Parent and IsCoveredByToggledAncestor(inst) then
+                    local _, _, disp = GetRelativePathInfo(inst)
+                    activeList[#activeList + 1] = { kind = "EXCL", inst = inst, disp = disp or inst.Name, sortKey = (disp or inst.Name):lower() }
+                end
+            end
+            table.sort(activeList, function(a, b) return a.sortKey < b.sortKey end)
+
+            if #activeList == 0 then
+                AddInfoMessage("No Workspace items or folders are currently toggled.\nSwitch to 'All Items' or 'Folders / Models' to select targets.")
+            else
+                for i = 1, #activeList do
+                    local item = activeList[i]
+                    orderIdx = orderIdx + 1
+                    if item.kind == "LIVE" then
+                        local inst = item.inst
+                        local subChildren = GetFilteredChildren(inst, false)
+                        local icon, desc = DescribeNode(inst, #subChildren)
+                        local _, _, disp = GetRelativePathInfo(inst)
+                        CreateBrowserRow(orderIdx, 4, false, false, icon, desc, "Workspace / " .. (disp or inst.Name), "ON", nil, nil, function()
+                            ToggleInstanceTracking(inst)
+                        end)
+                    elseif item.kind == "WAIT" then
+                        local rec = item.rec
+                        local pKey = item.pathKey
+                        CreateBrowserRow(orderIdx, 4, false, false, "⏳", (rec.displayPath or "Folder") .. "  [Waiting for Respawn]", "Will auto-track when recreated in Workspace", "WAIT", nil, nil, function()
+                            PendingContainers[pKey] = nil
+                            RebuildEntities(os.clock())
+                            WorkspaceTracker.RefreshBrowserTree()
+                        end)
+                    elseif item.kind == "EXCL" then
+                        local inst = item.inst
+                        CreateBrowserRow(orderIdx, 4, false, false, "🚫", inst.Name .. "  [Excluded from Folder]", "Workspace / " .. item.disp, "EXCL", nil, nil, function()
+                            ExcludedItems[inst] = nil
+                            RebuildEntities(os.clock())
+                            WorkspaceTracker.RefreshBrowserTree()
+                        end)
+                    end
+                end
+            end
+        elseif SearchText ~= "" then
+            local query = SearchText
+            local matches = {}
+            local function ScanSearch(parentInst, depth)
+                if depth > 10 or #matches >= MAX_SEARCH_RESULTS * 3 then return end
+                local ok, children = pcall(parentInst.GetChildren, parentInst)
+                if not ok or not children then return end
+                for i = 1, #children do
+                    local ch = children[i]
+                    if not IsSystemOrPlayerIgnored(ch) then
+                        if IsBrowsableClass(ch, containersOnly) then
+                            if ch.Name:lower():find(query, 1, true) or ch.ClassName:lower():find(query, 1, true) then
+                                matches[#matches + 1] = ch
+                            end
+                        end
+                        if (ch:IsA("Folder") or ch:IsA("Configuration") or ch:IsA("WorldModel") or ch:IsA("Model")) and depth < 10 then
+                            ScanSearch(ch, depth + 1)
+                        end
+                    end
+                end
+            end
+            ScanSearch(Workspace, 0)
+            SortBrowserItems(matches)
+
+            if #matches == 0 then
+                AddInfoMessage("No matching Workspace items found for '" .. SearchBox.Text .. "'.")
+            else
+                local count = min(#matches, MAX_SEARCH_RESULTS)
+                for i = 1, count do
+                    local inst = matches[i]
+                    orderIdx = orderIdx + 1
+                    local subChildren = GetFilteredChildren(inst, containersOnly)
+                    local icon, desc = DescribeNode(inst, #subChildren)
+                    local _, _, disp = GetRelativePathInfo(inst)
+                    local stateKind = GetNodeStateKind(inst)
+                    CreateBrowserRow(orderIdx, 4, false, false, icon, desc, "Workspace / " .. (disp or inst.Name), stateKind, nil, function()
+                        ToggleInstanceTracking(inst)
+                    end, function()
+                        ToggleInstanceTracking(inst)
+                    end)
+                end
+                if #matches > MAX_SEARCH_RESULTS then
+                    AddInfoMessage(string.format("Showing top %d of %d matches — refine search to narrow results.", MAX_SEARCH_RESULTS, #matches))
+                end
+            end
+        else
+            local function RenderSubtree(parentInst, depth)
+                if depth > 14 then return end
+                local children = GetFilteredChildren(parentInst, containersOnly)
+                SortBrowserItems(children)
+
+                if depth == 0 and #children == 0 then
+                    AddInfoMessage("No browsable items found in Workspace.")
+                    return
+                end
+
+                local limit = FolderPageLimits[parentInst] or DEFAULT_PAGE_LIMIT
+                local count = min(#children, limit)
+
+                for i = 1, count do
+                    local inst = children[i]
+                    local childItems = GetFilteredChildren(inst, containersOnly)
+                    local hasExpand = #childItems > 0
+                    local isExpanded = hasExpand and ExpandedNodes[inst] == true
+                    local icon, desc = DescribeNode(inst, #childItems)
+                    local stateKind = GetNodeStateKind(inst)
+
+                    orderIdx = orderIdx + 1
+                    local toggleExpandFn = nil
+                    if hasExpand then
+                        toggleExpandFn = function()
+                            ExpandedNodes[inst] = not ExpandedNodes[inst]
+                            WorkspaceTracker.RefreshBrowserTree()
+                        end
+                    end
+
+                    local labelClickFn = toggleExpandFn or function()
+                        ToggleInstanceTracking(inst)
+                    end
+
+                    CreateBrowserRow(orderIdx, depth * 14, hasExpand, isExpanded, icon, desc, nil, stateKind, toggleExpandFn, labelClickFn, function()
+                        ToggleInstanceTracking(inst)
+                    end)
+
+                    if isExpanded then
+                        RenderSubtree(inst, depth + 1)
+                    end
+                end
+
+                if #children > count then
+                    orderIdx = orderIdx + 1
+                    local moreBtn = Instance.new("TextButton")
+                    moreBtn.Size = UDim2.new(1, -(depth * 14 + 12), 0, 24)
+                    moreBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 44)
+                    moreBtn.BorderSizePixel = 0
+                    moreBtn.LayoutOrder = orderIdx
+                    moreBtn.Text = string.format("  + Show more (%d remaining in %s)", #children - count, parentInst.Name)
+                    moreBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+                    moreBtn.TextSize = 10
+                    moreBtn.TextColor3 = UI_THEME.Accent
+                    moreBtn.Parent = TreeScrollFrame
+                    local mc = Instance.new("UICorner")
+                    mc.CornerRadius = UDim.new(0, 4)
+                    mc.Parent = moreBtn
+                    moreBtn.MouseButton1Click:Connect(function()
+                        FolderPageLimits[parentInst] = limit + DEFAULT_PAGE_LIMIT
+                        WorkspaceTracker.RefreshBrowserTree()
+                    end)
+                end
+            end
+
+            RenderSubtree(Workspace, 0)
+        end
+
+        if TreeLayout then
+            TreeScrollFrame.CanvasSize = UDim2.new(0, 0, 0, TreeLayout.AbsoluteContentSize.Y + 8)
+            TreeScrollFrame.CanvasPosition = prevCanvas
+        end
+        UpdateStatusLabels()
+    end
+
+    local function UpdateFilterPillStyles()
+        for mode, btn in pairs(FilterButtons) do
+            local active = (FilterMode == mode)
+            btn.BackgroundColor3 = active and UI_THEME.Accent or Color3.fromRGB(38, 38, 44)
+            btn.TextColor3 = active and UI_THEME.Background or UI_THEME.Text
+        end
+    end
+
+    local function CreateBrowserWindow()
+        if WorkspaceTracker.MainFrame then return end
+
+        EnsureScreenGui()
+        local MainFrame = Instance.new("CanvasGroup")
+        MainFrame.Name = "WorkspaceTargetBrowser"
+        MainFrame.Size = UDim2.fromOffset(540, 450)
+        MainFrame.Position = UDim2.fromScale(0.5, 0.5)
+        MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+        MainFrame.BackgroundColor3 = UI_THEME.Background
+        MainFrame.BorderSizePixel = 0
+        MainFrame.Visible = false
+        MainFrame.ClipsDescendants = true
+        MainFrame.ZIndex = 20
+        MainFrame.Parent = ScreenGui
+
+        ApplyUIScale(MainFrame, Flags["Visuals/UIScale"] or 1)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = MainFrame
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(60, 60, 65)
+        stroke.Thickness = 1
+        stroke.Parent = MainFrame
+
+        UI.MakeDraggable(MainFrame)
+
+        local header = Instance.new("Frame")
+        header.Name = "Header"
+        header.Size = UDim2.new(1, 0, 0, 36)
+        header.BackgroundColor3 = UI_THEME.Sidebar
+        header.BorderSizePixel = 0
+        header.Parent = MainFrame
+
+        local headerCorner = Instance.new("UICorner")
+        headerCorner.CornerRadius = UDim.new(0, 8)
+        headerCorner.Parent = header
+
+        local headerFix = Instance.new("Frame")
+        headerFix.Size = UDim2.new(1, 0, 0, 10)
+        headerFix.Position = UDim2.new(0, 0, 1, -10)
+        headerFix.BackgroundColor3 = UI_THEME.Sidebar
+        headerFix.BorderSizePixel = 0
+        headerFix.Parent = header
+
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(0, 250, 1, 0)
+        title.Position = UDim2.fromOffset(12, 0)
+        title.BackgroundTransparency = 1
+        title.Text = "🎯 Workspace Target Browser"
+        title.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        title.TextSize = 14
+        title.TextColor3 = UI_THEME.Accent
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = header
+
+        local badge = Instance.new("TextLabel")
+        badge.Size = UDim2.new(1, -305, 1, 0)
+        badge.Position = UDim2.fromOffset(262, 0)
+        badge.BackgroundTransparency = 1
+        badge.Text = "0 Active"
+        badge.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        badge.TextSize = 11
+        badge.TextColor3 = UI_THEME.TextDark
+        badge.TextXAlignment = Enum.TextXAlignment.Right
+        badge.Parent = header
+        HeaderBadgeLabel = badge
+
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.fromOffset(26, 26)
+        closeBtn.Position = UDim2.new(1, -32, 0.5, -13)
+        closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        closeBtn.BackgroundTransparency = 0.35
+        closeBtn.Text = "X"
+        closeBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        closeBtn.TextSize = 13
+        closeBtn.TextColor3 = Color3.fromRGB(210, 210, 210)
+        closeBtn.BorderSizePixel = 0
+        closeBtn.Parent = header
+        local closeCorner = Instance.new("UICorner")
+        closeCorner.CornerRadius = UDim.new(0, 4)
+        closeCorner.Parent = closeBtn
+
+        TrackConnection(closeBtn.MouseButton1Click:Connect(function()
+            WorkspaceTracker.CloseBrowser()
+        end))
+
+        local controlsFrame = Instance.new("Frame")
+        controlsFrame.Size = UDim2.new(1, -16, 0, 80)
+        controlsFrame.Position = UDim2.fromOffset(8, 42)
+        controlsFrame.BackgroundTransparency = 1
+        controlsFrame.Parent = MainFrame
+
+        local searchWrap = Instance.new("Frame")
+        searchWrap.Size = UDim2.new(1, -82, 0, 28)
+        searchWrap.Position = UDim2.fromOffset(0, 0)
+        searchWrap.BackgroundColor3 = Color3.fromRGB(32, 32, 36)
+        searchWrap.BorderSizePixel = 0
+        searchWrap.Parent = controlsFrame
+        local swCorner = Instance.new("UICorner")
+        swCorner.CornerRadius = UDim.new(0, 6)
+        swCorner.Parent = searchWrap
+
+        local searchBox = Instance.new("TextBox")
+        searchBox.Size = UDim2.new(1, -34, 1, 0)
+        searchBox.Position = UDim2.fromOffset(10, 0)
+        searchBox.BackgroundTransparency = 1
+        searchBox.Text = ""
+        searchBox.PlaceholderText = "Search Workspace items or folders (e.g. Zombies, NPCs, Animals)..."
+        searchBox.PlaceholderColor3 = UI_THEME.TextDark
+        searchBox.ClearTextOnFocus = false
+        searchBox.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        searchBox.TextSize = 11
+        searchBox.TextColor3 = UI_THEME.Text
+        searchBox.TextXAlignment = Enum.TextXAlignment.Left
+        searchBox.Parent = searchWrap
+        SearchBox = searchBox
+
+        local clearSearch = Instance.new("TextButton")
+        clearSearch.Size = UDim2.fromOffset(22, 22)
+        clearSearch.Position = UDim2.new(1, -25, 0.5, -11)
+        clearSearch.BackgroundTransparency = 1
+        clearSearch.Text = "×"
+        clearSearch.Visible = false
+        clearSearch.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+        clearSearch.TextSize = 14
+        clearSearch.TextColor3 = UI_THEME.TextDark
+        clearSearch.Parent = searchWrap
+        ClearSearchBtn = clearSearch
+
+        TrackConnection(clearSearch.MouseButton1Click:Connect(function()
+            searchBox.Text = ""
+        end))
+
+        TrackConnection(searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+            local txt = searchBox.Text:lower():gsub("^%s+", ""):gsub("%s+$", "")
+            ClearSearchBtn.Visible = (txt ~= "")
+            if txt ~= SearchText then
+                SearchText = txt
+                if SearchText ~= "" and FilterMode == "Active" then
+                    FilterMode = "All"
+                    UpdateFilterPillStyles()
+                end
+                WorkspaceTracker.RefreshBrowserTree()
+            end
+        end))
+
+        local refreshBtn = Instance.new("TextButton")
+        refreshBtn.Size = UDim2.fromOffset(76, 28)
+        refreshBtn.Position = UDim2.new(1, -76, 0, 0)
+        refreshBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
+        refreshBtn.BorderSizePixel = 0
+        refreshBtn.Text = "↻ Refresh"
+        refreshBtn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        refreshBtn.TextSize = 11
+        refreshBtn.TextColor3 = UI_THEME.Text
+        refreshBtn.Parent = controlsFrame
+        local rfCorner = Instance.new("UICorner")
+        rfCorner.CornerRadius = UDim.new(0, 6)
+        rfCorner.Parent = refreshBtn
+
+        TrackConnection(refreshBtn.MouseButton1Click:Connect(function()
+            RebuildEntities(os.clock())
+            WorkspaceTracker.RefreshBrowserTree()
+        end))
+
+        local function CreateToolbarBtn(label, xOffset, width, fromRight, onClick)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.fromOffset(width, 24)
+            btn.Position = fromRight and UDim2.new(1, xOffset, 0, 34) or UDim2.fromOffset(xOffset, 34)
+            btn.BackgroundColor3 = Color3.fromRGB(38, 38, 44)
+            btn.BorderSizePixel = 0
+            btn.Text = label
+            btn.FontFace = Font.fromName("Montserrat", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+            btn.TextSize = 10
+            btn.TextColor3 = UI_THEME.Text
+            btn.Parent = controlsFrame
+            local bc = Instance.new("UICorner")
+            bc.CornerRadius = UDim.new(0, 5)
+            bc.Parent = btn
+            TrackConnection(btn.MouseButton1Click:Connect(onClick))
+            return btn
+        end
+
+        FilterButtons.All = CreateToolbarBtn("All Items", 0, 74, false, function()
+            FilterMode = "All"
+            UpdateFilterPillStyles()
+            WorkspaceTracker.RefreshBrowserTree()
+        end)
+
+        FilterButtons.Containers = CreateToolbarBtn("Folders / Models", 78, 112, false, function()
+            FilterMode = "Containers"
+            UpdateFilterPillStyles()
+            WorkspaceTracker.RefreshBrowserTree()
+        end)
+
+        FilterButtons.Active = CreateToolbarBtn("Active (0)", 194, 88, false, function()
+            FilterMode = "Active"
+            UpdateFilterPillStyles()
+            WorkspaceTracker.RefreshBrowserTree()
+        end)
+
+        CreateToolbarBtn("Collapse", -144, 68, true, function()
+            table.clear(ExpandedNodes)
+            table.clear(FolderPageLimits)
+            WorkspaceTracker.RefreshBrowserTree()
+        end)
+
+        local clearAllBtn = CreateToolbarBtn("Clear All", -72, 72, true, function()
+            ClearAllTracked()
+            UI.Notify("Workspace Tracking", "Cleared all tracked Workspace items and folders")
+        end)
+        clearAllBtn.TextColor3 = UI_THEME.Fail
+
+        local hintLbl = Instance.new("TextLabel")
+        hintLbl.Size = UDim2.new(1, 0, 0, 16)
+        hintLbl.Position = UDim2.fromOffset(2, 62)
+        hintLbl.BackgroundTransparency = 1
+        hintLbl.Text = "Toggle folders ON to auto-track all items inside (including newly spawned/modified items)."
+        hintLbl.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        hintLbl.TextSize = 10
+        hintLbl.TextColor3 = UI_THEME.TextDark
+        hintLbl.TextXAlignment = Enum.TextXAlignment.Left
+        hintLbl.Parent = controlsFrame
+
+        local listWrapper = Instance.new("Frame")
+        listWrapper.Size = UDim2.new(1, -16, 1, -132)
+        listWrapper.Position = UDim2.fromOffset(8, 124)
+        listWrapper.BackgroundColor3 = Color3.fromRGB(22, 22, 25)
+        listWrapper.BorderSizePixel = 0
+        listWrapper.Parent = MainFrame
+        local lwCorner = Instance.new("UICorner")
+        lwCorner.CornerRadius = UDim.new(0, 6)
+        lwCorner.Parent = listWrapper
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Name = "TreeScroll"
+        scroll.Size = UDim2.new(1, -8, 1, -8)
+        scroll.Position = UDim2.fromOffset(4, 4)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.ScrollBarThickness = 5
+        scroll.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 98)
+        scroll.Parent = listWrapper
+        TreeScrollFrame = scroll
+
+        local layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 3)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = scroll
+        TreeLayout = layout
+
+        TrackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
+        end))
+
+        WorkspaceTracker.MainFrame = MainFrame
+        UpdateFilterPillStyles()
+        pcall(UpdateScreenUIOpacity)
+    end
+
+    function WorkspaceTracker.OpenBrowser()
+        EnsureGlobalWatchers()
+        CreateBrowserWindow()
+        WorkspaceTracker.Visible = true
+        RebuildEntities(os.clock())
+        WorkspaceTracker.RefreshBrowserTree()
+        if WorkspaceTracker.MainFrame then
+            WorkspaceTracker.MainFrame.Visible = not Flags["Settings/GhostMode"]
+        end
+        UpdateStatusLabels()
+    end
+
+    function WorkspaceTracker.CloseBrowser()
+        WorkspaceTracker.Visible = false
+        if WorkspaceTracker.MainFrame then
+            WorkspaceTracker.MainFrame.Visible = false
+        end
+        UpdateStatusLabels()
+    end
+
+    function WorkspaceTracker.ToggleBrowser()
+        if WorkspaceTracker.Visible then
+            WorkspaceTracker.CloseBrowser()
+        else
+            WorkspaceTracker.OpenBrowser()
+        end
+    end
+
+    function WorkspaceTracker.SyncLockDot()
+        if not Flags["Aim/ShowAssistDots"] then
+            if NonPlayerLockDot and NonPlayerLockDot.Enabled then
+                NonPlayerLockDot.Enabled = false
+                NonPlayerLockDot.Adornee = nil
+            end
+            return
+        end
+
+        local showDot = Flags["Aim/AimLock"]
+            and not SAFE_MODE
+            and not Flags["Settings/GhostMode"]
+            and CachedTarget ~= nil
+            and (os.clock() - CachedTargetTime) < 0.1
+            and CachedTarget[1] ~= nil
+            and not CachedTarget[1]:IsA("Player")
+            and CachedTarget[3] ~= nil
+            and CachedTarget[3].Parent ~= nil
+
+        if not showDot then
+            if NonPlayerLockDot and NonPlayerLockDot.Enabled then
+                NonPlayerLockDot.Enabled = false
+                NonPlayerLockDot.Adornee = nil
+            end
+            return
+        end
+
+        local screenGui = EnsureScreenGui()
+        if not screenGui then return end
+
+        if not NonPlayerLockDot or not NonPlayerLockDot.Parent then
+            if NonPlayerLockDot then pcall(function() NonPlayerLockDot:Destroy() end) end
+            local bg = Instance.new("BillboardGui")
+            bg.Name = "NonPlayerTrackDot"
+            bg.AlwaysOnTop = true
+            bg.Size = UDim2.fromOffset(6, 6)
+            bg.StudsOffset = Vector3.new(0, 0, 0)
+            bg.Parent = screenGui
+
+            local dotFrame = Instance.new("Frame")
+            dotFrame.Name = "Dot"
+            dotFrame.Size = UDim2.new(1, 0, 1, 0)
+            dotFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            dotFrame.BorderSizePixel = 0
+            dotFrame.Parent = bg
+
+            local dc = Instance.new("UICorner")
+            dc.CornerRadius = UDim.new(1, 0)
+            dc.Parent = dotFrame
+
+            NonPlayerLockDot = bg
+        end
+
+        if NonPlayerLockDot.Adornee ~= CachedTarget[3] then
+            NonPlayerLockDot.Adornee = CachedTarget[3]
+        end
+        if not NonPlayerLockDot.Enabled then
+            NonPlayerLockDot.Enabled = true
+        end
+    end
+
+    function WorkspaceTracker.HeartbeatStep(now, ghostMode, ghostModeChanged)
+        if ghostModeChanged and WorkspaceTracker.MainFrame then
+            WorkspaceTracker.MainFrame.Visible = WorkspaceTracker.Visible and not ghostMode
+        end
+
+        if next(PendingContainers) ~= nil then
+            RebindPendingContainers()
+        end
+
+        if Dirty and (now - LastRebuildClock) >= 0.15 then
+            RebuildEntities(now)
+        end
+
+        if WorkspaceTracker.Visible and TreeDirty and (now - LastTreeRenderClock) >= 0.4 then
+            WorkspaceTracker.RefreshBrowserTree()
+        else
+            UpdateStatusLabels()
+        end
+
+        WorkspaceTracker.SyncLockDot()
+    end
+
+    function WorkspaceTracker.Cleanup()
+        DisconnectList(GlobalWatchConns)
+        for inst, rec in pairs(ToggledItems) do
+            DisconnectList(rec.conns)
+            ToggledItems[inst] = nil
+        end
+        table.clear(PendingContainers)
+        table.clear(ExcludedItems)
+        table.clear(ExpandedNodes)
+        table.clear(FolderPageLimits)
+        table.clear(WaypointPartsSet)
+        table.clear(SeenEntities)
+        table.clear(WorkspaceTracker.ActiveEntities)
+        table.clear(WorkspaceTracker.ActiveEntitySet)
+        table.clear(WorkspaceTracker.WorldHumEntities)
+        table.clear(FilterButtons)
+
+        if NonPlayerLockDot then
+            pcall(function() NonPlayerLockDot:Destroy() end)
+            NonPlayerLockDot = nil
+        end
+        if WorkspaceTracker.MainFrame then
+            pcall(function() WorkspaceTracker.MainFrame:Destroy() end)
+            WorkspaceTracker.MainFrame = nil
+        end
+
+        WorkspaceTracker.Visible = false
+        HeaderBadgeLabel = nil
+        TreeScrollFrame = nil
+        TreeLayout = nil
+        SearchBox = nil
+        ClearSearchBtn = nil
+        LastStatusText = ""
+        LastBtnText = ""
+    end
 end
 
 ClosestResult = {nil, nil, nil, 0, 0, nil}
@@ -4975,6 +6340,7 @@ function ClearCandidateReferences()
     for i = 1, #CandidateList do
         local entry = CandidateList[i]
         if entry then
+            entry.isPlayer = nil
             entry.ply = nil
             entry.char = nil
             entry.part = nil
@@ -5129,6 +6495,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                             entry = {}
                             CandidateList[CandidateCount] = entry
                         end
+                        entry.isPlayer = true
                         entry.mag = Magnitude
                         entry.ply = Player
                         entry.char = Character
@@ -5143,31 +6510,133 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
     end
 
+    local function PushNonPlayerPartCandidate(idObj, ignoreObj, part)
+        local ActualPosition = part.Position
+        local relPos = ActualPosition - CameraPosition
+        if lookVector:Dot(relPos) < 0 then return end
+
+        local Distance = relPos.Magnitude
+        if DistanceCheck and Distance >= DistanceLimit then return end
+
+        local ScreenPosition, OnScreen = GetViewportPoint(ActualPosition)
+        if not OnScreen then return end
+
+        local screenX, screenY = ScreenPosition.X, ScreenPosition.Y
+        local dx, dy = screenX - crosshairX, screenY - crosshairY
+        local Magnitude = sqrt(dx * dx + dy * dy)
+        if Magnitude >= FieldOfView then return end
+
+        local slotIdx
+        if CandidateCount < maxCandsLimit then
+            CandidateCount = CandidateCount + 1
+            slotIdx = CandidateCount
+        else
+            local worstIdx = 1
+            local worstMag = CandidateList[1].mag
+            for k = 2, maxCandsLimit do
+                local m = CandidateList[k].mag
+                if m > worstMag then
+                    worstMag = m
+                    worstIdx = k
+                end
+            end
+            if Magnitude >= worstMag then return end
+            slotIdx = worstIdx
+        end
+
+        local entry = CandidateList[slotIdx]
+        if not entry then
+            entry = {}
+            CandidateList[slotIdx] = entry
+        end
+        entry.isPlayer = false
+        entry.mag = Magnitude
+        entry.ply = idObj
+        entry.char = ignoreObj
+        entry.part = part
+        entry.sx = screenX
+        entry.sy = screenY
+        entry.pos = ActualPosition
+        entry.realPos = ActualPosition
+    end
+
+    local function EvaluateNonPlayerEntity(ent)
+        local idObj = ent.idObj
+        if not idObj or not idObj.Parent then return end
+
+        local hum = ent.hum
+        if hum then
+            if not hum.Parent or hum.Health <= 0 then return end
+        end
+
+        if ent.isBasePart then
+            PushNonPlayerPartCandidate(idObj, ent.ignoreObj, idObj)
+            return
+        end
+
+        local refPart = ent.fallbackPart
+        if not refPart or not refPart.Parent or not refPart:IsDescendantOf(idObj) then
+            refPart = WorkspaceTracker.RefreshFallbackPart(ent)
+            if not refPart then return end
+        end
+
+        local matchedAnyGroupPart = false
+        for _, PartName in ipairs(checkParts) do
+            local BodyPart = idObj:FindFirstChild(PartName)
+            if BodyPart and BodyPart:IsA("BasePart") then
+                matchedAnyGroupPart = true
+                PushNonPlayerPartCandidate(idObj, ent.ignoreObj, BodyPart)
+            end
+        end
+
+        if not matchedAnyGroupPart then
+            PushNonPlayerPartCandidate(idObj, ent.ignoreObj, refPart)
+        end
+    end
+
+    local nowClock = os.clock()
+    local wsEntities = WorkspaceTracker.GetWorkspaceEntities(nowClock)
+    for i = 1, #wsEntities do
+        EvaluateNonPlayerEntity(wsEntities[i])
+    end
+
+    if Flags["Aim/TrackWorldHumanoids"] then
+        local activeSet = WorkspaceTracker.ActiveEntitySet
+        local worldHums = WorkspaceTracker.GetWorldHumEntities(nowClock)
+        for i = 1, #worldHums do
+            local ent = worldHums[i]
+            if not activeSet[ent.idObj] then
+                EvaluateNonPlayerEntity(ent)
+            end
+        end
+    end
+
     if CandidateCount == 0 then
         return nil
     end
 
-    local currentSize = #CandidateList
     if CandidateCount > 1 then
         BoundedInsertionSort(CandidateList, CandidateCount, CandidateSortFn)
     end
 
-    local stickyId = StickyTarget and StickyTarget.UserId
-    local stickyTeam = StickyTarget and StickyTarget.Team and StickyTarget.Team.Name
+    local stickyIsPlayer = StickyTarget ~= nil and StickyTarget:IsA("Player")
+    local stickyId = stickyIsPlayer and StickyTarget.UserId or nil
+    local stickyTeam = stickyIsPlayer and StickyTarget.Team and StickyTarget.Team.Name or nil
     local isStickyBlacklisted = stickyId and (AdvancedPlayerPanelState.Blacklist[stickyId] or (stickyTeam and AdvancedPlayerPanelState.TeamBlacklist[stickyTeam] and not AdvancedPlayerPanelState.Whitelist[stickyId]))
 
-    if StickyTarget and not isStickyBlacklisted then
+    if StickyTarget and StickyTarget.Parent and not isStickyBlacklisted then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
-                local pId = entry.ply.UserId
-                local pTeam = entry.ply.Team
-                local teamName = pTeam and pTeam.Name
-                local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
-
                 local performStickyOcclusion = true
-                if isSpecTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
-                    performStickyOcclusion = false
+                if entry.isPlayer then
+                    local pId = entry.ply.UserId
+                    local pTeam = entry.ply.Team
+                    local teamName = pTeam and pTeam.Name
+                    local isSpecTargetBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
+                    if isSpecTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+                        performStickyOcclusion = false
+                    end
                 end
 
                 if not performStickyOcclusion or not ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
@@ -5192,14 +6661,15 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             continue
         end
 
-        local pId = entry.ply.UserId
-        local pTeam = entry.ply.Team
-        local teamName = pTeam and pTeam.Name
-        local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
-
         local performOcclusionCheck = true
-        if isEntryBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
-            performOcclusionCheck = false
+        if entry.isPlayer then
+            local pId = entry.ply.UserId
+            local pTeam = entry.ply.Team
+            local teamName = pTeam and pTeam.Name
+            local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
+            if isEntryBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+                performOcclusionCheck = false
+            end
         end
 
         if performOcclusionCheck and ObjectOccluded(VisibilityCheck, CameraPosition, entry.realPos, entry.char) then
@@ -5375,7 +6845,7 @@ do
             return false
         end
 
-        if targetPlayer then
+        if targetPlayer and targetPlayer:IsA("Player") then
             local tId = targetPlayer.UserId
             local tTeam = targetPlayer.Team
             local tTeamName = tTeam and tTeam.Name
@@ -5468,6 +6938,92 @@ do
         return tMin
     end
 
+    local function IsNonPlayerTargetLockedByPlayerPriority(targetPlayer, targetChar, cameraPos)
+        if not targetPlayer or not targetPlayer:IsA("Player") then
+            return false
+        end
+        local tId = targetPlayer.UserId
+        local tTeam = targetPlayer.Team
+        local tTeamName = tTeam and tTeam.Name
+        if GetPriorityRank(targetPlayer, tTeamName) then
+            return true
+        end
+        local isTargetIndivWl = AdvancedPlayerPanelState.Whitelist[tId]
+        local isTargetIndivBl = AdvancedPlayerPanelState.Blacklist[tId]
+        local isTargetTeamBl = tTeamName and AdvancedPlayerPanelState.TeamBlacklist[tTeamName]
+        local isTargetBlacklisted = isTargetIndivBl or (isTargetTeamBl and not isTargetIndivWl)
+        if isTargetBlacklisted then
+            if Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"] and targetChar then
+                local tRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart
+                if tRoot then
+                    local tDist = (tRoot.Position - cameraPos).Magnitude
+                    if tDist > Flags["Aim/BlacklistBypassDistance"] or ObjectOccluded(Flags["Aim/VisibilityCheck"], cameraPos, tRoot.Position, targetChar) then
+                        return false
+                    end
+                end
+            end
+            return true
+        end
+        return false
+    end
+
+    local function ResolveHitTrackedNonPlayer(hitPart, targetPlayer, targetChar)
+        if not hitPart then return nil, nil, false end
+
+        local isTargetNonPlayer = targetPlayer ~= nil and not targetPlayer:IsA("Player")
+        if isTargetNonPlayer and targetChar and (hitPart == targetChar or hitPart:IsDescendantOf(targetChar)) then
+            local hasHum = targetChar:IsA("Model") and targetChar:FindFirstChildOfClass("Humanoid") ~= nil
+            return targetPlayer, targetChar, hasHum
+        end
+
+        local activeSet = WorkspaceTracker and WorkspaceTracker.ActiveEntitySet
+        if activeSet and activeSet[hitPart] then
+            return hitPart, hitPart, false
+        end
+
+        local checkWorldHums = Flags["Aim/TrackWorldHumanoids"]
+        local hasActiveSet = activeSet and next(activeSet) ~= nil
+        if not checkWorldHums and not hasActiveSet then
+            return nil, nil, false
+        end
+
+        local myChar = LocalPlayer.Character
+        local anc = hitPart.Parent
+        while anc and anc ~= Workspace and anc ~= game do
+            if hasActiveSet and activeSet[anc] then
+                local ent = activeSet[anc]
+                if not ent.hum or (ent.hum.Parent and ent.hum.Health > 0) then
+                    return anc, ent.ignoreObj, (ent.hum ~= nil)
+                end
+            end
+            if checkWorldHums and anc:IsA("Model") and anc ~= myChar then
+                local hum = anc:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 and not WorkspaceTracker.IsExcluded(anc) and not Players:GetPlayerFromCharacter(anc) then
+                    return anc, anc, true
+                end
+            end
+            anc = anc.Parent
+        end
+
+        return nil, nil, false
+    end
+
+    local function IsValidNonPlayerHitPart(hitPart, container, hasHum, targetPart)
+        if hitPart == targetPart or hitPart == container then
+            return true
+        end
+        if hasHum then
+            return IsHumanoidBodyPart(hitPart, container)
+        end
+        if hitPart.Transparency >= 0.98 then
+            return false
+        end
+        if hitPart:FindFirstAncestorOfClass("Accessory") then
+            return false
+        end
+        return hitPart:IsDescendantOf(container)
+    end
+
     local function IsCrosshairOverHumanoid(originX, originY, targetPlayer, targetChar, targetPart, cameraPos, targetDist)
         if not Camera then return false end
 
@@ -5518,7 +7074,21 @@ do
                     CrosshairExcludeFilter[filterCount] = acc or tool or hitPart
                 end
             else
-                if not hitPart.CanCollide and hitPart.Transparency >= 0.95 then
+                local hitEntity, hitContainer, hitHasHum = ResolveHitTrackedNonPlayer(hitPart, targetPlayer, targetChar)
+                if hitEntity and hitContainer then
+                    if IsValidNonPlayerHitPart(hitPart, hitContainer, hitHasHum, targetPart) then
+                        if hitEntity == targetPlayer or not IsNonPlayerTargetLockedByPlayerPriority(targetPlayer, targetChar, cameraPos) then
+                            return true
+                        end
+                        wallDist = hitResult.Distance or (hitResult.Position - rayOrigin).Magnitude
+                        break
+                    else
+                        local acc = hitPart:FindFirstAncestorOfClass("Accessory")
+                        local tool = not acc and hitPart:FindFirstAncestorOfClass("Tool")
+                        filterCount = filterCount + 1
+                        CrosshairExcludeFilter[filterCount] = acc or tool or hitPart
+                    end
+                elseif not hitPart.CanCollide and hitPart.Transparency >= 0.95 then
                     filterCount = filterCount + 1
                     CrosshairExcludeFilter[filterCount] = hitPart
                 else
@@ -5532,32 +7102,46 @@ do
             return false
         end
 
-        local tId = targetPlayer.UserId
-        local tTeam = targetPlayer.Team
-        local tTeamName = tTeam and tTeam.Name
-        local isTargetIndivWl = AdvancedPlayerPanelState.Whitelist[tId]
-        local isTargetIndivBl = AdvancedPlayerPanelState.Blacklist[tId]
-        local isTargetTeamBl = tTeamName and AdvancedPlayerPanelState.TeamBlacklist[tTeamName]
-        local isTargetBlacklisted = isTargetIndivBl or (isTargetTeamBl and not isTargetIndivWl)
-
+        local isTargetPlayer = targetPlayer:IsA("Player")
         local performOcclusionCheck = Flags["Aim/VisibilityCheck"]
-        if isTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
-            performOcclusionCheck = false
+
+        if isTargetPlayer then
+            local tId = targetPlayer.UserId
+            local tTeam = targetPlayer.Team
+            local tTeamName = tTeam and tTeam.Name
+            local isTargetIndivWl = AdvancedPlayerPanelState.Whitelist[tId]
+            local isTargetIndivBl = AdvancedPlayerPanelState.Blacklist[tId]
+            local isTargetTeamBl = tTeamName and AdvancedPlayerPanelState.TeamBlacklist[tTeamName]
+            local isTargetBlacklisted = isTargetIndivBl or (isTargetTeamBl and not isTargetIndivWl)
+            if isTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+                performOcclusionCheck = false
+            end
         end
+
+        local targetHasHum = isTargetPlayer or (targetChar:IsA("Model") and targetChar:FindFirstChildOfClass("Humanoid") ~= nil)
 
         if not performOcclusionCheck and CachedIncludeFilterType then
             CrosshairIncludeFilter[1] = targetChar
             CrosshairIncludeParams.FilterDescendantsInstances = CrosshairIncludeFilter
             local incHit = Workspace:Raycast(rayOrigin, rayVector, CrosshairIncludeParams)
             if incHit and incHit.Instance then
-                if IsHumanoidBodyPart(incHit.Instance, targetChar) then
+                if isTargetPlayer then
+                    if IsHumanoidBodyPart(incHit.Instance, targetChar) then
+                        return true
+                    end
+                elseif IsValidNonPlayerHitPart(incHit.Instance, targetChar, targetHasHum, targetPart) then
                     return true
                 end
-                for _, partName in ipairs(ALL_BODY_PARTS) do
-                    local part = targetChar:FindFirstChild(partName)
-                    if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
-                        if RayIntersectsPartOBB(rayOrigin, rayDirUnit, part) then
-                            return true
+                if targetPart and RayIntersectsPartOBB(rayOrigin, rayDirUnit, targetPart) then
+                    return true
+                end
+                if targetChar:IsA("Model") then
+                    for _, partName in ipairs(ALL_BODY_PARTS) do
+                        local part = targetChar:FindFirstChild(partName)
+                        if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
+                            if RayIntersectsPartOBB(rayOrigin, rayDirUnit, part) then
+                                return true
+                            end
                         end
                     end
                 end
@@ -5565,13 +7149,19 @@ do
         end
 
         if targetPart and not targetPart.CanQuery then
-            local cache = CharCache[targetPlayer]
-            for _, partName in ipairs(ALL_BODY_PARTS) do
-                local part = (cache and cache[partName]) or targetChar:FindFirstChild(partName)
-                if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
-                    local tHit = RayIntersectsPartOBB(rayOrigin, rayDirUnit, part)
-                    if tHit and (not performOcclusionCheck or tHit < wallDist) then
-                        return true
+            local tDirect = RayIntersectsPartOBB(rayOrigin, rayDirUnit, targetPart)
+            if tDirect and (not performOcclusionCheck or tDirect < wallDist) then
+                return true
+            end
+            if targetChar:IsA("Model") then
+                local cache = isTargetPlayer and CharCache[targetPlayer] or nil
+                for _, partName in ipairs(ALL_BODY_PARTS) do
+                    local part = (cache and cache[partName]) or targetChar:FindFirstChild(partName)
+                    if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
+                        local tHit = RayIntersectsPartOBB(rayOrigin, rayDirUnit, part)
+                        if tHit and (not performOcclusionCheck or tHit < wallDist) then
+                            return true
+                        end
                     end
                 end
             end
@@ -10041,6 +11631,9 @@ function UpdateScreenUIOpacity()
     if ItemPanelUI and ItemPanelUI.MainFrame then
         ItemPanelUI.MainFrame.GroupTransparency = transparency
     end
+    if WorkspaceTracker and WorkspaceTracker.MainFrame then
+        WorkspaceTracker.MainFrame.GroupTransparency = transparency
+    end
 end
 
 function UpdateAllNametagOpacities()
@@ -10948,6 +12541,10 @@ function Cleanup()
     ItemPanelUI.PropertyFrame = nil
     ItemPanelUI.PropertySearch = nil
 
+    if WorkspaceTracker and WorkspaceTracker.Cleanup then
+        WorkspaceTracker.Cleanup()
+    end
+
     LocalPlayer.ReplicationFocus = nil
     pcall(function() GuiService:SetGameplayPausedNotificationEnabled(true) end)
 
@@ -10960,7 +12557,7 @@ function Cleanup()
     table.clear(CharCache)
 
     for _, entry in ipairs(CandidateList) do
-        entry.mag = nil; entry.ply = nil; entry.char = nil; entry.part = nil; entry.sx = nil; entry.sy = nil; entry.pos = nil; entry.realPos = nil
+        entry.isPlayer = nil; entry.mag = nil; entry.ply = nil; entry.char = nil; entry.part = nil; entry.sx = nil; entry.sy = nil; entry.pos = nil; entry.realPos = nil
     end
     table.clear(CandidateList)
 
@@ -14007,6 +15604,15 @@ UI.CreateSection(AimTab, "Camera Tracking Assistant")
 UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Stop Inside Humanoid Area (If OFF: Lock Part Center)", "Aim/HumanoidAreaLock", Flags["Aim/HumanoidAreaLock"])
+UI.CreateToggle(AimTab, "Track Nearby World Humanoids (NPCs / Animals / Mobs)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
+    CachedTarget = nil
+    if not state and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
+        table.clear(WorkspaceTracker.WorldHumEntities)
+    end
+end)
+WorkspaceTracker.AimTabButton = UI.CreateButton(AimTab, "📁 Open Workspace Target Browser", function()
+    WorkspaceTracker.ToggleBrowser()
+end)
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Auto Whitelist Friends/Connections", "Aim/AutoWhitelistFriends", Flags["Aim/AutoWhitelistFriends"], function(state)
     if state then
@@ -14247,6 +15853,9 @@ end)
 UI.CreateNumericInput(VisualsTab, "UI Scale", "Visuals/UIScale", Flags["Visuals/UIScale"], 0.1, 2.0, 0.10, "", function(val)
     ApplyUIScale(UIState.MainFrame, val)
     ApplyUIScale(ItemPanelUI.MainFrame, val)
+    if WorkspaceTracker and WorkspaceTracker.MainFrame then
+        ApplyUIScale(WorkspaceTracker.MainFrame, val)
+    end
 end)
 
 -- Fullbright & FullDark Toggles ──────────────────────────────────────────
@@ -15711,6 +17320,7 @@ local function IsCursorOverMenu()
     if isOverFrame(UIState.MainFrame) then return true end
 
     if isOverFrame(ItemPanelUI.MainFrame) then return true end
+    if WorkspaceTracker and isOverFrame(WorkspaceTracker.MainFrame) then return true end
     return false
 end
 
@@ -15850,6 +17460,9 @@ function UpdateAim()
     else
         ClearAimLockState(false)
     end
+    if WorkspaceTracker and WorkspaceTracker.SyncLockDot then
+        WorkspaceTracker.SyncLockDot()
+    end
 end
 
 TrackConnection(RunService.RenderStepped:Connect(UpdateAim))
@@ -15903,6 +17516,9 @@ function UnifiedHeartbeat(dt)
         ApplyHumanoidSettings()
         ApplyWorldHumanoidSettings()
         ApplyItemPanelSettings()
+        if WorkspaceTracker and WorkspaceTracker.HeartbeatStep then
+            WorkspaceTracker.HeartbeatStep(now, ghostMode, ghostModeChanged)
+        end
 
         local currentMax = LocalPlayer.CameraMaxZoomDistance
         local currentMin = LocalPlayer.CameraMinZoomDistance
@@ -16062,7 +17678,10 @@ function UnifiedHeartbeat(dt)
 
     local forceUpdateTarget = nil
     if CachedTarget and (now - CachedTargetTime) < 0.1 then
-        forceUpdateTarget = CachedTarget[1]
+        local ct = CachedTarget[1]
+        if ct and ct:IsA("Player") then
+            forceUpdateTarget = ct
+        end
     end
 
     if (shouldUpdateEsp or forceUpdateTarget) then
