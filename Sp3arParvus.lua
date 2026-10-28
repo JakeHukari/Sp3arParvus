@@ -91,9 +91,7 @@ local Flags = {
     ["Aim/AttractionStrength"] = 200,
     ["Aim/FOV/Radius"] = 50,
     ["Aim/FOV/ShowCircle"] = true,
-    ["Aim/Dampening"] = true,
-    ["Aim/Dampening/Threshold"] = 5,
-    ["Aim/Dampening/Strength"] = 5,
+    ["Aim/HumanoidAreaLock"] = true,
     ["Aim/Priority"] = "Head",
     ["Aim/TargetBlacklistedThroughTerrain"] = true,
     ["Aim/BypassBlacklistPriorityIfOccludedOrFar"] = false,
@@ -304,9 +302,16 @@ do
         return out
     end
 
+    local DEPRECATED_FLAGS = {
+        ["Aim/Dampening"] = true,
+        ["Aim/Dampening/Threshold"] = true,
+        ["Aim/Dampening/Strength"] = true,
+    }
+
     -- Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
         for k, v in pairs(data) do
+            if DEPRECATED_FLAGS[k] then continue end
             if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
             
             -- Mark as profile-loaded (NOT user-touched) to prevent cross-contamination
@@ -752,6 +757,7 @@ do
 
         -- Step 1: Update original profile flags with current live values
         for k in pairs(originalFlags) do
+            if DEPRECATED_FLAGS[k] then continue end
             local liveVal = Flags[k]
             local encoded = liveVal ~= nil and encodeVal(liveVal)
             newFlags[k] = encoded ~= nil and encoded or originalFlags[k]
@@ -5213,93 +5219,525 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     return nil
 end
 
-function AimAt(Hitbox)
-    if not Hitbox then
-        ClearAimLockState(false)
-        return
-    end
-    if not mousemoverel then
-        return
-    end
+do
+    local CachedIncludeFilterType = ResolveEnumItem(Enum.RaycastFilterType, {"Include", "Whitelist"})
 
-    local targetPart = Hitbox[3]
-    if not targetPart or not targetPart.Parent then
-        ClearAimLockState(false)
-        return
+    local CrosshairExcludeParams = RaycastParamsnew()
+    CrosshairExcludeParams.IgnoreWater = true
+    if CachedFilterType then
+        CrosshairExcludeParams.FilterType = CachedFilterType
     end
 
-    local currentMode = Services.UserInputService.MouseBehavior
-    if currentMode ~= AimState.LastMouseMode then
-        AimState.LastMouseMode = currentMode
-        AimState.LastOriginX = nil
-        AimState.LastOriginY = nil
+    local CrosshairIncludeParams = RaycastParamsnew()
+    CrosshairIncludeParams.IgnoreWater = true
+    if CachedIncludeFilterType then
+        CrosshairIncludeParams.FilterType = CachedIncludeFilterType
     end
 
-    local currentTarget = Hitbox[1]
-    if currentTarget ~= AimState.LastAimTarget then
-        AimState.LastAimTarget = currentTarget
-        AimState.LastOriginX = nil
-        AimState.LastOriginY = nil
+    local CrosshairExcludeFilter = {}
+    local CrosshairIncludeFilter = {nil}
+    local MAX_CROSSHAIR_RAY_STEPS = 8
+
+    local UserGameSettingsRef = nil
+    pcall(function()
+        UserGameSettingsRef = UserSettings():GetService("UserGameSettings")
+    end)
+
+    -- Adaptive gain state to prevent single-frame vaulting across humanoid outlines on high sensitivity / zoomed FOV
+    local DEFAULT_RAD_PER_COUNT = rad(0.5)
+    local EstCamRadPerCount = nil
+    local EstFreePxPerCount = 1.0
+    local LastStepPart = nil
+    local LastStepMode = nil
+    local LastStepClock = 0
+    local LastDx = 0
+    local LastDy = 0
+    local LastMoveX = 0
+    local LastMoveY = 0
+
+    local function ResetStepTracking()
+        LastStepPart = nil
+        LastMoveX = 0
+        LastMoveY = 0
     end
 
-    local targetPos = targetPart.Position
-    local cameraCFrame = Camera.CFrame
-    local cameraPos = cameraCFrame.Position
-    local dist = (targetPos - cameraPos).Magnitude
-
-    if dist < 1 then
-        return
+    local function GetCameraFocalLength(viewportHeight)
+        local fov = math.clamp((Camera and Camera.FieldOfView) or 70, 5, 170)
+        return (viewportHeight * 0.5) / math.tan(rad(fov * 0.5))
     end
 
-    local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
-    if not OnScreen or ScreenPosition.Z <= 0 then
-        return
+    local function GetSeedRadPerCount()
+        local sens = 1.0
+        if UserGameSettingsRef then
+            local ok, val = pcall(function() return UserGameSettingsRef.MouseSensitivity end)
+            if ok and type(val) == "number" and val > 0 then
+                sens = math.clamp(val, 0.05, 10)
+            end
+        end
+        return DEFAULT_RAD_PER_COUNT * sens
     end
 
-    local viewportSize = Camera.ViewportSize
-    local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
-    if not originValid then
-        return
-    end
-
-    local lastOriginX = AimState.LastOriginX
-    local lastOriginY = AimState.LastOriginY
-    AimState.LastOriginX = originX
-    AimState.LastOriginY = originY
-
-    local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
-    local dx, dy = targetX - originX, targetY - originY
-
-    local mag = sqrt(dx * dx + dy * dy)
-    if mag > Flags["Aim/FOV/Radius"] then
-        return
-    end
-
-    local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
-
-    if Flags["Aim/Dampening"] then
-        local lockThreshold = Flags["Aim/Dampening/Threshold"]
-        if mag < lockThreshold then
-            local dampening = math.max(Flags["Aim/Dampening/Strength"] / 100, mag / lockThreshold)
-            attractionMultiplier = attractionMultiplier * dampening
+    local function UpdateGainEstimate(now, currentMode, targetPart, dx, dy, viewportHeight)
+        if LastStepPart == targetPart and LastStepMode == currentMode and (now - LastStepClock) < 0.1 then
+            local moveSq = LastMoveX * LastMoveX + LastMoveY * LastMoveY
+            if moveSq > 0 then
+                local shiftX = LastDx - dx
+                local shiftY = LastDy - dy
+                local rawPxPerCount = (shiftX * LastMoveX + shiftY * LastMoveY) / moveSq
+                if rawPxPerCount >= 0.15 and rawPxPerCount <= 80 then
+                    local isCamRot = (currentMode == Enum.MouseBehavior.LockCenter or currentMode == Enum.MouseBehavior.LockCurrentPosition)
+                    if isCamRot then
+                        local focal = GetCameraFocalLength(viewportHeight)
+                        local measuredRad = rawPxPerCount / max(1, focal)
+                        local cur = EstCamRadPerCount or GetSeedRadPerCount()
+                        if measuredRad > cur then
+                            EstCamRadPerCount = cur * 0.25 + measuredRad * 0.75
+                        else
+                            EstCamRadPerCount = cur * 0.65 + measuredRad * 0.35
+                        end
+                    else
+                        if rawPxPerCount > EstFreePxPerCount then
+                            EstFreePxPerCount = EstFreePxPerCount * 0.25 + rawPxPerCount * 0.75
+                        else
+                            EstFreePxPerCount = EstFreePxPerCount * 0.65 + rawPxPerCount * 0.35
+                        end
+                    end
+                end
+            end
         end
     end
 
-    local BASE_PULL = 0.2
-    local deltaX = dx * BASE_PULL * attractionMultiplier
-    local deltaY = dy * BASE_PULL * attractionMultiplier
-
-    if deltaX ~= deltaX or deltaY ~= deltaY then
-        return
+    local function ResolveHitPlayerCharacter(inst)
+        local model = inst and inst.Parent
+        while model and model ~= Workspace and model ~= game do
+            if model:IsA("Model") then
+                local p = Players:GetPlayerFromCharacter(model)
+                if p then
+                    return p, model
+                end
+            end
+            model = model.Parent
+        end
+        return nil, nil
     end
 
-    local maxClampX = viewportSize.X * 0.5
-    local maxClampY = viewportSize.Y * 0.5
+    local function IsHumanoidBodyPart(hitPart, character)
+        local partName = hitPart.Name
+        if PART_TO_CATEGORY[partName] ~= nil then
+            if partName == "HumanoidRootPart" and hitPart.Transparency >= 1 then
+                local sz = hitPart.Size
+                if sz.X > 4.5 or sz.Y > 4.5 or sz.Z > 4.5 then
+                    return false
+                end
+            end
+            return true
+        end
+        if hitPart.Transparency >= 1 then
+            return false
+        end
+        if hitPart:FindFirstAncestorOfClass("Accessory") or hitPart:FindFirstAncestorOfClass("Tool") then
+            return false
+        end
+        return hitPart:IsDescendantOf(character)
+    end
 
-    deltaX = math.clamp(deltaX, -maxClampX, maxClampX)
-    deltaY = math.clamp(deltaY, -maxClampY, maxClampY)
+    local function IsEligibleOverlapTarget(player, targetPlayer, targetChar, cameraPos, isLocalDNR)
+        if not player or player == LocalPlayer then
+            return false
+        end
+        if player == targetPlayer then
+            return true
+        end
+        if not isLocalDNR and DNR(player) then
+            return false
+        end
 
-    mousemoverel(floor(deltaX + 0.5), floor(deltaY + 0.5))
+        local pId = player.UserId
+        local pTeam = player.Team
+        local teamName = pTeam and pTeam.Name
+
+        local isIndivWhitelisted = AdvancedPlayerPanelState.Whitelist[pId]
+        local isIndivBlacklisted = AdvancedPlayerPanelState.Blacklist[pId]
+        local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
+        local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
+
+        local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
+        if isWhitelisted then
+            return false
+        end
+
+        local isBlacklisted = isIndivBlacklisted or (isTeamBlacklisted and not isIndivWhitelisted)
+        if not isBlacklisted and not InEnemyTeam(Flags["Aim/TeamCheck"], player) then
+            return false
+        end
+
+        if not GetCharacter(player) then
+            return false
+        end
+
+        if targetPlayer then
+            local tId = targetPlayer.UserId
+            local tTeam = targetPlayer.Team
+            local tTeamName = tTeam and tTeam.Name
+            local targetRank = GetPriorityRank(targetPlayer, tTeamName)
+            if targetRank then
+                local playerRank = GetPriorityRank(player, teamName)
+                if not playerRank or playerRank > targetRank then
+                    return false
+                end
+            else
+                local isTargetIndivWl = AdvancedPlayerPanelState.Whitelist[tId]
+                local isTargetIndivBl = AdvancedPlayerPanelState.Blacklist[tId]
+                local isTargetTeamBl = tTeamName and AdvancedPlayerPanelState.TeamBlacklist[tTeamName]
+                local isTargetBlacklisted = isTargetIndivBl or (isTargetTeamBl and not isTargetIndivWl)
+                if isTargetBlacklisted then
+                    local bypassed = false
+                    if Flags["Aim/BypassBlacklistPriorityIfOccludedOrFar"] and targetChar then
+                        local tRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar.PrimaryPart
+                        if tRoot then
+                            local tDist = (tRoot.Position - cameraPos).Magnitude
+                            if tDist > Flags["Aim/BlacklistBypassDistance"] or ObjectOccluded(Flags["Aim/VisibilityCheck"], cameraPos, tRoot.Position, targetChar) then
+                                bypassed = true
+                            end
+                        end
+                    end
+                    if not bypassed and not isBlacklisted and not GetPriorityRank(player, teamName) then
+                        return false
+                    end
+                end
+            end
+        end
+
+        return true
+    end
+
+    local function RayIntersectsPartOBB(rayOrigin, rayDirUnit, part)
+        local cf = part.CFrame
+        local relOrigin = cf:PointToObjectSpace(rayOrigin)
+        local relDir = cf:VectorToObjectSpace(rayDirUnit)
+        local halfSize = part.Size * 0.5
+
+        local tMin = 0
+        local tMax = math.huge
+
+        local dx = relDir.X
+        local ox = relOrigin.X
+        local hx = halfSize.X
+        if abs(dx) < 1e-6 then
+            if ox < -hx or ox > hx then return nil end
+        else
+            local inv = 1 / dx
+            local t1 = (-hx - ox) * inv
+            local t2 = (hx - ox) * inv
+            if t1 > t2 then t1, t2 = t2, t1 end
+            if t1 > tMin then tMin = t1 end
+            if t2 < tMax then tMax = t2 end
+            if tMin > tMax then return nil end
+        end
+
+        local dy = relDir.Y
+        local oy = relOrigin.Y
+        local hy = halfSize.Y
+        if abs(dy) < 1e-6 then
+            if oy < -hy or oy > hy then return nil end
+        else
+            local inv = 1 / dy
+            local t1 = (-hy - oy) * inv
+            local t2 = (hy - oy) * inv
+            if t1 > t2 then t1, t2 = t2, t1 end
+            if t1 > tMin then tMin = t1 end
+            if t2 < tMax then tMax = t2 end
+            if tMin > tMax then return nil end
+        end
+
+        local dz = relDir.Z
+        local oz = relOrigin.Z
+        local hz = halfSize.Z
+        if abs(dz) < 1e-6 then
+            if oz < -hz or oz > hz then return nil end
+        else
+            local inv = 1 / dz
+            local t1 = (-hz - oz) * inv
+            local t2 = (hz - oz) * inv
+            if t1 > t2 then t1, t2 = t2, t1 end
+            if t1 > tMin then tMin = t1 end
+            if t2 < tMax then tMax = t2 end
+            if tMin > tMax then return nil end
+        end
+
+        return tMin
+    end
+
+    local function IsCrosshairOverHumanoid(originX, originY, targetPlayer, targetChar, targetPart, cameraPos, targetDist)
+        if not Camera then return false end
+
+        local unitRay = Camera:ViewportPointToRay(originX, originY)
+        if not unitRay then return false end
+
+        local rayOrigin = unitRay.Origin
+        local rayDirUnit = unitRay.Direction
+        local maxRayDist = max(2500, targetDist + 250)
+        local rayVector = rayDirUnit * maxRayDist
+
+        table.clear(CrosshairExcludeFilter)
+        local filterCount = 0
+        local localChar = LocalPlayer.Character
+        if localChar then
+            filterCount = filterCount + 1
+            CrosshairExcludeFilter[filterCount] = localChar
+        end
+        if Camera then
+            filterCount = filterCount + 1
+            CrosshairExcludeFilter[filterCount] = Camera
+        end
+
+        local isLocalDNR = DNR(LocalPlayer)
+        local wallDist = math.huge
+
+        for _ = 1, MAX_CROSSHAIR_RAY_STEPS do
+            CrosshairExcludeParams.FilterDescendantsInstances = CrosshairExcludeFilter
+            local hitResult = Workspace:Raycast(rayOrigin, rayVector, CrosshairExcludeParams)
+            if not hitResult or not hitResult.Instance then
+                break
+            end
+
+            local hitPart = hitResult.Instance
+            local hitPlayer, hitChar = ResolveHitPlayerCharacter(hitPart)
+
+            if hitPlayer and hitChar then
+                if IsHumanoidBodyPart(hitPart, hitChar) then
+                    if IsEligibleOverlapTarget(hitPlayer, targetPlayer, targetChar, cameraPos, isLocalDNR) then
+                        return true
+                    end
+                    wallDist = hitResult.Distance or (hitResult.Position - rayOrigin).Magnitude
+                    break
+                else
+                    local acc = hitPart:FindFirstAncestorOfClass("Accessory")
+                    local tool = not acc and hitPart:FindFirstAncestorOfClass("Tool")
+                    filterCount = filterCount + 1
+                    CrosshairExcludeFilter[filterCount] = acc or tool or hitPart
+                end
+            else
+                if not hitPart.CanCollide and hitPart.Transparency >= 0.95 then
+                    filterCount = filterCount + 1
+                    CrosshairExcludeFilter[filterCount] = hitPart
+                else
+                    wallDist = hitResult.Distance or (hitResult.Position - rayOrigin).Magnitude
+                    break
+                end
+            end
+        end
+
+        if not targetPlayer or not targetChar then
+            return false
+        end
+
+        local tId = targetPlayer.UserId
+        local tTeam = targetPlayer.Team
+        local tTeamName = tTeam and tTeam.Name
+        local isTargetIndivWl = AdvancedPlayerPanelState.Whitelist[tId]
+        local isTargetIndivBl = AdvancedPlayerPanelState.Blacklist[tId]
+        local isTargetTeamBl = tTeamName and AdvancedPlayerPanelState.TeamBlacklist[tTeamName]
+        local isTargetBlacklisted = isTargetIndivBl or (isTargetTeamBl and not isTargetIndivWl)
+
+        local performOcclusionCheck = Flags["Aim/VisibilityCheck"]
+        if isTargetBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"] then
+            performOcclusionCheck = false
+        end
+
+        if not performOcclusionCheck and CachedIncludeFilterType then
+            CrosshairIncludeFilter[1] = targetChar
+            CrosshairIncludeParams.FilterDescendantsInstances = CrosshairIncludeFilter
+            local incHit = Workspace:Raycast(rayOrigin, rayVector, CrosshairIncludeParams)
+            if incHit and incHit.Instance then
+                if IsHumanoidBodyPart(incHit.Instance, targetChar) then
+                    return true
+                end
+                for _, partName in ipairs(ALL_BODY_PARTS) do
+                    local part = targetChar:FindFirstChild(partName)
+                    if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
+                        if RayIntersectsPartOBB(rayOrigin, rayDirUnit, part) then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+
+        if targetPart and not targetPart.CanQuery then
+            local cache = CharCache[targetPlayer]
+            for _, partName in ipairs(ALL_BODY_PARTS) do
+                local part = (cache and cache[partName]) or targetChar:FindFirstChild(partName)
+                if part and part:IsA("BasePart") and IsHumanoidBodyPart(part, targetChar) then
+                    local tHit = RayIntersectsPartOBB(rayOrigin, rayDirUnit, part)
+                    if tHit and (not performOcclusionCheck or tHit < wallDist) then
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
+    end
+
+    function AimAt(Hitbox)
+        if not Hitbox then
+            if LastStepPart and LastStepPart.Parent and (LastMoveX ~= 0 or LastMoveY ~= 0) and Camera then
+                local now = os.clock()
+                if (now - LastStepClock) < 0.1 then
+                    local mode = Services.UserInputService.MouseBehavior
+                    local ox, oy, okOrig = GetCrosshairViewportPosition(mode)
+                    local sp, onScr = GetViewportPoint(LastStepPart.Position)
+                    if okOrig and onScr and sp.Z > 0 then
+                        UpdateGainEstimate(now, mode, LastStepPart, sp.X - ox, sp.Y - oy, Camera.ViewportSize.Y)
+                    end
+                end
+            end
+            ResetStepTracking()
+            ClearAimLockState(false)
+            return
+        end
+        if not mousemoverel then
+            return
+        end
+
+        local targetPart = Hitbox[3]
+        if not targetPart or not targetPart.Parent then
+            ResetStepTracking()
+            ClearAimLockState(false)
+            return
+        end
+
+        local currentMode = Services.UserInputService.MouseBehavior
+        if currentMode ~= AimState.LastMouseMode then
+            AimState.LastMouseMode = currentMode
+            AimState.LastOriginX = nil
+            AimState.LastOriginY = nil
+            ResetStepTracking()
+        end
+
+        local currentTarget = Hitbox[1]
+        if currentTarget ~= AimState.LastAimTarget then
+            AimState.LastAimTarget = currentTarget
+            AimState.LastOriginX = nil
+            AimState.LastOriginY = nil
+            ResetStepTracking()
+        end
+
+        local targetPos = targetPart.Position
+        local cameraCFrame = Camera.CFrame
+        local cameraPos = cameraCFrame.Position
+        local dist = (targetPos - cameraPos).Magnitude
+
+        if dist < 1 then
+            ResetStepTracking()
+            return
+        end
+
+        local ScreenPosition, OnScreen = GetViewportPoint(targetPos)
+        if not OnScreen or ScreenPosition.Z <= 0 then
+            ResetStepTracking()
+            return
+        end
+
+        local viewportSize = Camera.ViewportSize
+        local originX, originY, originValid = GetCrosshairViewportPosition(currentMode)
+        if not originValid then
+            ResetStepTracking()
+            return
+        end
+
+        AimState.LastOriginX = originX
+        AimState.LastOriginY = originY
+
+        local targetX, targetY = ScreenPosition.X, ScreenPosition.Y
+        local dx, dy = targetX - originX, targetY - originY
+        local now = os.clock()
+
+        UpdateGainEstimate(now, currentMode, targetPart, dx, dy, viewportSize.Y)
+
+        local mag = sqrt(dx * dx + dy * dy)
+        if mag > Flags["Aim/FOV/Radius"] then
+            ResetStepTracking()
+            return
+        end
+
+        local useHumanoidAreaLock = Flags["Aim/HumanoidAreaLock"]
+        if useHumanoidAreaLock then
+            if IsCrosshairOverHumanoid(originX, originY, currentTarget, Hitbox[2], targetPart, cameraPos, dist) then
+                ResetStepTracking()
+                return
+            end
+        end
+
+        local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
+
+        local BASE_PULL = 0.2
+        local deltaX = dx * BASE_PULL * attractionMultiplier
+        local deltaY = dy * BASE_PULL * attractionMultiplier
+
+        if deltaX ~= deltaX or deltaY ~= deltaY then
+            ResetStepTracking()
+            return
+        end
+
+        if useHumanoidAreaLock and mag > 0 then
+            local isCamRot = (currentMode == Enum.MouseBehavior.LockCenter or currentMode == Enum.MouseBehavior.LockCurrentPosition)
+            local estPxPerCount
+            if isCamRot then
+                if not EstCamRadPerCount then
+                    EstCamRadPerCount = GetSeedRadPerCount()
+                end
+                estPxPerCount = max(0.25, EstCamRadPerCount * GetCameraFocalLength(viewportSize.Y))
+            else
+                estPxPerCount = max(0.25, EstFreePxPerCount)
+            end
+
+            local deltaMag = sqrt(deltaX * deltaX + deltaY * deltaY)
+            local maxSafeCounts = (0.75 * mag) / estPxPerCount
+            if deltaMag > maxSafeCounts and deltaMag > 0 then
+                local scale = maxSafeCounts / deltaMag
+                deltaX = deltaX * scale
+                deltaY = deltaY * scale
+            end
+        end
+
+        local maxClampX = viewportSize.X * 0.5
+        local maxClampY = viewportSize.Y * 0.5
+
+        deltaX = math.clamp(deltaX, -maxClampX, maxClampX)
+        deltaY = math.clamp(deltaY, -maxClampY, maxClampY)
+
+        local moveX = deltaX >= 0 and floor(deltaX + 0.5) or -floor(-deltaX + 0.5)
+        local moveY = deltaY >= 0 and floor(deltaY + 0.5) or -floor(-deltaY + 0.5)
+
+        if useHumanoidAreaLock and moveX == 0 and moveY == 0 and mag > 1.5 then
+            local isCamRot = (currentMode == Enum.MouseBehavior.LockCenter or currentMode == Enum.MouseBehavior.LockCurrentPosition)
+            local estPxPerCount = isCamRot and ((EstCamRadPerCount or GetSeedRadPerCount()) * GetCameraFocalLength(viewportSize.Y)) or EstFreePxPerCount
+            if estPxPerCount <= mag * 1.5 then
+                if abs(dx) >= abs(dy) then
+                    moveX = dx > 0 and 1 or -1
+                else
+                    moveY = dy > 0 and 1 or -1
+                end
+            end
+        end
+
+        if moveX == 0 and moveY == 0 then
+            ResetStepTracking()
+            return
+        end
+
+        LastStepPart = targetPart
+        LastStepMode = currentMode
+        LastStepClock = now
+        LastDx = dx
+        LastDy = dy
+        LastMoveX = moveX
+        LastMoveY = moveY
+
+        mousemoverel(moveX, moveY)
+    end
 end
 
 ESPObjects = {}
@@ -13568,6 +14006,7 @@ end
 UI.CreateSection(AimTab, "Camera Tracking Assistant")
 UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
+UI.CreateToggle(AimTab, "Stop Inside Humanoid Area (If OFF: Lock Part Center)", "Aim/HumanoidAreaLock", Flags["Aim/HumanoidAreaLock"])
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Auto Whitelist Friends/Connections", "Aim/AutoWhitelistFriends", Flags["Aim/AutoWhitelistFriends"], function(state)
     if state then
@@ -13590,9 +14029,6 @@ UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Fl
 UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 UI.CreateToggle(AimTab, "Show FOV Circle", "Aim/FOV/ShowCircle", Flags["Aim/FOV/ShowCircle"])
-UI.CreateToggle(AimTab, "Enable Dampening", "Aim/Dampening", Flags["Aim/Dampening"])
-UI.CreateNumericInput(AimTab, "Dampening Threshold", "Aim/Dampening/Threshold", Flags["Aim/Dampening/Threshold"], 0, 500, 5, "px")
-UI.CreateNumericInput(AimTab, "Dampening Min Strength", "Aim/Dampening/Strength", Flags["Aim/Dampening/Strength"], 0, 100, 1, "%")
 
 UI.CreateSection(AimTab, "Target Zone Selector")
 

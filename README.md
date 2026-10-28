@@ -40,7 +40,7 @@ Execute the script in your testing environment workspace.
 ## Features
 
 ### Interaction & Input Testing
-*   **Advanced Target Tracking (Aim-Lock)**: Sophisticated viewport tracking to automatically focus the camera on nearby targets, simulating player focus. Includes customizable target groups (Head, Torso, Limbs), dampening/smoothing, and Field of View (FOV) limits.
+*   **Advanced Target Tracking (Aim-Lock)**: Sophisticated viewport tracking to automatically focus the camera on nearby targets, simulating player focus. Includes customizable target groups (Head, Torso, Limbs), humanoid-area or part-center lock modes, and Field of View (FOV) limits.
 *   **Target Prioritization**: Prioritize specific players or entire teams. Prioritized targets will be locked onto preferentially over other players.
 *   **Blacklist & Visibility Rules**: Configure rules to bypass blacklist priorities if a target is occluded or far away, and optionally target blacklisted players through terrain.
 *   **Input Simulation**: Automated click simulation for testing UI interactions, hitboxes, and event triggers without manual repetition.
