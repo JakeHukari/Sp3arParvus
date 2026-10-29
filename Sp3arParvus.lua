@@ -181,6 +181,7 @@ local Flags = {
     ["Settings/Freecam Toggle"] = true,
     ["Settings/GhostMode"] = false,
     ["Visuals/InformationDisplay"] = true,
+    ["Visuals/CenterDot"] = true,
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/MouseModeSwitcher"] = true,
     ["Misc/ItemPanel"] = false,
@@ -12806,6 +12807,85 @@ function UpdatePerformanceDisplay()
     end
 end
 
+local CenterDotFrame = nil
+
+function CreateCenterDot(parent)
+    if CenterDotFrame and CenterDotFrame.Parent then return CenterDotFrame end
+    if not parent then
+        parent = EnsureScreenGui()
+    end
+    if not parent then return nil end
+
+    CenterDotFrame = Instance.new("Frame")
+    CenterDotFrame.Name = "CenterDot"
+    CenterDotFrame.Size = UDim2.fromOffset(4, 4)
+    CenterDotFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    CenterDotFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    CenterDotFrame.BackgroundTransparency = 0
+    CenterDotFrame.BorderSizePixel = 0
+    CenterDotFrame.Active = false
+    CenterDotFrame.Selectable = false
+    CenterDotFrame.ZIndex = 10000
+    pcall(function() CenterDotFrame.Interactable = false end)
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = CenterDotFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(0, 0, 0)
+    stroke.Transparency = 0.3
+    stroke.Parent = CenterDotFrame
+
+    CenterDotFrame.Visible = Flags["Visuals/CenterDot"] and not Flags["Settings/GhostMode"]
+    CenterDotFrame.Parent = parent
+    return CenterDotFrame
+end
+
+function UpdateCenterDot()
+    if not CenterDotFrame or not CenterDotFrame.Parent then
+        CreateCenterDot(ScreenGui)
+        if not CenterDotFrame or not CenterDotFrame.Parent then return end
+    end
+
+    local enabled = Flags["Visuals/CenterDot"] and not Flags["Settings/GhostMode"]
+    if not enabled then
+        if CenterDotFrame.Visible then
+            CenterDotFrame.Visible = false
+        end
+        return
+    end
+
+    if not Camera then
+        Camera = Services.Workspace.CurrentCamera
+    end
+    if not Camera then return end
+
+    local currentMode = Services.UserInputService.MouseBehavior
+    local isMouseLocked = (currentMode == Enum.MouseBehavior.LockCenter)
+        or (currentMode == Enum.MouseBehavior.LockCurrentPosition)
+        or (MouseModeSwitcherState and MouseModeSwitcherState.CurrentMode == "CenterLocked")
+
+    local dotX, dotY
+    if isMouseLocked then
+        local viewportSize = Camera.ViewportSize
+        dotX = viewportSize.X * 0.5
+        dotY = viewportSize.Y * 0.5
+    else
+        local mouseLoc = Services.UserInputService:GetMouseLocation()
+        dotX = mouseLoc.X
+        dotY = mouseLoc.Y
+    end
+
+    if dotX ~= dotX or dotY ~= dotY then return end
+
+    CenterDotFrame.Position = UDim2.fromOffset(dotX, dotY)
+    if not CenterDotFrame.Visible then
+        CenterDotFrame.Visible = true
+    end
+end
+
 function UpdateScreenUIOpacity()
     local opacity = (Flags["LocalUI/ScreenUIOpacity"] or 75) / 100
     local transparency = 1 - opacity
@@ -13543,6 +13623,9 @@ local function SetMouseMode(targetMode, silent)
     if MouseModeSwitcherState.UpdateUI then
         pcall(MouseModeSwitcherState.UpdateUI)
     end
+    if UpdateCenterDot then
+        pcall(UpdateCenterDot)
+    end
 end
 
 local function TriggerMouseModeSwitcher()
@@ -13845,6 +13928,10 @@ function Cleanup()
     ClosestPlayerTrackerLabel = nil
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
+    if CenterDotFrame then
+        pcall(function() CenterDotFrame:Destroy() end)
+    end
+    CenterDotFrame = nil
 
     if AdvancedPlayerPanelUI.MainFrame then
         pcall(function() AdvancedPlayerPanelUI.MainFrame:Destroy() end)
@@ -14468,6 +14555,7 @@ CreateInformationDisplayHUD(ScreenGui)
 CreatePerformanceDisplay(ScreenGui)
 CreateLocalHealthHUD(ScreenGui)
 CreateClosestPlayerTracker()
+CreateCenterDot(ScreenGui)
 
 local AimTab = UI.CreateTab("Tracking")
 local VisualsTab = UI.CreateTab("Visuals")
@@ -17268,8 +17356,13 @@ end)
 UI.CreateToggle(VisualsTab, "Show Closest Player Tracker", "LocalUI/ClosestPlayerTracker", Flags["LocalUI/ClosestPlayerTracker"], function(state)
     if ClosestPlayerTrackerLabel then ClosestPlayerTrackerLabel.Visible = state end
 end)
+UI.CreateToggle(VisualsTab, "Show Center-Dot (Crosshair Overlay)", "Visuals/CenterDot", Flags["Visuals/CenterDot"], function(state)
+    Flags["Visuals/CenterDot"] = state
+    UpdateCenterDot()
+end)
 UI.CreateToggle(VisualsTab, "Gh0st Mode (Ctrl+G)", "Settings/GhostMode", Flags["Settings/GhostMode"], function(state)
     if NotifyGui then NotifyGui.Enabled = not state end
+    UpdateCenterDot()
 end)
 UI.CreateToggle(VisualsTab, "Enable Information Display (Ctrl+.)", "Visuals/InformationDisplay", Flags["Visuals/InformationDisplay"])
 UI.CreateToggle(VisualsTab, "Scroll-unlocker", "Misc/ScrollUnlocker", Flags["Misc/ScrollUnlocker"], function(state)
@@ -19026,6 +19119,7 @@ end
 
 function UpdateAim()
     pcall(UpdateFOVCircle)
+    pcall(UpdateCenterDot)
 
     if SAFE_MODE then return end
 

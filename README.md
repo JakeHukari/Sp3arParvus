@@ -50,6 +50,7 @@ Execute the script in your testing environment workspace.
 
 ### Visuals & Analytics
 *   **Gh0st Mode**: Removes obstructive UI elements to provide a cleaner debugging experience.
+*   **Center-Dot (Crosshair Overlay)**: A tiny white GUI dot that follows your mouse position (in free-mouse mode) or viewport center (when mouse is center-locked) to show the exact aim/cursor point in environments where standard cursors or crosshairs are hidden. Enabled by default; toggled in Visuals settings.
 *   **Player Visualization**: Full humanoidHitbox rendering, playerTags with user info, worldDistance tracking, and playerTeam identification.
     *   **Distance-based Sorting**: Color-coded proximity: **Pink** (Closest), **Red** (≤750 studs), **Yellow** (≤1875 studs), and **Green** (>1875 studs).
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
