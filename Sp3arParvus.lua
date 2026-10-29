@@ -182,6 +182,7 @@ local Flags = {
     ["Settings/GhostMode"] = false,
     ["Visuals/InformationDisplay"] = true,
     ["Misc/ScrollUnlocker"] = true,
+    ["Misc/MouseModeSwitcher"] = true,
     ["Misc/ItemPanel"] = false,
     ["Misc/QTeleport"] = true,
     ["Misc/HorizontalPositionForceValue"] = 1.5,
@@ -1308,6 +1309,17 @@ local ZoomState = {
     Multiplier = 1,
     WasCtrlHeld = false,
     UserScrolled = false
+}
+local MouseModeSwitcherState = {
+    CurrentMode = nil, -- nil = Game Default, "Unlocked" = Free cursor, "CenterLocked" = Center locked (camera/aim/phys)
+    LEFT_ALT_HELD = false,
+    RIGHT_ALT_HELD = false,
+    ComboActive = false,
+    LastToggle = 0,
+    StatusLabel = nil,
+    UpdateUI = nil,
+    OriginalMouseBehavior = nil,
+    OriginalMouseIconEnabled = nil
 }
 
 local LocalCharReady = true
@@ -13481,6 +13493,152 @@ end
 end
 ___InitializeFreecam()
 
+
+local function SetMouseMode(targetMode, silent)
+    if MouseModeSwitcherState.CurrentMode == nil and targetMode ~= nil then
+        MouseModeSwitcherState.OriginalMouseBehavior = Services.UserInputService.MouseBehavior
+        pcall(function()
+            MouseModeSwitcherState.OriginalMouseIconEnabled = Services.UserInputService.MouseIconEnabled
+        end)
+    end
+
+    MouseModeSwitcherState.CurrentMode = targetMode
+
+    if targetMode == "Unlocked" then
+        Services.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        pcall(function() Services.UserInputService.MouseIconEnabled = true end)
+        if _G.FreecamActive and freecamMouseLocked ~= nil then
+            freecamMouseLocked = false
+        end
+        if not silent then
+            UI.Notify("Mouse Mode Switcher", "Mouse Mode: Unlocked (Free-Move)\nCursor freed for GUI interactions", 3)
+        end
+    elseif targetMode == "CenterLocked" then
+        Services.UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        if _G.FreecamActive and freecamMouseLocked ~= nil then
+            freecamMouseLocked = true
+        end
+        if not silent then
+            UI.Notify("Mouse Mode Switcher", "Mouse Mode: Center-Locked\nPanning aims weapon / turns character", 3)
+        end
+    else
+        MouseModeSwitcherState.CurrentMode = nil
+        if MouseModeSwitcherState.OriginalMouseBehavior then
+            Services.UserInputService.MouseBehavior = MouseModeSwitcherState.OriginalMouseBehavior
+        else
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end
+        if MouseModeSwitcherState.OriginalMouseIconEnabled ~= nil then
+            pcall(function()
+                Services.UserInputService.MouseIconEnabled = MouseModeSwitcherState.OriginalMouseIconEnabled
+            end)
+        else
+            pcall(function() Services.UserInputService.MouseIconEnabled = true end)
+        end
+        if not silent then
+            UI.Notify("Mouse Mode Switcher", "Mouse Mode: Game Default\nControl returned to game", 3)
+        end
+    end
+
+    if MouseModeSwitcherState.UpdateUI then
+        pcall(MouseModeSwitcherState.UpdateUI)
+    end
+end
+
+local function TriggerMouseModeSwitcher()
+    if not Flags["Misc/MouseModeSwitcher"] then
+        UI.Notify("Mouse Mode Switcher", "Mouse Mode Switcher is disabled in Dev Tools settings.", 3)
+        return
+    end
+
+    local now = os.clock()
+    if (now - MouseModeSwitcherState.LastToggle) < 0.25 then
+        return
+    end
+    MouseModeSwitcherState.LastToggle = now
+
+    local targetMode
+    if MouseModeSwitcherState.CurrentMode == "Unlocked" then
+        targetMode = "CenterLocked"
+    elseif MouseModeSwitcherState.CurrentMode == "CenterLocked" then
+        targetMode = "Unlocked"
+    else
+        local cur = Services.UserInputService.MouseBehavior
+        if cur == Enum.MouseBehavior.LockCenter or cur == Enum.MouseBehavior.LockCurrentPosition then
+            targetMode = "Unlocked"
+        else
+            targetMode = "CenterLocked"
+        end
+    end
+
+    SetMouseMode(targetMode)
+end
+
+local function EnforceMouseMode()
+    if not Sp3arParvus.Active then return end
+    if not Flags["Misc/MouseModeSwitcher"] then return end
+    if _G.FreecamActive then return end
+
+    if MouseModeSwitcherState.CurrentMode == "Unlocked" then
+        if Services.UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end
+        if not Services.UserInputService.MouseIconEnabled then
+            pcall(function() Services.UserInputService.MouseIconEnabled = true end)
+        end
+    elseif MouseModeSwitcherState.CurrentMode == "CenterLocked" then
+        if Services.UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        end
+    end
+end
+
+pcall(function()
+    Services.RunService:BindToRenderStep("Sp3arParvusMouseModeSwitcher", Enum.RenderPriority.Last.Value + 1000, EnforceMouseMode)
+end)
+
+TrackConnection(Services.RunService.RenderStepped:Connect(EnforceMouseMode))
+
+local updatingMouseBehavior = false
+TrackConnection(Services.UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
+    if updatingMouseBehavior then return end
+    if not Sp3arParvus.Active or not Flags["Misc/MouseModeSwitcher"] or _G.FreecamActive then return end
+
+    if MouseModeSwitcherState.CurrentMode == "Unlocked" then
+        if Services.UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+            updatingMouseBehavior = true
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            updatingMouseBehavior = false
+        end
+    elseif MouseModeSwitcherState.CurrentMode == "CenterLocked" then
+        if Services.UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+            updatingMouseBehavior = true
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            updatingMouseBehavior = false
+        end
+    end
+end))
+
+local updatingMouseIcon = false
+TrackConnection(Services.UserInputService:GetPropertyChangedSignal("MouseIconEnabled"):Connect(function()
+    if updatingMouseIcon then return end
+    if not Sp3arParvus.Active or not Flags["Misc/MouseModeSwitcher"] or _G.FreecamActive then return end
+
+    if MouseModeSwitcherState.CurrentMode == "Unlocked" then
+        if not Services.UserInputService.MouseIconEnabled then
+            updatingMouseIcon = true
+            pcall(function() Services.UserInputService.MouseIconEnabled = true end)
+            updatingMouseIcon = false
+        end
+    end
+end))
+
+TrackConnection(Services.UserInputService.WindowFocusReleased:Connect(function()
+    MouseModeSwitcherState.LEFT_ALT_HELD = false
+    MouseModeSwitcherState.RIGHT_ALT_HELD = false
+    MouseModeSwitcherState.ComboActive = false
+end))
+
 function Cleanup()
 
     if delfile and isfile and isfile("Sp3arParvus_Icon.png") then
@@ -13495,6 +13653,20 @@ function Cleanup()
     pcall(function()
         game:GetService("ContextActionService"):UnbindAction("FreecamToggle")
     end)
+
+    if MouseModeSwitcherState then
+        pcall(function()
+            Services.RunService:UnbindFromRenderStep("Sp3arParvusMouseModeSwitcher")
+        end)
+        if MouseModeSwitcherState.CurrentMode then
+            Services.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            pcall(function() Services.UserInputService.MouseIconEnabled = true end)
+        end
+        MouseModeSwitcherState.CurrentMode = nil
+        MouseModeSwitcherState.LEFT_ALT_HELD = false
+        MouseModeSwitcherState.RIGHT_ALT_HELD = false
+        MouseModeSwitcherState.ComboActive = false
+    end
 
     Sp3arParvus.Active = false
 
@@ -13849,9 +14021,9 @@ local KeyboardRows = {
     {
         {Text = "ctrl", Key = "Ctrl", Width = 1.25, KeyCode = Enum.KeyCode.LeftControl, Name = "Control Modifier", Action = "Ctrl (Held)", Desc = "Modifier key held to execute script keyboard shortcuts."},
         {Text = "❖", Width = 1.25},
-        {Text = "alt", Width = 1.25},
+        {Text = "alt", Key = "LeftAlt", Width = 1.25, KeyCode = Enum.KeyCode.LeftAlt, Name = "Mouse Mode Switcher (Left Alt)", Action = "Right-Alt + Left-Alt", Desc = "Press Right-Alt and Left-Alt together to switch mouse mode between Center-Locked (aim/movement) and Unlocked (free mouse/GUI).", StatusKey = "MouseModeSwitcher"},
         {Text = "space", Width = 5.5},
-        {Text = "alt", Width = 1.25},
+        {Text = "alt", Key = "RightAlt", Width = 1.25, KeyCode = Enum.KeyCode.RightAlt, Name = "Mouse Mode Switcher (Right Alt)", Action = "Right-Alt + Left-Alt", Desc = "Press Right-Alt and Left-Alt together to switch mouse mode between Center-Locked (aim/movement) and Unlocked (free mouse/GUI).", StatusKey = "MouseModeSwitcher"},
         {Text = "fn", Width = 1.25},
         {Text = "ctrl", Width = 1.25},
         {Text = "←", Key = "Left", Width = 1, KeyCode = Enum.KeyCode.Left, Name = "Position Force Left", Action = "Ctrl + Left", Desc = "Forces character position left by the configured distance."},
@@ -14064,6 +14236,12 @@ function InitializeShortcutsPage(page)
                     local shiftDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
                     status = shiftDown and hsActive or whActive
                     customStatusText = string.format("World Hum: %s  •  Headshot: %s", whActive and "ON" or "OFF", hsActive and "ON" or "OFF")
+                elseif keyData.StatusKey == "MouseModeSwitcher" then
+                    status = Flags["Misc/MouseModeSwitcher"]
+                    local mode = MouseModeSwitcherState.CurrentMode or "Game Default"
+                    if mode == "Unlocked" then mode = "Unlocked (Free)"
+                    elseif mode == "CenterLocked" then mode = "Center-Locked" end
+                    customStatusText = string.format("Enabled: %s  •  Mode: %s", status and "ON" or "OFF", mode)
                 else
                     status = Flags[keyData.StatusKey]
                 end
@@ -17666,6 +17844,92 @@ end)
 UI.CreateButton(MiscTab, "Unload Script", Cleanup)
 UI.CreateButton(MiscTab, "Force Reload (Reload latest script version from GitHub)", ForceReload)
 
+UI.CreateSection(MiscTab, "Mouse Mode Switcher (Right-Alt + Left-Alt)")
+UI.CreateToggle(MiscTab, "Enable Mouse-Mode-Switcher", "Misc/MouseModeSwitcher", Flags["Misc/MouseModeSwitcher"], function(state)
+    Flags["Misc/MouseModeSwitcher"] = state
+    if not state then
+        SetMouseMode(nil)
+    end
+    if MouseModeSwitcherState.UpdateUI then
+        MouseModeSwitcherState.UpdateUI()
+    end
+end)
+
+do
+    local statusFrame = Instance.new("Frame")
+    statusFrame.Size = UDim2.new(1, 0, 0, 32)
+    statusFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    statusFrame.BorderSizePixel = 0
+    statusFrame.Parent = MiscTab
+
+    local sfCorner = Instance.new("UICorner")
+    sfCorner.CornerRadius = UDim.new(0, 6)
+    sfCorner.Parent = statusFrame
+
+    local sfStroke = Instance.new("UIStroke")
+    sfStroke.Color = UI_THEME.Accent
+    sfStroke.Thickness = 1
+    sfStroke.Parent = statusFrame
+
+    local sfPadding = Instance.new("UIPadding")
+    sfPadding.PaddingLeft = UDim.new(0, 10)
+    sfPadding.PaddingRight = UDim.new(0, 10)
+    sfPadding.Parent = statusFrame
+
+    local sfLayout = Instance.new("UIListLayout")
+    sfLayout.FillDirection = Enum.FillDirection.Horizontal
+    sfLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    sfLayout.Padding = UDim.new(0, 8)
+    sfLayout.Parent = statusFrame
+
+    local sfDot = Instance.new("Frame")
+    sfDot.Size = UDim2.fromOffset(8, 8)
+    sfDot.BackgroundColor3 = UI_THEME.Accent
+    sfDot.Parent = statusFrame
+    local sfdCorner = Instance.new("UICorner"); sfdCorner.CornerRadius = UDim.new(1, 0); sfdCorner.Parent = sfDot
+
+    local sfLabel = Instance.new("TextLabel")
+    sfLabel.Size = UDim2.new(1, -20, 1, 0)
+    sfLabel.BackgroundTransparency = 1
+    sfLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+    sfLabel.TextSize = 11
+    sfLabel.TextColor3 = UI_THEME.Text
+    sfLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sfLabel.Parent = statusFrame
+
+    MouseModeSwitcherState.StatusLabel = sfLabel
+
+    local function refreshUI()
+        local mode = MouseModeSwitcherState.CurrentMode
+        if not Flags["Misc/MouseModeSwitcher"] then
+            sfDot.BackgroundColor3 = UI_THEME.Fail
+            sfLabel.Text = "Mouse Mode: Disabled in Settings"
+        elseif mode == "Unlocked" then
+            sfDot.BackgroundColor3 = UI_THEME.Success
+            sfLabel.Text = "Mouse Mode: Unlocked (Free-Move / GUI Interactions)"
+        elseif mode == "CenterLocked" then
+            sfDot.BackgroundColor3 = Color3.fromRGB(240, 180, 50)
+            sfLabel.Text = "Mouse Mode: Center-Locked (Aim / Movement)"
+        else
+            sfDot.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+            local cur = Services.UserInputService.MouseBehavior
+            local curText = (cur == Enum.MouseBehavior.LockCenter or cur == Enum.MouseBehavior.LockCurrentPosition) and "Game Center-Locked" or "Game Free"
+            sfLabel.Text = "Mouse Mode: Game Default (" .. curText .. ")"
+        end
+    end
+
+    MouseModeSwitcherState.UpdateUI = refreshUI
+    refreshUI()
+end
+
+UI.CreateButton(MiscTab, "Switch Mode (Unlocked <-> Center-Locked)", function()
+    TriggerMouseModeSwitcher()
+end)
+
+UI.CreateButton(MiscTab, "Reset Mouse to Game Default", function()
+    SetMouseMode(nil)
+end)
+
 UI.CreateSection(MiscTab, "Configuration")
 
 do
@@ -18026,6 +18290,16 @@ TrackConnection(Services.UserInputService.InputBegan:Connect(function(input, gam
         Br3ak3rState.CTRL_HELD = true
     elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
         H1ghl1ght3rState.SHIFT_HELD = true
+    elseif input.KeyCode == Enum.KeyCode.LeftAlt then
+        MouseModeSwitcherState.LEFT_ALT_HELD = true
+        if MouseModeSwitcherState.RIGHT_ALT_HELD or Services.UserInputService:IsKeyDown(Enum.KeyCode.RightAlt) then
+            TriggerMouseModeSwitcher()
+        end
+    elseif input.KeyCode == Enum.KeyCode.RightAlt then
+        MouseModeSwitcherState.RIGHT_ALT_HELD = true
+        if MouseModeSwitcherState.LEFT_ALT_HELD or Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt) then
+            TriggerMouseModeSwitcher()
+        end
     end
 
     if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -18137,6 +18411,10 @@ TrackConnection(Services.UserInputService.InputEnded:Connect(function(input)
         if not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and not UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
             H1ghl1ght3rState.SHIFT_HELD = false
         end
+    elseif input.KeyCode == Enum.KeyCode.LeftAlt then
+        MouseModeSwitcherState.LEFT_ALT_HELD = false
+    elseif input.KeyCode == Enum.KeyCode.RightAlt then
+        MouseModeSwitcherState.RIGHT_ALT_HELD = false
     end
 
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -18796,6 +19074,20 @@ lastGhostMode = nil
 
 function UnifiedHeartbeat(dt)
     if not Sp3arParvus.Active or not LocalCharReady then return end
+
+    -- Dual Alt combo check (heartbeat backup in case key input was captured by GUI/engine)
+    if Flags["Misc/MouseModeSwitcher"] then
+        local leftAltDown = Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt)
+        local rightAltDown = Services.UserInputService:IsKeyDown(Enum.KeyCode.RightAlt)
+        if leftAltDown and rightAltDown then
+            if not MouseModeSwitcherState.ComboActive then
+                MouseModeSwitcherState.ComboActive = true
+                TriggerMouseModeSwitcher()
+            end
+        else
+            MouseModeSwitcherState.ComboActive = false
+        end
+    end
 
     local now = os.clock()
     local ghostMode = Flags["Settings/GhostMode"]

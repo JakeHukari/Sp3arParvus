@@ -44,6 +44,7 @@ Execute the script in your testing environment workspace.
 *   **Target Prioritization**: Prioritize specific players or entire teams. Prioritized targets will be locked onto preferentially over other players.
 *   **Blacklist & Visibility Rules**: Configure rules to bypass blacklist priorities if a target is occluded or far away, and optionally target blacklisted players through terrain.
 *   **Input Simulation**: Automated click simulation for testing UI interactions, hitboxes, and event triggers without manual repetition.
+*   **Mouse Mode Switcher**: Instantly switch mouse/cursor mode between **Center-Locked** (mouse movement turns camera and character to aim weapons and interact with the physical game world) and **Free-Move / Unlocked** mode (mouse cursor is unlocked and visible to click on-screen GUI elements, menus, dialogs, and HUD buttons) by pressing **Right-Alt + Left-Alt** at the same time.
 *   **Target Indicators**: Dynamic Indicators on target parts that turn **Red** when focused by the camera tracking system.
 *   **Position-Force**: Instantly move your humanoid in any direction using direction inputs.
 
@@ -86,6 +87,7 @@ Execute the script in your testing environment workspace.
 *   **Unload Sp3arParvus**: `Ctrl + U`
 
 ### Interaction & Testing
+*   **Mouse Mode Switcher**: `Right-Alt + Left-Alt` (Switch between Center-Locked and Free-Move Unlocked mouse)
 *   **Aim-Lock / Camera Tracking Toggle**: `Ctrl + ~`
 *   **Aim-Lock Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
 *   **Toggle World Humanoid Tracking & Visuals**: `Ctrl + H`
