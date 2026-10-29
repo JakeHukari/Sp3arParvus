@@ -40,7 +40,7 @@ Execute the script in your testing environment workspace.
 ## Features
 
 ### Interaction & Input Testing
-*   **Advanced Target Tracking (Aim-Lock)**: Sophisticated viewport tracking to automatically focus the camera on nearby targets, simulating player focus. Includes customizable target groups (Head, Torso, Limbs), humanoid-area or part-center lock modes, nearby World Humanoid (NPC/animal/mob) tracking, a dynamic Workspace Target Browser for tracking any non-player items or folders, and Field of View (FOV) limits.
+*   **Advanced Target Tracking (Aim-Lock)**: Sophisticated viewport tracking to automatically focus the camera on nearby targets, simulating player focus. Includes customizable target groups (Head, Torso, Limbs), humanoid-area or part-center lock modes, nearby World Humanoid (NPC/animal/mob) tracking, player-over-world humanoid prioritization, a dynamic Workspace Target Browser for tracking any non-player items or folders, and Field of View (FOV) limits.
 *   **Target Prioritization**: Prioritize specific players or entire teams. Prioritized targets will be locked onto preferentially over other players.
 *   **Blacklist & Visibility Rules**: Configure rules to bypass blacklist priorities if a target is occluded or far away, and optionally target blacklisted players through terrain.
 *   **Input Simulation**: Automated click simulation for testing UI interactions, hitboxes, and event triggers without manual repetition.
@@ -53,7 +53,7 @@ Execute the script in your testing environment workspace.
     *   **Distance-based Sorting**: Color-coded proximity: **Pink** (Closest), **Red** (≤750 studs), **Yellow** (≤1875 studs), and **Green** (>1875 studs).
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
     *   **Equipped Item Viewer**: View the currently equipped items being held by nearby players.
-*   **World Humanoid & Workspace Target Visualization**: Dedicated toggles to render 3D outlines and two-line name + stud-distance nametags on nearby World Humanoids and any items/folders selected in the Workspace Target Browser, complete with a configurable humanoid detection distance slider and custom HSV/Hex group color pickers.
+*   **World Humanoid & Workspace Target Visualization**: Dedicated toggles to render 3D outlines and two-line name + stud-distance nametags on nearby World Humanoids and any items/folders selected in the Workspace Target Browser, complete with a configurable humanoid detection distance slider, an indicator/label opacity slider, and custom HSV/Hex group color pickers.
 *   **Closest Player Tracker**: Real-time HUD displaying the nearest player's name and worldDistance.
 *   **Local Health HUD**: Compact display of your current character health and max health.
 *   **worldLighting Modifiers**: Toggle `Fullbright` (maximum brightness, no shadows/fog) or `FullDark` (minimum brightness) to test visibility in extreme lighting conditions.

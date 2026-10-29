@@ -93,6 +93,8 @@ local Flags = {
     ["Aim/FOV/ShowCircle"] = true,
     ["Aim/HumanoidAreaLock"] = true,
     ["Aim/TrackWorldHumanoids"] = false,
+    ["Aim/PrioritizePlayers"] = true,
+    ["Aim/PrioritizePlayerHumanoids"] = true,
     ["Aim/Priority"] = "Head",
     ["Aim/TargetBlacklistedThroughTerrain"] = true,
     ["Aim/BypassBlacklistPriorityIfOccludedOrFar"] = false,
@@ -134,6 +136,8 @@ local Flags = {
     ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(252, 149, 175),
     ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(80, 220, 255),
     ["Visuals/TargetLockColor"] = Color3.fromRGB(45, 245, 105),
+    ["Visuals/NonPlayerIndicatorOpacity"] = 90,
+    ["Visuals/IndicatorOpacity"] = 90,
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
     -- Fullbright modifiers
@@ -692,6 +696,9 @@ do
             end
             if WorkspaceTracker.RefreshIndicatorColors then
                 WorkspaceTracker.RefreshIndicatorColors()
+            end
+            if WorkspaceTracker.RefreshIndicatorOpacities then
+                WorkspaceTracker.RefreshIndicatorOpacities()
             end
             if WorkspaceTracker.UpdateVisualIndicators then
                 WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
@@ -7068,7 +7075,10 @@ do
     end
 
     function WorkspaceTracker.RefreshIndicatorOpacities()
-        local opacity = (Flags["ESP/NametagOpacity"] or 90) / 100
+        local opacityVal = (Flags["Visuals/NonPlayerIndicatorOpacity"] ~= nil and Flags["Visuals/NonPlayerIndicatorOpacity"])
+            or (Flags["Visuals/IndicatorOpacity"] ~= nil and Flags["Visuals/IndicatorOpacity"])
+            or 90
+        local opacity = opacityVal / 100
         local transparency = 1 - opacity
         for _, entry in pairs(IndicatorObjects) do
             if entry.nameLbl then
@@ -7118,7 +7128,10 @@ do
         local camPos = Camera.CFrame.Position
         local maxDist = Flags["ESP/MaxDistance"] or 10000
         local maxWorldHumDist = min(Flags["Visuals/WorldHumanoidDistance"] or 500, maxDist)
-        local opacity = (Flags["ESP/NametagOpacity"] or 90) / 100
+        local opacityVal = (Flags["Visuals/NonPlayerIndicatorOpacity"] ~= nil and Flags["Visuals/NonPlayerIndicatorOpacity"])
+            or (Flags["Visuals/IndicatorOpacity"] ~= nil and Flags["Visuals/IndicatorOpacity"])
+            or 90
+        local opacity = opacityVal / 100
         local transparency = 1 - opacity
         local lockedObj = GetActiveLockedNonPlayer(now)
         LastLockedVisualObj = lockedObj
@@ -7463,6 +7476,10 @@ end
 ClosestResult = {nil, nil, nil, 0, 0, nil}
 
 function CandidateSortFn(a, b)
+    local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false)
+    if prioritizePlayers and a.isPlayer ~= b.isPlayer then
+        return a.isPlayer == true
+    end
     return a.mag < b.mag
 end
 
@@ -7673,16 +7690,20 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
             CandidateCount = CandidateCount + 1
             slotIdx = CandidateCount
         else
-            local worstIdx = 1
-            local worstMag = CandidateList[1].mag
-            for k = 2, maxCandsLimit do
-                local m = CandidateList[k].mag
-                if m > worstMag then
-                    worstMag = m
-                    worstIdx = k
+            local worstIdx = nil
+            local worstMag = -math.huge
+            local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false)
+            for k = 1, maxCandsLimit do
+                local entryK = CandidateList[k]
+                if not (prioritizePlayers and entryK and entryK.isPlayer) then
+                    local m = entryK and entryK.mag or 0
+                    if m > worstMag then
+                        worstMag = m
+                        worstIdx = k
+                    end
                 end
             end
-            if Magnitude >= worstMag then return end
+            if not worstIdx or Magnitude >= worstMag then return end
             slotIdx = worstIdx
         end
 
@@ -7766,7 +7787,26 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local stickyTeam = stickyIsPlayer and StickyTarget.Team and StickyTarget.Team.Name or nil
     local isStickyBlacklisted = stickyId and (AdvancedPlayerPanelState.Blacklist[stickyId] or (stickyTeam and AdvancedPlayerPanelState.TeamBlacklist[stickyTeam] and not AdvancedPlayerPanelState.Whitelist[stickyId]))
 
-    if StickyTarget and StickyTarget.Parent and not isStickyBlacklisted then
+    local bypassStickyForPlayer = false
+    local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false)
+    if prioritizePlayers and StickyTarget and not stickyIsPlayer then
+        for j = 1, CandidateCount do
+            local cand = CandidateList[j]
+            if cand and cand.isPlayer then
+                local pId = cand.ply.UserId
+                local pTeam = cand.ply.Team
+                local teamName = pTeam and pTeam.Name
+                local isEntryBlacklisted = AdvancedPlayerPanelState.Blacklist[pId] or (teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName] and not AdvancedPlayerPanelState.Whitelist[pId])
+                local performOcclusionCheck = not (isEntryBlacklisted and Flags["Aim/TargetBlacklistedThroughTerrain"])
+                if not performOcclusionCheck or not ObjectOccluded(VisibilityCheck, CameraPosition, cand.realPos, cand.char) then
+                    bypassStickyForPlayer = true
+                    break
+                end
+            end
+        end
+    end
+
+    if StickyTarget and StickyTarget.Parent and not isStickyBlacklisted and not bypassStickyForPlayer then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
@@ -16782,6 +16822,12 @@ end)
 WorkspaceTracker.AimTabButton = UI.CreateButton(AimTab, "Open Workspace Target Browser", function()
     WorkspaceTracker.ToggleBrowser()
 end)
+UI.CreateToggle(AimTab, "Prioritize Players Over World/Workspace Humanoids", "Aim/PrioritizePlayers", Flags["Aim/PrioritizePlayers"], function(state)
+    Flags["Aim/PrioritizePlayerHumanoids"] = state
+    USER_MODIFIED_FLAGS["Aim/PrioritizePlayerHumanoids"] = true
+    CachedTarget = nil
+end)
+UIState.Updaters["Aim/PrioritizePlayerHumanoids"] = UIState.Updaters["Aim/PrioritizePlayers"]
 UI.CreateToggle(AimTab, "Ignore Teammates", "Aim/TeamCheck", Flags["Aim/TeamCheck"])
 UI.CreateToggle(AimTab, "Auto Whitelist Friends/Connections", "Aim/AutoWhitelistFriends", Flags["Aim/AutoWhitelistFriends"], function(state)
     if state then
@@ -17023,6 +17069,16 @@ UI.CreateColorPicker(VisualsTab, "Target Lock-On Indicator / Label Color", "Visu
         WorkspaceTracker.RefreshIndicatorColors()
     end
 end)
+
+UI.CreateSlider(VisualsTab, "Indicator / Label Opacity", "Visuals/NonPlayerIndicatorOpacity", Flags["Visuals/NonPlayerIndicatorOpacity"], 0, 100, 5, "%", function(val)
+    Flags["Visuals/IndicatorOpacity"] = val
+    USER_MODIFIED_FLAGS["Visuals/IndicatorOpacity"] = true
+    if WorkspaceTracker and WorkspaceTracker.RefreshIndicatorOpacities then
+        WorkspaceTracker.RefreshIndicatorOpacities()
+    end
+end)
+UIState.Updaters["Visuals/IndicatorOpacity"] = UIState.Updaters["Visuals/NonPlayerIndicatorOpacity"]
+UIState.Updaters["Visuals/NonPlayerNametagOpacity"] = UIState.Updaters["Visuals/NonPlayerIndicatorOpacity"]
 
 UI.CreateSection(VisualsTab, "Local UI Elements")
 UI.CreateToggle(VisualsTab, "Show Performance Panel", "LocalUI/PerformancePanel", Flags["LocalUI/PerformancePanel"], function(state)
