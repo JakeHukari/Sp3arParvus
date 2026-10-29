@@ -88,8 +88,8 @@ Execute the script in your testing environment workspace.
 ### Interaction & Testing
 *   **Aim-Lock / Camera Tracking Toggle**: `Ctrl + ~`
 *   **Aim-Lock Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
-*   **Toggle Headshot Only**: `Ctrl + H`
-*   **Toggle World Humanoid Tracking & Visuals**: `Ctrl + Shift + H`
+*   **Toggle World Humanoid Tracking & Visuals**: `Ctrl + H`
+*   **Toggle Headshot Only**: `Ctrl + Shift + H`
 *   **Mouse Teleport**: `Ctrl + Q` to teleport to mouse position
 *   **Teleport to Last Waypoint**: `Ctrl + Y`
 *   **Position-Force**: `Ctrl` + `Up↑`, `Down↓`, `Left←`, `Right→` (Arrow keys)

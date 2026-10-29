@@ -13781,7 +13781,7 @@ local KeyboardRows = {
         {Text = "D", Width = 1},
         {Text = "F", Key = "F", Width = 1, KeyCode = Enum.KeyCode.F, Name = "Toggle Fullbright", Action = "Ctrl + F", Desc = "Toggles full bright lighting, removing shadows.", StatusKey = "Visuals/Fullbright"},
         {Text = "G", Key = "G", Width = 1, KeyCode = Enum.KeyCode.G, Name = "Toggle Ghost Mode", Action = "Ctrl + G", Desc = "Toggles Ghost Mode (character transparency & noclip).", StatusKey = "Settings/GhostMode"},
-        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "Headshot Mode / World Humanoids", Action = "Ctrl+H / Ctrl+Shift+H", Desc = "Toggles headshot-only vs all-body tracking (Ctrl+H), or nearby World Humanoid tracking & visuals (Ctrl+Shift+H).", StatusKey = "H_DualStatus"},
+        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "World Humanoids / Headshot Mode", Action = "Ctrl+H / Ctrl+Shift+H", Desc = "Toggles nearby World Humanoid tracking & visuals (Ctrl+H), or headshot-only vs all-body tracking (Ctrl+Shift+H).", StatusKey = "H_DualStatus"},
         {Text = "J", Key = "J", Width = 1, KeyCode = Enum.KeyCode.J, Name = "Toggle Item Panel", Action = "Ctrl + J", Desc = "Toggles visibility of the item panel HUD.", StatusKey = "Misc/ItemPanel"},
         {Text = "K", Key = "K", Width = 1, KeyCode = Enum.KeyCode.K, Name = "PlayerPage Shortcut", Action = "Ctrl + K", Desc = "Opens menu and navigates directly to the PlayerPage tab."},
         {Text = "L", Width = 1},
@@ -14022,8 +14022,8 @@ function InitializeShortcutsPage(page)
                     local hsActive = Flags["Aim/HeadshotOnlyState"] ~= false
                     local whActive = (Flags["Aim/TrackWorldHumanoids"] == true) or (Flags["Visuals/HighlightWorldHumanoids"] == true)
                     local shiftDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-                    status = shiftDown and whActive or hsActive
-                    customStatusText = string.format("Headshot: %s  •  World Hum: %s", hsActive and "ON" or "OFF", whActive and "ON" or "OFF")
+                    status = shiftDown and hsActive or whActive
+                    customStatusText = string.format("World Hum: %s  •  Headshot: %s", whActive and "ON" or "OFF", hsActive and "ON" or "OFF")
                 else
                     status = Flags[keyData.StatusKey]
                 end
@@ -16773,7 +16773,7 @@ UI.CreateSection(AimTab, "Camera Tracking Assistant")
 UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Stop Inside Humanoid Area (If OFF: Lock Part Center)", "Aim/HumanoidAreaLock", Flags["Aim/HumanoidAreaLock"])
-UI.CreateToggle(AimTab, "Track Nearby World Humanoids (Ctrl+Shift+H)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
+UI.CreateToggle(AimTab, "Track Nearby World Humanoids (Ctrl+H)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
     CachedTarget = nil
     if not state and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
         table.clear(WorkspaceTracker.WorldHumEntities)
@@ -16988,7 +16988,7 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
 end)
 
 UI.CreateSection(VisualsTab, "Non-Player & Workspace Target ESP")
-UI.CreateToggle(VisualsTab, "Highlight Humanoids (Ctrl+Shift+H)", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
+UI.CreateToggle(VisualsTab, "Highlight Humanoids (Ctrl+H)", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
     if WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
         WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
     end
@@ -18288,6 +18288,41 @@ local function handleShortcuts(actionName, inputState, inputObject)
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.H then
             if shiftHeld then
+                if Flags["Aim/HeadshotOnlyState"] == nil then
+                    Flags["Aim/HeadshotOnlyState"] = true
+                end
+
+                Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
+                local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
+
+                for k in pairs(Flags["Aim/TargetGroups"]) do
+                    Flags["Aim/TargetGroups"][k] = false
+                end
+                Flags["Aim/TargetGroups"]["Head"] = true
+
+                if isHeadshotOnly then
+                    Flags["Aim/BodyParts"] = {"Head"}
+                    Flags["Aim/Priority"] = "Head"
+                    UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+Shift+H'")
+                else
+                    Flags["Aim/TargetGroups"]["Torso"] = true
+                    Flags["Aim/TargetGroups"]["LeftArm"] = true
+                    Flags["Aim/TargetGroups"]["RightArm"] = true
+                    Flags["Aim/TargetGroups"]["LeftLeg"] = true
+                    Flags["Aim/TargetGroups"]["RightLeg"] = true
+                    Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
+                    Flags["Aim/Priority"] = "Head"
+                    UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+Shift+H'")
+                end
+
+                if UIState.Updaters["Aim/TargetGroups"] then
+                    for k, v in pairs(Flags["Aim/TargetGroups"]) do
+                        if UIState.Updaters["Aim/TargetGroups"][k] then
+                            UIState.Updaters["Aim/TargetGroups"][k](v)
+                        end
+                    end
+                end
+            else
                 local newState
                 local trackState
                 if SAFE_MODE then
@@ -18325,44 +18360,9 @@ local function handleShortcuts(actionName, inputState, inputObject)
                 end
 
                 if SAFE_MODE then
-                    UI.Notify("World Humanoids", string.format("World Humanoid Visuals %s with 'Ctrl+Shift+H' (Tracking disabled in Safe Mode)", newState and "activated" or "deactivated"))
+                    UI.Notify("World Humanoids", string.format("World Humanoid Visuals %s with 'Ctrl+H' (Tracking disabled in Safe Mode)", newState and "activated" or "deactivated"))
                 else
-                    UI.Notify("World Humanoids", string.format("World Humanoid Tracking & Visuals %s with 'Ctrl+Shift+H'", newState and "activated" or "deactivated"))
-                end
-            else
-                if Flags["Aim/HeadshotOnlyState"] == nil then
-                    Flags["Aim/HeadshotOnlyState"] = true
-                end
-
-                Flags["Aim/HeadshotOnlyState"] = not Flags["Aim/HeadshotOnlyState"]
-                local isHeadshotOnly = Flags["Aim/HeadshotOnlyState"]
-
-                for k in pairs(Flags["Aim/TargetGroups"]) do
-                    Flags["Aim/TargetGroups"][k] = false
-                end
-                Flags["Aim/TargetGroups"]["Head"] = true
-
-                if isHeadshotOnly then
-                    Flags["Aim/BodyParts"] = {"Head"}
-                    Flags["Aim/Priority"] = "Head"
-                    UI.Notify("Camera Tracking", "Headshot Only Mode ACTIVATED with 'Ctrl+H'")
-                else
-                    Flags["Aim/TargetGroups"]["Torso"] = true
-                    Flags["Aim/TargetGroups"]["LeftArm"] = true
-                    Flags["Aim/TargetGroups"]["RightArm"] = true
-                    Flags["Aim/TargetGroups"]["LeftLeg"] = true
-                    Flags["Aim/TargetGroups"]["RightLeg"] = true
-                    Flags["Aim/BodyParts"] = {"Head", "HumanoidRootPart", "LeftArm", "RightArm", "LeftLeg", "RightLeg"}
-                    Flags["Aim/Priority"] = "Head"
-                    UI.Notify("Camera Tracking", "All-Body Mode ACTIVATED with 'Ctrl+H'")
-                end
-
-                if UIState.Updaters["Aim/TargetGroups"] then
-                    for k, v in pairs(Flags["Aim/TargetGroups"]) do
-                        if UIState.Updaters["Aim/TargetGroups"][k] then
-                            UIState.Updaters["Aim/TargetGroups"][k](v)
-                        end
-                    end
+                    UI.Notify("World Humanoids", string.format("World Humanoid Tracking & Visuals %s with 'Ctrl+H'", newState and "activated" or "deactivated"))
                 end
             end
             return Enum.ContextActionResult.Sink
