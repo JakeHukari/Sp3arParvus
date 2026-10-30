@@ -89,7 +89,7 @@ Execute the script in your testing environment workspace.
 
 ### Interaction & Testing
 *   **Mouse Mode Switcher**: `Right-Alt + Left-Alt` (Switch between Center-Locked and Free-Move Unlocked mouse)
-*   **Aim-Lock / Camera Tracking Toggle**: `Ctrl + ~`
+*   **Toggle Player Camera Tracking**: `Ctrl + ~`
 *   **Aim-Lock Tracking Lock-on**: Hold `Right Mouse Button` (When "Always Active" is OFF)
 *   **Toggle World Humanoid Tracking & Visuals**: `Ctrl + H`
 *   **Toggle Headshot Only**: `Ctrl + Shift + H`

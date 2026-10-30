@@ -84,6 +84,7 @@ local AimState = {
 local Flags = {
     ["Aim/AimLock"] = true,
     ["Aim/AlwaysEnabled"] = true,
+    ["Aim/TrackPlayers"] = true,
     ["Aim/ShowAssistDots"] = false,
     ["Aim/TeamCheck"] = false,
     ["Aim/AutoWhitelistFriends"] = false,
@@ -199,6 +200,7 @@ local Flags = {
 if SAFE_MODE then
     Flags["Aim/AimLock"]             = false
     Flags["Aim/AlwaysEnabled"]       = false
+    Flags["Aim/TrackPlayers"]        = false
     Flags["Aim/TrackWorldHumanoids"] = false
     Flags["ShootBot/Enabled"]        = false
     Flags["Misc/QTeleport"]          = false
@@ -7593,7 +7595,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local checkParts = _hoistedCheckParts
     local isLocalDNR = DNR(LocalPlayer)
 
-    for _, Player in ipairs(players) do
+    if Flags["Aim/TrackPlayers"] ~= false then
+        for _, Player in ipairs(players) do
         if Player == LocalPlayer then
             continue
         end
@@ -7696,6 +7699,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                 end
             end
         end
+    end
     end
 
     local function PushNonPlayerPartCandidate(idObj, ignoreObj, part)
@@ -7817,7 +7821,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
     local isStickyBlacklisted = stickyId and (AdvancedPlayerPanelState.Blacklist[stickyId] or (stickyTeam and AdvancedPlayerPanelState.TeamBlacklist[stickyTeam] and not AdvancedPlayerPanelState.Whitelist[stickyId]))
 
     local bypassStickyForPlayer = false
-    local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false)
+    local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false) and (Flags["Aim/TrackPlayers"] ~= false)
     if prioritizePlayers and StickyTarget and not stickyIsPlayer then
         for j = 1, CandidateCount do
             local cand = CandidateList[j]
@@ -7835,7 +7839,8 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         end
     end
 
-    if StickyTarget and StickyTarget.Parent and not isStickyBlacklisted and not bypassStickyForPlayer then
+    local stickyValid = StickyTarget and StickyTarget.Parent and not isStickyBlacklisted and not bypassStickyForPlayer and not (stickyIsPlayer and Flags["Aim/TrackPlayers"] == false)
+    if stickyValid then
         for i = 1, CandidateCount do
             local entry = CandidateList[i]
             if entry.ply == StickyTarget then
@@ -8044,6 +8049,10 @@ do
         local isTeamWhitelisted = teamName and AdvancedPlayerPanelState.TeamWhitelist[teamName]
         local isTeamBlacklisted = teamName and AdvancedPlayerPanelState.TeamBlacklist[teamName]
 
+        if Flags["Aim/TrackPlayers"] == false then
+            return false
+        end
+
         local isWhitelisted = isIndivWhitelisted or (isTeamWhitelisted and not isIndivBlacklisted)
         if isWhitelisted then
             return false
@@ -8152,6 +8161,9 @@ do
     end
 
     local function IsNonPlayerTargetLockedByPlayerPriority(targetPlayer, targetChar, cameraPos)
+        if Flags["Aim/TrackPlayers"] == false then
+            return false
+        end
         if not targetPlayer or not targetPlayer:IsA("Player") then
             return false
         end
@@ -13984,7 +13996,7 @@ end
 
 local KeyboardRows = {
     {
-        {Text = "` ~", Key = "Backquote", Width = 1, KeyCode = Enum.KeyCode.Backquote, Name = "Aimlock Assist Toggle", Action = "Ctrl + ~", Desc = "Toggles camera-lock tracking assistant.", StatusKey = "Aim/AimLock"},
+        {Text = "` ~", Key = "Backquote", Width = 1, KeyCode = Enum.KeyCode.Backquote, Name = "Player Tracking Toggle", Action = "Ctrl + ~", Desc = "Toggles player camera-lock tracking.", StatusKey = "Aim/TrackPlayers"},
         {Text = "1", Width = 1},
         {Text = "2", Width = 1},
         {Text = "3", Width = 1},
@@ -17019,13 +17031,27 @@ if SAFE_MODE then
     bnCorner.Parent = safeBanner
 end
 UI.CreateSection(AimTab, "Camera Tracking Assistant")
-UI.CreateToggle(AimTab, "Enable Camera Tracking (Ctrl + ~)", "Aim/AimLock", Flags["Aim/AimLock"])
+UI.CreateToggle(AimTab, "Enable Camera Tracking (Overall)", "Aim/AimLock", Flags["Aim/AimLock"], function(state)
+    if not state then
+        CachedTarget = nil
+        ClearAimLockState(false)
+    end
+end)
 UI.CreateToggle(AimTab, "Always Active (No Keybind — If OFF: hold RMB to track)", "Aim/AlwaysEnabled", Flags["Aim/AlwaysEnabled"])
 UI.CreateToggle(AimTab, "Stop Inside Humanoid Area (If OFF: Lock Part Center)", "Aim/HumanoidAreaLock", Flags["Aim/HumanoidAreaLock"])
+UI.CreateToggle(AimTab, "Track Players (Ctrl + ~)", "Aim/TrackPlayers", Flags["Aim/TrackPlayers"], function(state)
+    CachedTarget = nil
+    if not state and AimState.LastAimTarget and AimState.LastAimTarget:IsA("Player") then
+        ClearAimLockState(false)
+    end
+end)
 UI.CreateToggle(AimTab, "Track Nearby World Humanoids (Ctrl+H)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
     CachedTarget = nil
     if not state and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
         table.clear(WorkspaceTracker.WorldHumEntities)
+    end
+    if not state and AimState.LastAimTarget and not AimState.LastAimTarget:IsA("Player") then
+        ClearAimLockState(false)
     end
 end)
 WorkspaceTracker.AimTabButton = UI.CreateButton(AimTab, "Open Workspace Target Browser", function()
@@ -18665,11 +18691,20 @@ local function handleShortcuts(actionName, inputState, inputObject)
             UI.Notify("Information Display", string.format("Information Display has been %s with 'Ctrl+.'", state and "activated" or "deactivated"))
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.Backquote then
-            Flags["Aim/AimLock"] = not Flags["Aim/AimLock"]
-            local state = Flags["Aim/AimLock"]
-            local updater = UIState.Updaters["Aim/AimLock"]
-            if updater then updater(state) end
-            UI.Notify("Camera Tracking", string.format("Camera Tracking Assistant has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
+            if SAFE_MODE then
+                UI.Notify("Safe Mode", "Player tracking is disabled while Safe Mode is ON.")
+            else
+                Flags["Aim/TrackPlayers"] = not Flags["Aim/TrackPlayers"]
+                local state = Flags["Aim/TrackPlayers"]
+                USER_MODIFIED_FLAGS["Aim/TrackPlayers"] = true
+                CachedTarget = nil
+                if not state and AimState.LastAimTarget and AimState.LastAimTarget:IsA("Player") then
+                    ClearAimLockState(false)
+                end
+                local updater = UIState.Updaters["Aim/TrackPlayers"]
+                if updater then updater(state) end
+                UI.Notify("Player Tracking", string.format("Player Camera Tracking has been %s with 'Ctrl+~'", state and "activated" or "deactivated"))
+            end
             return Enum.ContextActionResult.Sink
         elseif inputObject.KeyCode == Enum.KeyCode.H then
             if shiftHeld then
