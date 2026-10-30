@@ -135,6 +135,8 @@ local Flags = {
     ["ESP/ShowEquipped"] = true,
     ["ESP/AdvancedPlayerPanel"] = false,
     ["ESP/PlayerOutlines"] = true,
+    ["ESP/PlayerOutlineColor"] = Color3.fromRGB(255, 105, 180),
+    ["ESP/PlayerLockColor"] = Color3.fromRGB(45, 245, 105),
     ["Visuals/HighlightWorldHumanoids"] = false,
     ["Visuals/HighlightWorkspaceTargets"] = false,
     ["Visuals/WorldHumanoidDistance"] = 2500,
@@ -720,6 +722,9 @@ do
             end
             if WorkspaceTracker.RefreshIndicatorColors then
                 WorkspaceTracker.RefreshIndicatorColors()
+            end
+            if type(RefreshPlayerOutlineColors) == "function" then
+                RefreshPlayerOutlineColors()
             end
             if WorkspaceTracker.RefreshIndicatorOpacities then
                 WorkspaceTracker.RefreshIndicatorOpacities()
@@ -8592,14 +8597,67 @@ end
 
 ESPObjects = {}
 PlayerOutlineObjects = {}
+local LastLockedPlayer = nil
 
 local _cachedESPOpacity      = nil
 local _cachedESPTransparency = nil
 
+local DEFAULT_PLAYER_OUTLINE_COLOR = Color3.fromRGB(255, 105, 180)
+local DEFAULT_PLAYER_LOCK_COLOR    = Color3.fromRGB(45, 245, 105)
+
+function GetPlayerOutlineColor()
+    local c = Flags["ESP/PlayerOutlineColor"]
+    if typeof(c) ~= "Color3" then c = Flags["Visuals/PlayerOutlineColor"] end
+    return (typeof(c) == "Color3") and c or DEFAULT_PLAYER_OUTLINE_COLOR
+end
+
+function GetPlayerLockColor()
+    local c = Flags["ESP/PlayerLockColor"]
+    if typeof(c) ~= "Color3" then c = Flags["ESP/PlayerTargetLockColor"] end
+    if typeof(c) ~= "Color3" then c = Flags["Visuals/PlayerLockColor"] end
+    if typeof(c) ~= "Color3" then c = Flags["Visuals/PlayerTargetLockColor"] end
+    return (typeof(c) == "Color3") and c or DEFAULT_PLAYER_LOCK_COLOR
+end
+
+function IsPlayerLockedOn(player, character)
+    if Flags["Aim/AimLock"]
+        and not SAFE_MODE
+        and CachedTarget ~= nil
+        and (os.clock() - CachedTargetTime) < 0.1
+    then
+        if CachedTarget[1] == player or (character and CachedTarget[2] == character) then
+            return true
+        end
+    end
+    return false
+end
+
+function RefreshPlayerOutlineColors()
+    local outlineCol = GetPlayerOutlineColor()
+    local lockCol = GetPlayerLockColor()
+    COLORS.OUTLINE = outlineCol
+
+    if PlayerOutlineObjects then
+        for player, storage in pairs(PlayerOutlineObjects) do
+            if storage and storage.Highlight then
+                local pChar = (player and player.Character) or storage.Highlight.Adornee
+                local isLocked = IsPlayerLockedOn(player, pChar)
+                local targetColor = isLocked and lockCol or outlineCol
+                if storage.Highlight.OutlineColor ~= targetColor then
+                    storage.Highlight.OutlineColor = targetColor
+                end
+                if storage.Highlight.FillColor ~= targetColor then
+                    storage.Highlight.FillColor = targetColor
+                end
+            end
+        end
+    end
+end
+
 COLORS = {
     CLOSEST = Color3.fromRGB(255, 105, 180),
     NORMAL = Color3.fromRGB(255, 255, 255),
-    OUTLINE = Color3.fromRGB(255, 105, 180)
+    OUTLINE = GetPlayerOutlineColor()
 }
 
 MAX_OUTLINE_HIGHLIGHTS = 15
@@ -11592,8 +11650,12 @@ function UpdatePlayerOutlines(player, character)
         end
     end
 
+    local isLocked = IsPlayerLockedOn(player, character)
+    local targetColor = isLocked and GetPlayerLockColor() or GetPlayerOutlineColor()
+    storage.isLocked = isLocked
+
     for k, v in pairs(storage) do
-        if k ~= "Highlight" then
+        if k ~= "Highlight" and k ~= "isLocked" then
             local stillNeeded = false
             for _, name in ipairs(dotParts) do
                 if k == name .. "Dot" then stillNeeded = true break end
@@ -11612,9 +11674,10 @@ function UpdatePlayerOutlines(player, character)
             local furthest = nil
             local maxDist = -1
             local myPos = Camera.CFrame.Position
+            local lockedObj = (CachedTarget and (os.clock() - CachedTargetTime) < 0.1) and CachedTarget[1] or nil
 
             for p, obj in pairs(PlayerOutlineObjects) do
-                if obj.Highlight then
+                if obj.Highlight and p ~= player and p ~= lockedObj then
                     local _, root = GetCharacter(p)
                     if root then
                         local d = (root.Position - myPos).Magnitude
@@ -11643,9 +11706,9 @@ function UpdatePlayerOutlines(player, character)
             local highlight = GetPooledObject("Highlights", "Highlight")
             highlight.Name = "PlayerOutlineHighlight"
             highlight.Adornee = character
-            highlight.FillColor = COLORS.OUTLINE
+            highlight.FillColor = targetColor
             highlight.FillTransparency = 1
-            highlight.OutlineColor = COLORS.OUTLINE
+            highlight.OutlineColor = targetColor
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             highlight.Enabled = true
@@ -11654,7 +11717,9 @@ function UpdatePlayerOutlines(player, character)
             storage.Highlight = highlight
             ActiveHighlightCount = ActiveHighlightCount + 1
         end
-    else
+    end
+
+    if storage.Highlight then
         local highlight = storage.Highlight
 
         if not highlight.Parent and highlight ~= storage.Highlight then
@@ -11668,8 +11733,11 @@ function UpdatePlayerOutlines(player, character)
         if highlight.Parent ~= character then
             highlight.Parent = character
         end
-        if highlight.OutlineColor ~= COLORS.OUTLINE then
-            highlight.OutlineColor = COLORS.OUTLINE
+        if highlight.OutlineColor ~= targetColor then
+            highlight.OutlineColor = targetColor
+        end
+        if highlight.FillColor ~= targetColor then
+            highlight.FillColor = targetColor
         end
         if not highlight.Enabled then
             highlight.Enabled = true
@@ -11682,6 +11750,10 @@ function UpdatePlayerOutlines(player, character)
 end
 
 function RemovePlayerOutlines(player)
+    if LastLockedPlayer == player then
+        LastLockedPlayer = nil
+    end
+
     local storage = PlayerOutlineObjects[player]
     if not storage then return end
 
@@ -17306,7 +17378,14 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
         end
         table.clear(PlayerOutlineObjects)
         ActiveHighlightCount = 0
+        LastLockedPlayer = nil
     end
+end)
+UI.CreateColorPicker(VisualsTab, "Player Outline Color", "ESP/PlayerOutlineColor", DEFAULT_FLAGS["ESP/PlayerOutlineColor"], function()
+    RefreshPlayerOutlineColors()
+end)
+UI.CreateColorPicker(VisualsTab, "Target Lock-On Indicator Color", "ESP/PlayerLockColor", DEFAULT_FLAGS["ESP/PlayerLockColor"], function()
+    RefreshPlayerOutlineColors()
 end)
 
 UI.CreateSection(VisualsTab, "Non-Player & Workspace Target ESP")
@@ -17355,6 +17434,10 @@ UI.CreateSlider(VisualsTab, "Indicator / Label Opacity", "Visuals/NonPlayerIndic
 end)
 UIState.Updaters["Visuals/IndicatorOpacity"] = UIState.Updaters["Visuals/NonPlayerIndicatorOpacity"]
 UIState.Updaters["Visuals/NonPlayerNametagOpacity"] = UIState.Updaters["Visuals/NonPlayerIndicatorOpacity"]
+UIState.Updaters["Visuals/PlayerOutlineColor"] = UIState.Updaters["ESP/PlayerOutlineColor"]
+UIState.Updaters["Visuals/PlayerLockColor"] = UIState.Updaters["ESP/PlayerLockColor"]
+UIState.Updaters["Visuals/PlayerTargetLockColor"] = UIState.Updaters["ESP/PlayerLockColor"]
+UIState.Updaters["ESP/PlayerTargetLockColor"] = UIState.Updaters["ESP/PlayerLockColor"]
 
 UI.CreateSection(VisualsTab, "Local UI Elements")
 UI.CreateToggle(VisualsTab, "Show Performance Panel", "LocalUI/PerformancePanel", Flags["LocalUI/PerformancePanel"], function(state)
@@ -19369,14 +19452,22 @@ function UnifiedHeartbeat(dt)
     local shouldUpdateTracker = (now - lastTrackerUpdate) > trackerUpdateRate
 
     local forceUpdateTarget = nil
-    if CachedTarget and (now - CachedTargetTime) < 0.1 then
+    if Flags["Aim/AimLock"] and not SAFE_MODE and CachedTarget and (now - CachedTargetTime) < 0.1 then
         local ct = CachedTarget[1]
         if ct and ct:IsA("Player") then
             forceUpdateTarget = ct
         end
     end
 
-    if (shouldUpdateEsp or forceUpdateTarget) then
+    local prevLockedTarget = LastLockedPlayer
+    if prevLockedTarget and prevLockedTarget ~= forceUpdateTarget then
+        LastLockedPlayer = forceUpdateTarget
+    else
+        LastLockedPlayer = forceUpdateTarget
+        prevLockedTarget = nil
+    end
+
+    if (shouldUpdateEsp or forceUpdateTarget or prevLockedTarget) then
         if shouldUpdateEsp then
             lastEspUpdate = now
         end
@@ -19405,11 +19496,11 @@ function UnifiedHeartbeat(dt)
                 local pChar, pRoot = GetCharacter(player)
                 local skip = false
 
-                if not shouldUpdateEsp and player ~= forceUpdateTarget then
+                if not shouldUpdateEsp and player ~= forceUpdateTarget and player ~= prevLockedTarget then
                     skip = true
                 end
 
-                if not skip and pRoot and player ~= forceUpdateTarget then
+                if not skip and pRoot and player ~= forceUpdateTarget and player ~= prevLockedTarget then
                     local dist = (pRoot.Position - myPos).Magnitude
                     if dist > 1000 then
 

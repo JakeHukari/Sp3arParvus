@@ -55,6 +55,7 @@ Execute the script in your testing environment workspace.
     *   **Distance-based Sorting**: Color-coded proximity: **Pink** (Closest), **Red** (≤750 studs), **Yellow** (≤1875 studs), and **Green** (>1875 studs).
     *   **Health HUD**: Numerical health display and real-time health bars on player nametags.
     *   **Equipped Item Viewer**: View the currently equipped items being held by nearby players.
+    *   **Customizable Outlines & Lock-On Indicator**: Color pickers for player humanoid hitbox outlines and active camera tracking target lock-on indication.
 *   **World Humanoid & Workspace Target Visualization**: Dedicated toggles to render 3D outlines and two-line name + stud-distance nametags on nearby World Humanoids and any items/folders selected in the Workspace Target Browser, complete with a configurable humanoid detection distance slider, an indicator/label opacity slider, and custom HSV/Hex group color pickers.
 *   **Closest Player Tracker**: Real-time HUD displaying the nearest player's name and worldDistance.
 *   **Local Health HUD**: Compact display of your current character health and max health.
