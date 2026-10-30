@@ -106,11 +106,11 @@ local Flags = {
     ["Aim/BodyParts"] = {"Head"},
     ["Aim/TargetGroups"] = {
         Head = true,
-        Torso = false,
-        LeftArm = false,
-        RightArm = false,
-        LeftLeg = false,
-        RightLeg = false
+        Torso = true,
+        LeftArm = true,
+        RightArm = true,
+        LeftLeg = true,
+        RightLeg = true
     },
     ["ShootBot/Enabled"] = false,
     ["ShootBot/CPS"] = 8,
@@ -12822,7 +12822,7 @@ function UpdatePerformanceDisplay()
     end
     if PerformanceRows.Aim then
         local AimActive = Flags["Aim/AimLock"] and (Flags["Aim/AlwaysEnabled"] or AimState.Aim)
-        local val = AimActive and "LOCKED 🔒" or "IDLE ─"
+        local val = AimActive and "On" or "Off"
         local col = AimActive and UI_THEME.Accent or Color3.fromRGB(150, 150, 150)
         if PerformanceRows.Aim.Text ~= val then PerformanceRows.Aim.Text = val end
         if PerformanceRows.Aim.TextColor3 ~= col then PerformanceRows.Aim.TextColor3 = col end
