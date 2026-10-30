@@ -12037,6 +12037,8 @@ end
 
 local InformationDisplayHUD = nil
 local InformationDisplayLabel = nil
+local InformationDisplayLeftHUD = nil
+local InformationDisplayLeftLabel = nil
 
 -- Server region detection: infer from round-trip ping latency against Roblox's
 -- known data-center locations. Cached after first stable read to avoid flicker.
@@ -12318,6 +12320,7 @@ do
         if NotifyGui and (gui == NotifyGui or gui:IsDescendantOf(NotifyGui)) then return true end
         if FreecamUI and (gui == FreecamUI or gui:IsDescendantOf(FreecamUI)) then return true end
         if InformationDisplayHUD and (gui == InformationDisplayHUD or gui:IsDescendantOf(InformationDisplayHUD)) then return true end
+        if InformationDisplayLeftHUD and (gui == InformationDisplayLeftHUD or gui:IsDescendantOf(InformationDisplayLeftHUD)) then return true end
         return gui.Name == "Sp3arParvusUI" or gui.Name == "FreecamKeybindsUI"
     end
 
@@ -12598,6 +12601,41 @@ do
 end
 
 function CreateInformationDisplayHUD(parent)
+    if InformationDisplayLeftHUD then
+        pcall(function() InformationDisplayLeftHUD:Destroy() end)
+        InformationDisplayLeftHUD = nil
+        InformationDisplayLeftLabel = nil
+    end
+    if InformationDisplayHUD then
+        pcall(function() InformationDisplayHUD:Destroy() end)
+        InformationDisplayHUD = nil
+        InformationDisplayLabel = nil
+    end
+
+    InformationDisplayLeftHUD = Instance.new("Frame")
+    InformationDisplayLeftHUD.Name = "InformationDisplayLeftHUD"
+    InformationDisplayLeftHUD.Position = UDim2.new(0, 6, 0, 3)
+    InformationDisplayLeftHUD.AnchorPoint = Vector2.new(0, 0)
+    InformationDisplayLeftHUD.BackgroundTransparency = 1
+    InformationDisplayLeftHUD.AutomaticSize = Enum.AutomaticSize.XY
+    InformationDisplayLeftHUD.Parent = parent
+
+    InformationDisplayLeftLabel = Instance.new("TextLabel")
+    InformationDisplayLeftLabel.Name = "InformationDisplayLeftLabel"
+    InformationDisplayLeftLabel.Text = ""
+    InformationDisplayLeftLabel.BackgroundTransparency = 1
+    InformationDisplayLeftLabel.FontFace = Font.fromName("Montserrat", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    InformationDisplayLeftLabel.TextSize = 15
+    InformationDisplayLeftLabel.TextColor3 = Color3.new(1, 1, 1)
+    InformationDisplayLeftLabel.TextXAlignment = Enum.TextXAlignment.Left
+    InformationDisplayLeftLabel.AutomaticSize = Enum.AutomaticSize.XY
+    InformationDisplayLeftLabel.Parent = InformationDisplayLeftHUD
+
+    local strokeLeft = Instance.new("UIStroke")
+    strokeLeft.Thickness = 1
+    strokeLeft.Color = Color3.new(0, 0, 0)
+    strokeLeft.Parent = InformationDisplayLeftLabel
+
     InformationDisplayHUD = Instance.new("Frame")
     InformationDisplayHUD.Name = "InformationDisplayHUD"
     InformationDisplayHUD.Position = UDim2.new(1, -6, 0, 3)
@@ -12624,11 +12662,14 @@ function CreateInformationDisplayHUD(parent)
 end
 
 function UpdateInformationDisplay()
-    if not InformationDisplayHUD then return end
+    if not InformationDisplayHUD and not InformationDisplayLeftHUD then return end
 
     local visible = Flags["Visuals/InformationDisplay"] and not Flags["Settings/GhostMode"]
-    if InformationDisplayHUD.Visible ~= visible then
+    if InformationDisplayHUD and InformationDisplayHUD.Visible ~= visible then
         InformationDisplayHUD.Visible = visible
+    end
+    if InformationDisplayLeftHUD and InformationDisplayLeftHUD.Visible ~= visible then
+        InformationDisplayLeftHUD.Visible = visible
     end
 
     if not visible then return end
@@ -12664,12 +12705,24 @@ function UpdateInformationDisplay()
         or "?"
     local serverUptimeStr = GetServerUptime()
 
-    local newText = string.format(
-        "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s] Script/Session/Server uptime: {%s/%s/%s}",
-        timeStr, lpcStr, lmcStr, regionStr, scriptUptimeStr, sessionUptimeStr, serverUptimeStr
-    )
-    if InformationDisplayLabel.Text ~= newText then
-        InformationDisplayLabel.Text = newText
+    if InformationDisplayLeftLabel then
+        local leftText = string.format(
+            "Script/Session/Server uptime: {%s/%s/%s}",
+            scriptUptimeStr, sessionUptimeStr, serverUptimeStr
+        )
+        if InformationDisplayLeftLabel.Text ~= leftText then
+            InformationDisplayLeftLabel.Text = leftText
+        end
+    end
+
+    if InformationDisplayLabel then
+        local rightText = string.format(
+            "WorldTime[%s] Humanoid[%s] Mouse[%s] Region[%s]",
+            timeStr, lpcStr, lmcStr, regionStr
+        )
+        if InformationDisplayLabel.Text ~= rightText then
+            InformationDisplayLabel.Text = rightText
+        end
     end
 end
 
@@ -13973,8 +14026,13 @@ function Cleanup()
     if InformationDisplayHUD then
         pcall(function() InformationDisplayHUD:Destroy() end)
     end
+    if InformationDisplayLeftHUD then
+        pcall(function() InformationDisplayLeftHUD:Destroy() end)
+    end
     InformationDisplayHUD = nil
     InformationDisplayLabel = nil
+    InformationDisplayLeftHUD = nil
+    InformationDisplayLeftLabel = nil
     ClosestPlayerTrackerLabel = nil
     LocalHealthHUD = nil
     LocalHealthValueLabel = nil
