@@ -224,6 +224,7 @@ local UIState
 local AdvancedPlayerPanelState
 local WorldHumState
 local WorkspaceTracker
+local ConfigManager
 
 local FLAG_METADATA = {
     ["Humanoid/Health"]     = { ReadOnly = true },
@@ -272,7 +273,7 @@ local _updateHum  -- forward-declared; assigned once the Humanoid UI is built
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║  ConfigManager — Local Profile Save/Load System                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
-local ConfigManager = { IsDirty = true }
+ConfigManager = { IsDirty = true }
 do
     -- Path Constants ────────────────────────────────────────────────
     local ROOT_DIR        = "Sp3arParvus"
@@ -876,10 +877,6 @@ do
         parsed.savedAt = os.time()
         parsed.version = VERSION
         applyFilterToPayload(parsed, filter)
-        
-        if not ConfigManager.IsDirty then
-            return true, parsed.name or "Unknown"
-        end
         
         local writeOk, writeErr = pcall(writefile, filePath, encode(parsed))
         if writeOk then ConfigManager.IsDirty = false end
