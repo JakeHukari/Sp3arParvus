@@ -7078,7 +7078,15 @@ do
             if entry.hl.FillColor ~= primaryColor then
                 entry.hl.FillColor = primaryColor
             end
-            local fillTrans = isLocked and 0.80 or 0.92
+            local opacityVal = (Flags["Visuals/NonPlayerIndicatorOpacity"] ~= nil and Flags["Visuals/NonPlayerIndicatorOpacity"])
+                or (Flags["Visuals/IndicatorOpacity"] ~= nil and Flags["Visuals/IndicatorOpacity"])
+                or 90
+            local opacity = opacityVal / 100
+            local transparency = 1 - opacity
+            if entry.hl.OutlineTransparency ~= transparency then
+                entry.hl.OutlineTransparency = transparency
+            end
+            local fillTrans = 1 - (opacity * (isLocked and 0.20 or 0.08))
             if entry.hl.FillTransparency ~= fillTrans then
                 entry.hl.FillTransparency = fillTrans
             end
@@ -7111,7 +7119,18 @@ do
             or 90
         local opacity = opacityVal / 100
         local transparency = 1 - opacity
+        local fillUnlocked = 1 - (opacity * 0.08)
+        local fillLocked = 1 - (opacity * 0.20)
         for _, entry in pairs(IndicatorObjects) do
+            if entry.hl then
+                if entry.hl.OutlineTransparency ~= transparency then
+                    entry.hl.OutlineTransparency = transparency
+                end
+                local fillTrans = entry.isLocked and fillLocked or fillUnlocked
+                if entry.hl.FillTransparency ~= fillTrans then
+                    entry.hl.FillTransparency = fillTrans
+                end
+            end
             if entry.nameLbl then
                 entry.nameLbl.TextTransparency = transparency
                 entry.nameLbl.TextStrokeTransparency = transparency
@@ -7272,8 +7291,8 @@ do
                     local hl = Instance.new("Highlight")
                     hl.Name = "Sp3arTargetHighlight"
                     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    hl.OutlineTransparency = 0
-                    hl.FillTransparency = 0.92
+                    hl.OutlineTransparency = transparency
+                    hl.FillTransparency = 1 - (opacity * (cand.isLocked and 0.20 or 0.08))
                     hl.Adornee = hlAdornee
                     hl.Enabled = true
                     hl.Parent = screenGui
@@ -7283,6 +7302,9 @@ do
                     if entry.hl.Parent ~= screenGui then entry.hl.Parent = screenGui end
                     if entry.hl.Adornee ~= hlAdornee then entry.hl.Adornee = hlAdornee end
                     if not entry.hl.Enabled then entry.hl.Enabled = true end
+                    if entry.hl.OutlineTransparency ~= transparency then
+                        entry.hl.OutlineTransparency = transparency
+                    end
                 end
             elseif entry.hl then
                 pcall(function() entry.hl:Destroy() end)
