@@ -1,7 +1,7 @@
 -- ╔══════════════════════════════════════════════════════════════════╗
 -- ║            Sp3arParvus — Developer Tool                          ║
 -- ╠══════════════════════════════════════════════════════════════════╣
--- ║  Version: 4.2.9                                                  ║
+-- ║  Version: 4.3.0                                                  ║
 -- ╚══════════════════════════════════════════════════════════════════╝
 
 local VERSION = "4.3.0" -- World Humanoid & Workspace Targeting Config Support
@@ -136,8 +136,8 @@ local Flags = {
     ["Visuals/WorldHumanoidColor"] = Color3.fromRGB(252, 149, 175),
     ["Visuals/WorkspaceTargetColor"] = Color3.fromRGB(80, 220, 255),
     ["Visuals/TargetLockColor"] = Color3.fromRGB(45, 245, 105),
-    ["Visuals/NonPlayerIndicatorOpacity"] = 90,
-    ["Visuals/IndicatorOpacity"] = 90,
+    ["Visuals/NonPlayerIndicatorOpacity"] = 50,
+    ["Visuals/IndicatorOpacity"] = 50,
     ["Visuals/Fullbright"] = false,
     ["Visuals/FullDark"] = false,
     -- Fullbright modifiers
@@ -181,7 +181,7 @@ local Flags = {
     ["Settings/Freecam Toggle"] = true,
     ["Settings/GhostMode"] = false,
     ["Visuals/InformationDisplay"] = true,
-    ["Visuals/CenterDot"] = true,
+    ["Visuals/CenterDot"] = false,
     ["Misc/ScrollUnlocker"] = true,
     ["Misc/MouseModeSwitcher"] = true,
     ["Misc/ItemPanel"] = false,
