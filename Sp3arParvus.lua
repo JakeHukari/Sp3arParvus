@@ -88,6 +88,10 @@ local Flags = {
     ["Aim/TeamCheck"] = false,
     ["Aim/AutoWhitelistFriends"] = false,
     ["Aim/VisibilityCheck"] = true,
+    ["Aim/AttractionStrength/Player"] = 200,
+    ["Aim/AttractionStrength/PlayerHumanoid"] = 200,
+    ["Aim/AttractionStrength/NonPlayer"] = 200,
+    ["Aim/AttractionStrength/NonPlayerHumanoid"] = 200,
     ["Aim/AttractionStrength"] = 200,
     ["Aim/FOV/Radius"] = 50,
     ["Aim/FOV/ShowCircle"] = true,
@@ -323,10 +327,25 @@ do
         ["Aim/Dampening"] = true,
         ["Aim/Dampening/Threshold"] = true,
         ["Aim/Dampening/Strength"] = true,
+        ["Aim/AttractionStrength"] = true,
     }
 
     -- Apply a flags table onto live Flags + update UI updaters ──────
     local function applyFlags(data)
+        if data["Aim/AttractionStrength"] ~= nil then
+            if data["Aim/AttractionStrength/Player"] == nil and data["Aim/AttractionStrength/PlayerHumanoid"] == nil then
+                data["Aim/AttractionStrength/Player"] = data["Aim/AttractionStrength"]
+            end
+            if data["Aim/AttractionStrength/NonPlayer"] == nil and data["Aim/AttractionStrength/NonPlayerHumanoid"] == nil then
+                data["Aim/AttractionStrength/NonPlayer"] = data["Aim/AttractionStrength"]
+            end
+        end
+        if data["Aim/AttractionStrength/PlayerHumanoid"] ~= nil and data["Aim/AttractionStrength/Player"] == nil then
+            data["Aim/AttractionStrength/Player"] = data["Aim/AttractionStrength/PlayerHumanoid"]
+        end
+        if data["Aim/AttractionStrength/NonPlayerHumanoid"] ~= nil and data["Aim/AttractionStrength/NonPlayer"] == nil then
+            data["Aim/AttractionStrength/NonPlayer"] = data["Aim/AttractionStrength/NonPlayerHumanoid"]
+        end
         for k, v in pairs(data) do
             if DEPRECATED_FLAGS[k] then continue end
             if FLAG_METADATA[k] and FLAG_METADATA[k].ReadOnly then continue end
@@ -7486,7 +7505,7 @@ do
     end
 end
 
-ClosestResult = {nil, nil, nil, 0, 0, nil}
+ClosestResult = {nil, nil, nil, 0, 0, nil, false}
 
 function CandidateSortFn(a, b)
     local prioritizePlayers = (Flags["Aim/PrioritizePlayers"] ~= false)
@@ -7841,6 +7860,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
                     ClosestResult[4] = entry.sx
                     ClosestResult[5] = entry.sy
                     ClosestResult[6] = entry.pos
+                    ClosestResult[7] = (entry.isPlayer == true)
                     return ClosestResult
                 end
                 break
@@ -7877,6 +7897,7 @@ function GetClosest(Enabled, TeamCheck, VisibilityCheck, DistanceCheck, Distance
         ClosestResult[4] = entry.sx
         ClosestResult[5] = entry.sy
         ClosestResult[6] = entry.pos
+        ClosestResult[7] = (entry.isPlayer == true)
 
         return ClosestResult
     end
@@ -8455,7 +8476,20 @@ do
             end
         end
 
-        local attractionMultiplier = Flags["Aim/AttractionStrength"] / 100
+        local isPlayerTarget = (Hitbox[7] == true)
+            or (currentTarget ~= nil and typeof(currentTarget) == "Instance" and currentTarget:IsA("Player"))
+            or (Hitbox[2] ~= nil and typeof(Hitbox[2]) == "Instance" and Players:GetPlayerFromCharacter(Hitbox[2]) ~= nil)
+
+        local strengthVal = isPlayerTarget
+            and (Flags["Aim/AttractionStrength/Player"] or Flags["Aim/AttractionStrength/PlayerHumanoid"] or Flags["Aim/AttractionStrength"] or 200)
+            or (Flags["Aim/AttractionStrength/NonPlayer"] or Flags["Aim/AttractionStrength/NonPlayerHumanoid"] or Flags["Aim/AttractionStrength"] or 200)
+
+        local attractionMultiplier = strengthVal / 100
+
+        if attractionMultiplier <= 0 then
+            ResetStepTracking()
+            return
+        end
 
         local BASE_PULL = 0.2
         local deltaX = dx * BASE_PULL * attractionMultiplier
@@ -17025,7 +17059,26 @@ UI.CreateToggle(AimTab, "Auto Whitelist Friends/Connections", "Aim/AutoWhitelist
 end)
 UI.CreateToggle(AimTab, "Visibility Check (Raycast)", "Aim/VisibilityCheck", Flags["Aim/VisibilityCheck"])
 UI.CreateToggle(AimTab, "Show Tracking Indicator Dots", "Aim/ShowAssistDots", Flags["Aim/ShowAssistDots"])
-UI.CreateNumericInput(AimTab, "Attraction Strength", "Aim/AttractionStrength", Flags["Aim/AttractionStrength"], 0, 500, 10, "%")
+UI.CreateNumericInput(AimTab, "Player Attraction Strength", "Aim/AttractionStrength/Player", Flags["Aim/AttractionStrength/Player"], 0, 500, 10, "%", function(val)
+    Flags["Aim/AttractionStrength/PlayerHumanoid"] = val
+    USER_MODIFIED_FLAGS["Aim/AttractionStrength/PlayerHumanoid"] = true
+end)
+UIState.Updaters["Aim/AttractionStrength/PlayerHumanoid"] = UIState.Updaters["Aim/AttractionStrength/Player"]
+
+UI.CreateNumericInput(AimTab, "Non-Player Attraction Strength", "Aim/AttractionStrength/NonPlayer", Flags["Aim/AttractionStrength/NonPlayer"], 0, 500, 10, "%", function(val)
+    Flags["Aim/AttractionStrength/NonPlayerHumanoid"] = val
+    USER_MODIFIED_FLAGS["Aim/AttractionStrength/NonPlayerHumanoid"] = true
+end)
+UIState.Updaters["Aim/AttractionStrength/NonPlayerHumanoid"] = UIState.Updaters["Aim/AttractionStrength/NonPlayer"]
+
+UIState.Updaters["Aim/AttractionStrength"] = function(val)
+    if UIState.Updaters["Aim/AttractionStrength/Player"] then
+        UIState.Updaters["Aim/AttractionStrength/Player"](val)
+    end
+    if UIState.Updaters["Aim/AttractionStrength/NonPlayer"] then
+        UIState.Updaters["Aim/AttractionStrength/NonPlayer"](val)
+    end
+end
 UI.CreateNumericInput(AimTab, "FOV Radius", "Aim/FOV/Radius", Flags["Aim/FOV/Radius"], 0, 500, 5, "px")
 UI.CreateToggle(AimTab, "Show FOV Circle", "Aim/FOV/ShowCircle", Flags["Aim/FOV/ShowCircle"])
 
