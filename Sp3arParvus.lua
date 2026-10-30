@@ -11502,7 +11502,7 @@ function _resetPooledObject(obj)
 end
 
 function ReturnPooledObject(obj)
-    if not obj then return end
+    if not obj or typeof(obj) ~= "Instance" then return end
 
     local success = pcall(_resetPooledObject, obj)
 
@@ -11661,7 +11661,9 @@ function UpdatePlayerOutlines(player, character)
                 if k == name .. "Dot" then stillNeeded = true break end
             end
             if not stillNeeded then
-                ReturnPooledObject(v)
+                if typeof(v) == "Instance" then
+                    ReturnPooledObject(v)
+                end
                 storage[k] = nil
             end
         end
@@ -11764,15 +11766,18 @@ function RemovePlayerOutlines(player)
     end
 
     for k, v in pairs(storage) do
-        if k ~= "Highlight" then
-            if v:IsA("BillboardGui") then
-                ReturnPooledObject(v)
-            else
-                if v and v.Parent then v:Destroy() end
+        if k ~= "Highlight" and k ~= "isLocked" then
+            if typeof(v) == "Instance" then
+                if v:IsA("BillboardGui") then
+                    ReturnPooledObject(v)
+                elseif v.Parent then
+                    v:Destroy()
+                end
             end
             storage[k] = nil
         end
     end
+    storage.isLocked = nil
 
     PlayerOutlineObjects[player] = nil
 end
@@ -19570,7 +19575,10 @@ function UnifiedHeartbeat(dt)
                 end
 
                 if not skip then
-                   UpdateESP(now, player, player == NearestPlayerRef)
+                    local ok, err = pcall(UpdateESP, now, player, player == NearestPlayerRef)
+                    if not ok and _G.SP3AR_DEBUG then
+                        warn("[Sp3arParvus ESP Error]: " .. tostring(err))
+                    end
                 end
             end
         end
