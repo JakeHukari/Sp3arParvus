@@ -14036,7 +14036,7 @@ local KeyboardRows = {
         {Text = "D", Width = 1},
         {Text = "F", Key = "F", Width = 1, KeyCode = Enum.KeyCode.F, Name = "Toggle Fullbright", Action = "Ctrl + F", Desc = "Toggles full bright lighting, removing shadows.", StatusKey = "Visuals/Fullbright"},
         {Text = "G", Key = "G", Width = 1, KeyCode = Enum.KeyCode.G, Name = "Toggle Ghost Mode", Action = "Ctrl + G", Desc = "Toggles Ghost Mode (character transparency & noclip).", StatusKey = "Settings/GhostMode"},
-        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "World Humanoids / Headshot Mode", Action = "Ctrl+H / Ctrl+Shift+H", Desc = "Toggles nearby World Humanoid tracking & visuals (Ctrl+H), or headshot-only vs all-body tracking (Ctrl+Shift+H).", StatusKey = "H_DualStatus"},
+        {Text = "H", Key = "H", Width = 1, KeyCode = Enum.KeyCode.H, Name = "World Humanoids / Headshot Mode", Action = "Ctrl+H / Ctrl+Shift+H", Desc = "Toggles nearby World Humanoid tracking / lock (Ctrl+H), or headshot-only vs all-body tracking (Ctrl+Shift+H).", StatusKey = "H_DualStatus"},
         {Text = "J", Key = "J", Width = 1, KeyCode = Enum.KeyCode.J, Name = "Toggle Item Panel", Action = "Ctrl + J", Desc = "Toggles visibility of the item panel HUD.", StatusKey = "Misc/ItemPanel"},
         {Text = "K", Key = "K", Width = 1, KeyCode = Enum.KeyCode.K, Name = "PlayerPage Shortcut", Action = "Ctrl + K", Desc = "Opens menu and navigates directly to the PlayerPage tab."},
         {Text = "L", Width = 1},
@@ -14275,10 +14275,10 @@ function InitializeShortcutsPage(page)
                     status = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
                 elseif keyData.StatusKey == "H_DualStatus" then
                     local hsActive = Flags["Aim/HeadshotOnlyState"] ~= false
-                    local whActive = (Flags["Aim/TrackWorldHumanoids"] == true) or (Flags["Visuals/HighlightWorldHumanoids"] == true)
+                    local whActive = (Flags["Aim/TrackWorldHumanoids"] == true)
                     local shiftDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
                     status = shiftDown and hsActive or whActive
-                    customStatusText = string.format("World Hum: %s  •  Headshot: %s", whActive and "ON" or "OFF", hsActive and "ON" or "OFF")
+                    customStatusText = string.format("World Lock: %s  •  Headshot: %s", whActive and "ON" or "OFF", hsActive and "ON" or "OFF")
                 elseif keyData.StatusKey == "MouseModeSwitcher" then
                     status = Flags["Misc/MouseModeSwitcher"]
                     local cur = Services.UserInputService.MouseBehavior
@@ -17047,7 +17047,7 @@ UI.CreateToggle(AimTab, "Track Players (Ctrl + ~)", "Aim/TrackPlayers", Flags["A
 end)
 UI.CreateToggle(AimTab, "Track Nearby World Humanoids (Ctrl+H)", "Aim/TrackWorldHumanoids", Flags["Aim/TrackWorldHumanoids"], function(state)
     CachedTarget = nil
-    if not state and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
+    if not state and not Flags["Visuals/HighlightWorldHumanoids"] and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
         table.clear(WorkspaceTracker.WorldHumEntities)
     end
     if not state and AimState.LastAimTarget and not AimState.LastAimTarget:IsA("Player") then
@@ -17288,7 +17288,7 @@ UI.CreateToggle(VisualsTab, "Player Outlines (Hitbox)", "ESP/PlayerOutlines", Fl
 end)
 
 UI.CreateSection(VisualsTab, "Non-Player & Workspace Target ESP")
-UI.CreateToggle(VisualsTab, "Highlight Humanoids (Ctrl+H)", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
+UI.CreateToggle(VisualsTab, "Highlight Humanoids", "Visuals/HighlightWorldHumanoids", Flags["Visuals/HighlightWorldHumanoids"], function()
     if WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
         WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
     end
@@ -18743,46 +18743,29 @@ local function handleShortcuts(actionName, inputState, inputObject)
                     end
                 end
             else
-                local newState
-                local trackState
                 if SAFE_MODE then
-                    newState = not Flags["Visuals/HighlightWorldHumanoids"]
-                    trackState = false
-                    Flags["Aim/TrackWorldHumanoids"] = false
-                    Flags["Visuals/HighlightWorldHumanoids"] = newState
-                    USER_MODIFIED_FLAGS["Visuals/HighlightWorldHumanoids"] = true
+                    UI.Notify("Safe Mode", "World Humanoid tracking is disabled while Safe Mode is ON.")
                 else
-                    newState = not (Flags["Aim/TrackWorldHumanoids"] and Flags["Visuals/HighlightWorldHumanoids"])
-                    trackState = newState
-                    Flags["Aim/TrackWorldHumanoids"] = newState
-                    Flags["Visuals/HighlightWorldHumanoids"] = newState
+                    Flags["Aim/TrackWorldHumanoids"] = not Flags["Aim/TrackWorldHumanoids"]
+                    local trackState = Flags["Aim/TrackWorldHumanoids"]
                     USER_MODIFIED_FLAGS["Aim/TrackWorldHumanoids"] = true
-                    USER_MODIFIED_FLAGS["Visuals/HighlightWorldHumanoids"] = true
-                end
 
-                CachedTarget = nil
-                if WorkspaceTracker and WorkspaceTracker.ForceRefreshWorldHumanoids then
-                    WorkspaceTracker.ForceRefreshWorldHumanoids()
-                end
+                    CachedTarget = nil
+                    if not trackState and AimState.LastAimTarget and not AimState.LastAimTarget:IsA("Player") then
+                        ClearAimLockState(false)
+                    end
+                    if WorkspaceTracker and WorkspaceTracker.ForceRefreshWorldHumanoids then
+                        WorkspaceTracker.ForceRefreshWorldHumanoids()
+                    end
 
-                local aimUpdater = UIState.Updaters["Aim/TrackWorldHumanoids"]
-                if aimUpdater then
-                    aimUpdater(trackState)
-                elseif not trackState and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
-                    table.clear(WorkspaceTracker.WorldHumEntities)
-                end
+                    local aimUpdater = UIState.Updaters["Aim/TrackWorldHumanoids"]
+                    if aimUpdater then
+                        aimUpdater(trackState)
+                    elseif not trackState and not Flags["Visuals/HighlightWorldHumanoids"] and WorkspaceTracker and WorkspaceTracker.WorldHumEntities then
+                        table.clear(WorkspaceTracker.WorldHumEntities)
+                    end
 
-                local visUpdater = UIState.Updaters["Visuals/HighlightWorldHumanoids"]
-                if visUpdater then
-                    visUpdater(newState)
-                elseif WorkspaceTracker and WorkspaceTracker.UpdateVisualIndicators then
-                    WorkspaceTracker.UpdateVisualIndicators(os.clock(), true)
-                end
-
-                if SAFE_MODE then
-                    UI.Notify("World Humanoids", string.format("World Humanoid Visuals %s with 'Ctrl+H' (Tracking disabled in Safe Mode)", newState and "activated" or "deactivated"))
-                else
-                    UI.Notify("World Humanoids", string.format("World Humanoid Tracking & Visuals %s with 'Ctrl+H'", newState and "activated" or "deactivated"))
+                    UI.Notify("World Humanoids", string.format("World Humanoid Tracking %s with 'Ctrl+H'", trackState and "activated" or "deactivated"))
                 end
             end
             return Enum.ContextActionResult.Sink
